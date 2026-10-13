@@ -420,9 +420,12 @@ struct Ctx {
 
 fn open(cli: &Cli) -> Result<Ctx, Fail> {
     if let Some(root) = &cli.skills_root {
+        // Create the root before hashing it. On macOS, canonicalize() rewrites
+        // /var to /private/var only after the directory exists, so a missing
+        // root and a later call would land in two different state directories.
+        fs::create_dir_all(root).map_err(|err| Fail::other(err.to_string()))?;
         let state = central_repo::external_base_dir(root);
         fs::create_dir_all(state.join("skills")).map_err(|err| Fail::other(err.to_string()))?;
-        fs::create_dir_all(root).map_err(|err| Fail::other(err.to_string()))?;
         central_repo::set_runtime_base_dir_override(Some(state));
         central_repo::set_runtime_skills_dir_override(Some(root.clone()));
     }

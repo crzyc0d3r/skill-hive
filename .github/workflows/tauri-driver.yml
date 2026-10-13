@@ -37,8 +37,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf build-essential pkg-config xvfb
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf build-essential pkg-config xvfb webkit2gtk-driver
           sudo apt-get install -y libayatana-appindicator3-dev || sudo apt-get install -y libappindicator3-dev
+          if ! command -v WebKitWebDriver >/dev/null 2>&1; then
+            found=$(find /usr -name 'WebKitWebDriver' -type f | head -1)
+            test -n "$found"
+            sudo ln -sf "$found" /usr/local/bin/WebKitWebDriver
+          fi
 
       - name: Install npm dependencies
         run: npm ci
