@@ -1,0 +1,52 @@
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-22.04
+    name: Lint, types, and vitest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Contrast
+        run: npm run contrast
+
+      - name: Derived-file headers
+        run: npm run check:headers
+
+      - name: Raw palette fixture
+        run: npm run check:palette
+
+      - name: IPC types
+        run: |
+          node scripts/gen-ipc-types.mjs --check
+          node scripts/gen-ipc-types.mjs --self-test
+
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Test
+        run: npm test
+
+      - name: npm audit
+        run: npm audit --audit-level=high

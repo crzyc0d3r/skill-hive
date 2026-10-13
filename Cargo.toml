@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/studio-core", "crates/studio-cli", "src-tauri"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+authors = ["Skill Studio"]
+rust-version = "1.97"
+description = "Skill Studio — create, generate and test agent skills"
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+thiserror = "1"

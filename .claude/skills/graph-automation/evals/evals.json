@@ -1,0 +1,23 @@
+{
+  "skill_name": "graph-automation",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/graph-automation \"Audit every Python script in ./tools for functions with no docstring and produce a report\" --output reports/docstring-audit.md --sources tools --checks \"report has one section per file::test $(grep -c '^## ' reports/docstring-audit.md) -ge 1\" --limit 8 --auto",
+      "expected_output": "An automations/<slug>/ bundle with graph.md (approved spec: at least one code node for the deterministic scan, model nodes for judgment, a code merge node), checks.md with gate rows and completion, progress.md with next action, and reports/docstring-audit.md produced by a code node; graphify-out built for ./tools; final message states what passed and what is unresolved.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I want this done as a graph of bounded nodes with gates like the autoresearch setup: write release notes for everything that changed in src/ since the last tag, output to docs/RELEASE.md. Don't start until I've approved the node graph.",
+      "expected_output": "graphify maps src/, graph.md is written with nodes/edges/checks and the session pauses for approval before any node runs; after approval the loop runs, every node gate is recorded in checks.md, docs/RELEASE.md is written by a code merge node, progress.md is updated.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/graph-automation resume docstring-audit",
+      "expected_output": "Reads automations/docstring-audit/graph.md and progress.md first, runs graphctl status, continues from the recorded next action without re-running passed nodes, and finishes with graphctl complete and an updated progress.md.",
+      "files": []
+    }
+  ]
+}

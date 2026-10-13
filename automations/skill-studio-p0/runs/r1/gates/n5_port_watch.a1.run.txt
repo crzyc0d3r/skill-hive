@@ -1,0 +1,8 @@
+$ python3 automations/skill-studio-p0/code/port_phase0.py port_watch
+(exit 0)
+wrote crates/studio-core/src/deploy/tool_adapters.rs
+wrote crates/studio-core/src/util/file_watcher.rs
+wrote crates/studio-core/src/deploy/mod.rs
+wrote crates/studio-core/src/util/mod.rs
+wrote crates/studio-core/src/lib.rs
+wrote automations/skill-studio-p0/out/n5_port_watch.md
