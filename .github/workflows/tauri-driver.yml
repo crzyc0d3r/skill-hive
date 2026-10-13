@@ -15,10 +15,10 @@ jobs:
         include:
           - os: ubuntu-22.04
             label: Linux
-            binary: src-tauri/target/debug/skill-hive
+            binary: target/debug/skill-hive
           - os: windows-latest
             label: Windows
-            binary: src-tauri/target/debug/skill-hive.exe
+            binary: target/debug/skill-hive.exe
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
@@ -58,6 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -f "${{ matrix.binary }}"
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             xvfb-run -a node scripts/tauri-driver-suite.mjs "${{ matrix.binary }}"
           else
