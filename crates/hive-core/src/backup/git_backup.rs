@@ -142,6 +142,10 @@ fn git(cwd: &Path, args: &[&str]) -> Result<String> {
             "commit.gpgsign=false",
             "-c",
             "init.defaultBranch=main",
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
         ])
         .args(args)
         .current_dir(cwd)

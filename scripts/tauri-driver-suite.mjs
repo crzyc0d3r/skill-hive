@@ -13,7 +13,10 @@ const base = mkdtempSync(path.join(tmpdir(), "skill-hive-driver-"));
 process.env.SKILL_HIVE_BASE = base;
 process.env.SKILL_HIVE_CONFIG_DIR = path.join(base, "config");
 
-const driver = spawn("tauri-driver", [], { stdio: "inherit" });
+const driverArgs = process.env.TAURI_NATIVE_DRIVER
+  ? ["--native-driver", process.env.TAURI_NATIVE_DRIVER]
+  : [];
+const driver = spawn("tauri-driver", driverArgs, { stdio: "inherit" });
 await new Promise((resolve) => setTimeout(resolve, 1000));
 
 async function call(method, urlPath, body) {
@@ -41,11 +44,37 @@ try {
   if (!session) throw new Error(`no session id in ${JSON.stringify(created)}`);
   const prefix = `/session/${session}`;
 
+  const handles = await call("GET", `${prefix}/window/handles`);
+  const windows = handles.value ?? [];
+  console.log(`windows ${JSON.stringify(windows)}`);
+  let chosen = null;
+  for (const handle of windows) {
+    await call("POST", `${prefix}/window`, { handle });
+    const url = await call("GET", `${prefix}/url`);
+    const source = await call("GET", `${prefix}/source`);
+    const html = String(source.value ?? "");
+    console.log(`url ${url.value} source ${html.slice(0, 400).replace(/\s+/g, " ")}`);
+    if (html.includes("data-testid=\"sidebar\"") || html.includes("data-testid='sidebar'")) {
+      chosen = handle;
+      break;
+    }
+  }
+  if (!chosen && windows[0]) {
+    await call("POST", `${prefix}/window`, { handle: windows[0] });
+  }
+
   async function find(selector) {
-    const found = await call("POST", `${prefix}/element`, { using: "css selector", value: selector });
-    const id = found.value?.["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(found.value ?? {})[0];
-    if (!id) throw new Error(`missing ${selector}: ${JSON.stringify(found)}`);
-    return id;
+    try {
+      const found = await call("POST", `${prefix}/element`, { using: "css selector", value: selector });
+      const id = found.value?.["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(found.value ?? {})[0];
+      if (!id) throw new Error(`missing ${selector}: ${JSON.stringify(found)}`);
+      return id;
+    } catch (err) {
+      const url = await call("GET", `${prefix}/url`).catch(() => ({}));
+      const source = await call("GET", `${prefix}/source`).catch(() => ({}));
+      const html = String(source.value ?? "").replace(/\s+/g, " ").slice(0, 700);
+      throw new Error(`${err.message}\nurl ${url.value}\nsource ${html}`);
+    }
   }
 
   async function click(selector) {
