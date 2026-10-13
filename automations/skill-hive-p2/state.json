@@ -1,0 +1,445 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-13T22:31:10+00:00",
+  "finished": "2026-10-13T22:33:37+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n3_ledger": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "2e80fe97b34fe40cbff6ae80dd763cd5e470c86ac12f6d800b9ee1ab324ab5d9",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'missing none' automations/skill-hive-p2/out/n3_ledger.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-13T22:31:16+00:00",
+        "output_hash": "2e80fe97b34fe40cbff6ae80dd763cd5e470c86ac12f6d800b9ee1ab324ab5d9",
+        "log": "automations/skill-hive-p2/runs/r1/gates/n3_ledger.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'missing none' automations/skill-hive-p2/out/n3_ledger.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-13T22:31:16+00:00",
+          "output_hash": "2e80fe97b34fe40cbff6ae80dd763cd5e470c86ac12f6d800b9ee1ab324ab5d9",
+          "log": "automations/skill-hive-p2/runs/r1/gates/n3_ledger.a1.md"
+        }
+      ]
+    },
+    "n1_rust": {
+      "status": "passed",
+      "attempts": 2,
+      "last_verdict": "gate:pass",
+      "output_hash": "743e9487391efbd5111bb9c37e25b57a0eedc67449ae54e8e66260c9675a310c",
+      "gate": {
+        "attempt": 2,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'exit 0' automations/skill-hive-p2/out/n1_rust.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-13T22:33:06+00:00",
+        "output_hash": "743e9487391efbd5111bb9c37e25b57a0eedc67449ae54e8e66260c9675a310c",
+        "log": "automations/skill-hive-p2/runs/r1/gates/n1_rust.a2.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "fail",
+          "rows": [
+            [
+              "check.cmd",
+              "fail",
+              "`grep -q 'exit 0' automations/skill-hive-p2/out/n1_rust.md` → exit 1: (no output)"
+            ],
+            [
+              "node.report",
+              "fail",
+              "exit 101: "
+            ]
+          ],
+          "at": "2026-10-13T22:31:23+00:00",
+          "output_hash": "8ab89ac684f6474d20b0a695d09dde800623f3d5a75e171ae357a2451a7b2680",
+          "log": "automations/skill-hive-p2/runs/r1/gates/n1_rust.a1.md"
+        },
+        {
+          "attempt": 2,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'exit 0' automations/skill-hive-p2/out/n1_rust.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-13T22:33:06+00:00",
+          "output_hash": "743e9487391efbd5111bb9c37e25b57a0eedc67449ae54e8e66260c9675a310c",
+          "log": "automations/skill-hive-p2/runs/r1/gates/n1_rust.a2.md"
+        }
+      ]
+    },
+    "n2_frontend": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "27e500b4ccbb0a7affa858807eeaaf13e6c403892f83f5b6ae2bca75ca438c29",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q '| npm test | 0 |' automations/skill-hive-p2/out/n2_frontend.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-13T22:33:26+00:00",
+        "output_hash": "27e500b4ccbb0a7affa858807eeaaf13e6c403892f83f5b6ae2bca75ca438c29",
+        "log": "automations/skill-hive-p2/runs/r1/gates/n2_frontend.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q '| npm test | 0 |' automations/skill-hive-p2/out/n2_frontend.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-13T22:33:26+00:00",
+          "output_hash": "27e500b4ccbb0a7affa858807eeaaf13e6c403892f83f5b6ae2bca75ca438c29",
+          "log": "automations/skill-hive-p2/runs/r1/gates/n2_frontend.a1.md"
+        }
+      ]
+    },
+    "n4_result": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "df6686a41b5142a10007e6ffd60c443bec86d2345a388f16c9c490e798deef89",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/skill-hive-p2/code/check_result.py` → exit 0: result.md records six passing Phase 2 criteria"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-13T22:33:37+00:00",
+        "output_hash": "df6686a41b5142a10007e6ffd60c443bec86d2345a388f16c9c490e798deef89",
+        "log": "automations/skill-hive-p2/runs/r1/gates/n4_result.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/skill-hive-p2/code/check_result.py` → exit 0: result.md records six passing Phase 2 criteria"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-13T22:33:37+00:00",
+          "output_hash": "df6686a41b5142a10007e6ffd60c443bec86d2345a388f16c9c490e798deef89",
+          "log": "automations/skill-hive-p2/runs/r1/gates/n4_result.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n3_ledger",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T22:31:16+00:00",
+      "finished": "2026-10-13T22:31:16+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p2/out/n3_ledger.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n1_rust",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T22:31:16+00:00",
+      "finished": "2026-10-13T22:31:23+00:00",
+      "verdict": "fail",
+      "output": "automations/skill-hive-p2/out/n1_rust.md",
+      "evidence": "exit 101: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n1_rust",
+      "attempt": 2,
+      "role": "code",
+      "started": "2026-10-13T22:32:58+00:00",
+      "finished": "2026-10-13T22:33:06+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p2/out/n1_rust.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": "check.cmd: fail — `grep -q 'exit 0' automations/skill-hive-p2/out/n1_rust.md` → exit 1: (no output)\nnode.report: fail — exit 101: ",
+      "snapshot": "automations/skill-hive-p2/runs/r1/snapshots/n1_rust/a2/n1_rust.md"
+    },
+    {
+      "node": "n2_frontend",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T22:33:06+00:00",
+      "finished": "2026-10-13T22:33:26+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p2/out/n2_frontend.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n4_result",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T22:33:37+00:00",
+      "finished": "2026-10-13T22:33:37+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p2/out/result.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/skill-hive-p2/code/check_result.py` → exit 0: result.md records six passing Phase 2 criteria",
+      "at": "2026-10-13T22:33:37+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-13T22:31:10+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash 432fe7d3ca67ffc5)"
+    },
+    {
+      "at": "2026-10-13T22:31:10+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-13T22:31:10+00:00",
+      "type": "decision",
+      "msg": "graphify is not installed, so the split is not graph-informed. Product code spans many files; the code nodes re-run the gates."
+    },
+    {
+      "at": "2026-10-13T22:31:10+00:00",
+      "type": "baseline",
+      "msg": "0/3 pass before the run"
+    },
+    {
+      "at": "2026-10-13T22:31:16+00:00",
+      "type": "gate",
+      "msg": "n3_ledger attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T22:31:23+00:00",
+      "type": "gate",
+      "msg": "n1_rust attempt 1: fail"
+    },
+    {
+      "at": "2026-10-13T22:32:58+00:00",
+      "type": "snapshot",
+      "msg": "n1_rust: saved automations/skill-hive-p2/out/n1_rust.md to automations/skill-hive-p2/runs/r1/snapshots/n1_rust/a2/n1_rust.md"
+    },
+    {
+      "at": "2026-10-13T22:33:06+00:00",
+      "type": "gate",
+      "msg": "n1_rust attempt 2: pass"
+    },
+    {
+      "at": "2026-10-13T22:33:26+00:00",
+      "type": "gate",
+      "msg": "n2_frontend attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T22:33:37+00:00",
+      "type": "gate",
+      "msg": "n4_result attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T22:33:37+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-13T22:33:37+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 432fe7d3ca67ffc5"
+      ],
+      [
+        "n1_rust: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p2/out/n1_rust.md (825 bytes)"
+      ],
+      [
+        "n1_rust: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T22:33:06+00:00"
+      ],
+      [
+        "n2_frontend: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p2/out/n2_frontend.md (111 bytes)"
+      ],
+      [
+        "n2_frontend: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T22:33:26+00:00"
+      ],
+      [
+        "n3_ledger: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p2/out/n3_ledger.md (77 bytes)"
+      ],
+      [
+        "n3_ledger: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T22:31:16+00:00"
+      ],
+      [
+        "n4_result: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p2/out/result.md (851 bytes)"
+      ],
+      [
+        "n4_result: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T22:33:37+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 4 of 4 declared nodes"
+      ],
+      [
+        "acceptance 0: six criteria recorded",
+        "pass",
+        "`python3 automations/skill-hive-p2/code/check_result.py` → exit 0: result.md records six passing Phase 2 criteria"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/skill-hive-p2/out/result.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-13T22:31:10+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "automations/skill-hive-p2/out/result.md absent"
+      ],
+      [
+        "acceptance 0: six criteria recorded",
+        "fail",
+        "`python3 automations/skill-hive-p2/code/check_result.py` → exit 1: [stderr]\nTraceback (most recent call last):\n  File \"/workspace/automations/skill-hive-p2/code/check_result.py\", line 5, in <module>\n    text = Path(\"automations/skill-hive-p2/out/result.md\").read_text()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/pathlib.py\", line 1029, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/pathlib.py\", line 1015, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'automations/skill-hive-p2/out/result.md'"
+      ],
+      [
+        "note",
+        "noted",
+        "Phase 2 product code was written before the graph. Rust workspace tests and Playwright already passed once."
+      ]
+    ]
+  }
+}

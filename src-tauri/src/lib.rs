@@ -8,6 +8,8 @@ use hive_core::util::file_watcher::start_file_watcher;
 use hive_core::util::notifier::Notifier;
 use tauri::{Emitter, Manager};
 
+mod tray;
+
 struct TauriNotifier(tauri::AppHandle);
 
 impl Notifier for TauriNotifier {
@@ -101,8 +103,12 @@ pub fn run() {
             if let Ok(dir) = app.path().app_log_dir() {
                 hive_core::util::panic_log::install_panic_hook(dir);
             }
+            if let Err(err) = tray::install(app.handle()) {
+                log::warn!("tray icon unavailable: {err}");
+            }
             Ok(())
         })
+        .on_window_event(tray::on_window)
         .invoke_handler(tauri::generate_handler![
             get_settings,
             set_settings,

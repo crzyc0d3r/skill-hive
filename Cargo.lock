@@ -1869,8 +1869,11 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 name = "hive-cli"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "clap",
  "hive-core",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -1883,6 +1886,7 @@ dependencies = [
  "dirs 5.0.1",
  "fs2",
  "hex",
+ "keyring",
  "log",
  "notify",
  "rand",
@@ -2453,6 +2457,16 @@ checksum = "0fbe853b403ae61a04233030ae8a79d94975281ed9770a1f9e246732b534b28d"
 dependencies = [
  "bitflags 2.13.2",
  "serde",
+]
+
+[[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "log",
+ "zeroize",
 ]
 
 [[package]]

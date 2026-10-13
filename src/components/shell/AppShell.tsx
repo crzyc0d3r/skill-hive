@@ -11,6 +11,9 @@ import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, t } from "../../lib/i18n";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "../../lib/phase1/client";
 import { moveById } from "../../lib/phase1/model";
+import { lobsterAgents } from "../../lib/phase2/model";
+import { useProjectDot } from "../../lib/phase2/store";
+import { CloseGuardDialog, HelpDialog } from "../../views/phase2/screens";
 import { Kbd } from "../Kbd";
 import { StatusBanner } from "../StatusBanner";
 
@@ -43,6 +46,13 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const [dragPreset, setDragPreset] = useState<string | null>(null);
   const [editingPreset, setEditingPreset] = useState<string | null>(null);
   const [presetName, setPresetName] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const projectDot = useProjectDot();
+  const lobsterRows = lobsterAgents(
+    (typeof localStorage !== "undefined" ? localStorage.getItem("skill-hive-home") ?? "" : "").split(",").filter(Boolean),
+  );
+  const showUpdate = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-app-update") === "1";
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -253,6 +263,24 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             <NavLink to="/global-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
               {collapsed ? "+" : t("preset.new")}
             </NavLink>
+            <div className="mt-3 px-2 text-xs text-muted-foreground">{t("sidebar.projects")}</div>
+            <NavLink to="/project/fixture" className="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-accent">
+              <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block h-2 w-2 rounded-full bg-current" />
+              {collapsed ? "P" : t("project.title")}
+            </NavLink>
+            {lobsterRows.length === 0 ? null : (
+              <>
+                <div className="mt-3 px-2 text-xs text-muted-foreground">{t("lobster.title")}</div>
+                <NavLink to="/lobster-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
+                  {collapsed ? "L" : t("lobster.all")}
+                </NavLink>
+                {lobsterRows.map((agent) => (
+                  <NavLink key={agent.key} to={`/lobster-workspace/${agent.key}`} className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
+                    {collapsed ? agent.name.slice(0, 1) : agent.name}
+                  </NavLink>
+                ))}
+              </>
+            )}
           </nav>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -263,7 +291,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             <div data-testid="breadcrumb" className="text-sm text-muted-foreground">
               {title}
             </div>
-            <div data-testid="toolbar" className="text-xs text-muted-foreground">
+            <div data-testid="toolbar" className="flex items-center gap-2 text-xs text-muted-foreground">
+              <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setHelpOpen(true)}>{t("help.title")}</button>
+              <button type="button" data-testid="request-close" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setCloseOpen(true)}>{t("close.dialog")}</button>
               <Kbd>Mod+K</Kbd>
             </div>
           </header>
@@ -382,6 +412,17 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             </button>
           </div>
         </div>
+      ) : null}
+      {showUpdate ? <div role="alert" data-testid="update-toast" className="fixed bottom-8 right-3 rounded-md border border-border bg-popover px-3 py-2 text-sm">{t("startup.toast")}</div> : null}
+      {helpOpen ? <HelpDialog onClose={() => setHelpOpen(false)} /> : null}
+      {closeOpen ? (
+        <CloseGuardDialog
+          onRemember={(choice) => {
+            localStorage.setItem("skill-hive-close", choice);
+            void setSettings("closeBehaviour", choice);
+          }}
+          onClose={() => setCloseOpen(false)}
+        />
       ) : null}
       <Toaster />
     </div>

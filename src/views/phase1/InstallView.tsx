@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/phase1/client";
 import { t } from "@/lib/i18n";
+import { MarketplacePanel } from "@/views/phase2/screens";
 
 const TABS = ["leaderboard", "local", "git", "scan"] as const;
 
@@ -13,6 +14,7 @@ export function InstallView({
   onCancel,
   onInstallLocal,
   onInstallArchive,
+  marketplaceReachable = true,
 }: {
   scanned: ScanRow[];
   onImportAll?: (names: string[]) => void;
@@ -21,6 +23,7 @@ export function InstallView({
   onCancel?: () => void;
   onInstallLocal?: (path: string) => void;
   onInstallArchive?: (path: string) => void;
+  marketplaceReachable?: boolean;
 }) {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "local";
@@ -33,18 +36,21 @@ export function InstallView({
   const [installed, setInstalled] = useState<string | null>(null);
   const [imported, setImported] = useState<string | null>(null);
   const [scanNames, setScanNames] = useState<Record<string, string>>({});
-  const active = useMemo(() => (TABS.includes(tab as (typeof TABS)[number]) ? tab : "local"), [tab]);
+  const reachable = marketplaceReachable !== false;
+  const tabs = (reachable ? TABS : TABS.filter((item) => item !== "leaderboard")) as readonly string[];
+  const active = useMemo(() => (tabs.includes(tab) ? tab : "local"), [tab, tabs]);
 
   return (
     <section data-testid="install">
       <h1 className="font-mono text-[22px] font-semibold">{t("install.title")}</h1>
       <div role="tablist" aria-label={t("install.title")} className="mt-3 flex gap-2">
-        {TABS.map((item) => (
+        {tabs.map((item) => (
           <button
             key={item}
             type="button"
             role="tab"
             aria-selected={active === item}
+            data-testid={`tab-${item}`}
             className="rounded-md border border-border px-2 py-1 text-sm"
             onClick={() => setParams({ tab: item })}
           >
@@ -52,7 +58,7 @@ export function InstallView({
           </button>
         ))}
       </div>
-      {active === "leaderboard" ? <p className="mt-4 text-sm text-muted-foreground">{t("install.leaderboard.empty")}</p> : null}
+      {active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
       {active === "local" ? (
         <form
           className="mt-4 space-y-2"

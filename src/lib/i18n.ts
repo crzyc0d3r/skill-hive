@@ -1,9 +1,30 @@
-import dictionary from "../locales/en.json";
+import en from "../locales/en.json";
+import zhCN from "../locales/zh-CN.json";
+import zhTW from "../locales/zh-TW.json";
 
-const table = dictionary as Record<string, string>;
+export const LOCALES = ["en", "zh-CN", "zh-TW"] as const;
+export type Locale = (typeof LOCALES)[number];
+
+const TABLES: Record<Locale, Record<string, string>> = {
+  en: en as Record<string, string>,
+  "zh-CN": zhCN as Record<string, string>,
+  "zh-TW": zhTW as Record<string, string>,
+};
+
+let locale: Locale = "en";
+
+export function currentLocale(): Locale {
+  return locale;
+}
+
+export function setLocale(next: string): Locale {
+  locale = next === "zh-CN" || next === "zh-TW" ? next : "en";
+  document.documentElement.lang = locale;
+  return locale;
+}
 
 export function t(key: string, vars?: Record<string, string>): string {
-  const template = table[key] ?? key;
+  const template = TABLES[locale][key] ?? TABLES.en[key] ?? key;
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (_, name: string) => vars[name] ?? "");
 }

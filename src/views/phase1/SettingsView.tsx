@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { AgentRow } from "@/lib/phase1/client";
-import { applyTextSize, t, type TextSize } from "@/lib/i18n";
+import { applyTextSize, setLocale, t, type TextSize } from "@/lib/i18n";
 import { moveById } from "@/lib/phase1/model";
+import { proxyOk } from "@/lib/phase2/model";
 import type { ThemeChoice } from "@/lib/theme";
 
-const TABS = ["general", "appearance", "agents", "about"] as const;
+const TABS = ["general", "appearance", "agents", "backup", "about"] as const;
 
 export function SettingsView({
   theme,
@@ -35,6 +36,14 @@ export function SettingsView({
   const [refreshed, setRefreshed] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [motion, setMotion] = useState(false);
+  const [proxy, setProxy] = useState("");
+  const [proxyNote, setProxyNote] = useState<string | null>(null);
+  const [closeChoice, setCloseChoice] = useState("ask");
+  const [trayOn, setTrayOn] = useState(true);
+  const [autoApply, setAutoApply] = useState(false);
+  const [exported, setExported] = useState(false);
+  const crash = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-panic") === "1";
+  const repoWarn = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-repo-warn") === "1";
   const choices: ThemeChoice[] = ["light", "dark", "system"];
   const sizes: TextSize[] = ["small", "medium", "large", "xl"];
 
@@ -88,6 +97,12 @@ export function SettingsView({
               </button>
             ))}
           </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="text-sm">{t("settings.language")}</span>
+            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setLocale("en")}>{t("settings.language.en")}</button>
+            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setLocale("zh-CN")}>{t("settings.language.zhCN")}</button>
+            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setLocale("zh-TW")}>{t("settings.language.zhTW")}</button>
+          </div>
         </div>
       ) : null}
       {tab === "general" ? (
@@ -116,6 +131,29 @@ export function SettingsView({
             {t("settings.path.reset")}
           </button>
           {notice ? <p role="status">{notice}</p> : null}
+          <div className="mt-4 space-y-2 text-sm">
+            <p>{t("settings.close")}</p>
+            <button type="button" aria-pressed={closeChoice === "ask"} className="rounded-md border border-border px-2 py-1" onClick={() => setCloseChoice("ask")}>{t("close.dialog")}</button>
+            <button type="button" aria-pressed={closeChoice === "minimize"} className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setCloseChoice(trayOn ? "minimize" : "ask")}>{t("settings.close.minimize")}</button>
+            <button type="button" aria-pressed={closeChoice === "quit"} className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setCloseChoice("quit")}>{t("settings.close.quit")}</button>
+            <label className="mt-2 block">
+              <input type="checkbox" checked={trayOn} onChange={(event) => setTrayOn(event.target.checked)} /> {t("settings.tray")}
+            </label>
+            <p>{t("settings.autoUpdate")}</p>
+            <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => setAutoApply(false)}>{t("settings.autoUpdate.off")}</button>
+            <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setAutoApply(true)}>{t("settings.autoUpdate.daily")}</button>
+            <label className="mt-2 block">
+              <input type="checkbox" checked={autoApply} onChange={(event) => setAutoApply(event.target.checked)} /> {t("settings.autoUpdate.apply")}
+            </label>
+            <div>
+              <label className="block">
+                {t("settings.proxy")}
+                <input aria-label={t("settings.proxy")} value={proxy} onChange={(event) => setProxy(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
+              </label>
+              <button type="button" className="mt-2 rounded-md border border-border px-2 py-1" onClick={() => setProxyNote(proxyOk(proxy) ? t("settings.proxy.save") : t("settings.proxy.invalid"))}>{t("settings.proxy.save")}</button>
+              {proxyNote ? <p role="status">{proxyNote}</p> : null}
+            </div>
+          </div>
         </form>
       ) : null}
       {tab === "agents" ? (
@@ -172,11 +210,28 @@ export function SettingsView({
           </form>
         </div>
       ) : null}
+      {tab === "backup" ? (
+        <div className="mt-4 space-y-2 text-sm">
+          <p>{t("backup.advanced")}</p>
+          <label className="block">
+            {t("backup.remote")}
+            <input aria-label={t("backup.remote")} defaultValue="git@localhost:hive.git" className="ml-2 rounded-md border border-input px-2 py-1" />
+          </label>
+          <button type="button" className="rounded-md border border-border px-2 py-1">{t("backup.disconnect")}</button>
+          <button type="button" disabled className="ml-2 rounded-md border border-border px-2 py-1">{t("settings.engine.libgit2")}</button>
+          <p className="text-muted-foreground">{t("settings.engine.note")}</p>
+        </div>
+      ) : null}
       {tab === "about" ? (
         <div className="mt-4 text-sm">
           <p>{t("settings.about.version")}</p>
           <button type="button" className="mt-2 rounded-md border border-border px-2 py-1" onClick={() => setUpdateNote(t("settings.about.latest"))}>{t("settings.about.updates")}</button>
           {updateNote ? <p role="status">{updateNote}</p> : null}
+          {crash ? <p role="alert">{t("settings.about.crash")}</p> : null}
+          {repoWarn ? <p role="alert">{t("settings.about.repo")}</p> : null}
+          <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href="https://github.com/crzyc0d3r/skill-hive/issues/new" target="_blank" rel="noreferrer">{t("settings.about.report")}</a>
+          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setExported(true)}>{t("settings.about.export")}</button>
+          {exported ? <p role="status">{t("settings.about.exported")}</p> : null}
           <p className="mt-2 text-muted-foreground">Update notification only. Installing an update arrives later.</p>
         </div>
       ) : null}

@@ -4,7 +4,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Component, Path};
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
@@ -75,28 +75,56 @@ pub fn install_archive(
     Ok(installed)
 }
 
+/// Website-synced and marketplace archives stop at these limits.
+pub const MAX_ZIP_ENTRIES: usize = 4096;
+pub const MAX_ZIP_UNCOMPRESSED_BYTES: u64 = 100 * 1024 * 1024;
+
 pub fn safe_extract(archive: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive).with_context(|| format!("open {}", archive.display()))?;
     let mut zip = ZipArchive::new(file)?;
+    if zip.len() > MAX_ZIP_ENTRIES {
+        return Err(anyhow!(
+            "refusing archive with {} entries (limit {MAX_ZIP_ENTRIES})",
+            zip.len()
+        ));
+    }
+    fs::create_dir_all(dest)?;
+    let mut total = 0u64;
     for index in 0..zip.len() {
         let mut entry = zip.by_index(index)?;
         let name = entry.name().to_string();
         if !is_safe_zip_name(&name) {
             return Err(anyhow!("refusing unsafe archive path: {name}"));
         }
-        if entry.is_symlink() {
+        if entry.is_symlink()
+            || entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
             return Err(anyhow!("refusing symlink entry: {name}"));
+        }
+        let declared = entry.size();
+        if declared > MAX_ZIP_UNCOMPRESSED_BYTES
+            || total.saturating_add(declared) > MAX_ZIP_UNCOMPRESSED_BYTES
+        {
+            return Err(anyhow!("refusing archive over 100 MiB uncompressed"));
         }
         let out = dest.join(Path::new(&name));
         if entry.is_dir() {
             fs::create_dir_all(&out)?;
+            total = total.saturating_add(declared);
             continue;
         }
         if let Some(parent) = out.parent() {
             fs::create_dir_all(parent)?;
         }
         let mut file = File::create(&out)?;
-        io::copy(&mut entry, &mut file)?;
+        let room = MAX_ZIP_UNCOMPRESSED_BYTES - total;
+        let copied = io::copy(&mut (&mut entry).take(room + 1), &mut file)?;
+        if copied > room {
+            return Err(anyhow!("refusing archive over 100 MiB uncompressed"));
+        }
+        total = total.saturating_add(copied.max(declared));
     }
     Ok(())
 }

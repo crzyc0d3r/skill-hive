@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Route, Routes, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, Route, Routes, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { APP_ROUTES } from "./app/routes";
 import { AppShell, type ShellOutletContext } from "./components/shell/AppShell";
@@ -14,6 +14,7 @@ import { InstallView } from "./views/phase1/InstallView";
 import { LibraryView } from "./views/phase1/LibraryView";
 import { SettingsView } from "./views/phase1/SettingsView";
 import { WorkspaceView } from "./views/phase1/WorkspaceView";
+import { BackupView, LobsterView, ProjectView } from "./views/phase2/screens";
 
 function DashboardPage() {
   const { skills } = useOutletContext<ShellOutletContext>();
@@ -106,6 +107,7 @@ function workspaceCards(skills: SkillCard[], agentKey: string): WorkspaceCard[] 
 function WorkspacePage() {
   const { presets, skills, agents } = useOutletContext<ShellOutletContext>();
   const { agentKey } = useParams();
+  if (agentKey === "openclaw") return <Navigate to="/lobster-workspace/openclaw" replace />;
   return (
     <WorkspaceView
       presets={presets}
@@ -154,8 +156,16 @@ function screenFor(path: string) {
   if (path === "/my-skills") return <LibraryPage />;
   if (path === "/install") return <InstallPage />;
   if (path === "/global-workspace" || path === "/global-workspace/:agentKey") return <WorkspacePage />;
+  if (path === "/backup") return <BackupView />;
+  if (path === "/project/:id") return <ProjectView />;
+  if (path === "/lobster-workspace" || path === "/lobster-workspace/:agentKey") return <LobsterPage />;
   if (path === "/dev/tokens") return <TokensView />;
   return <PlaceholderView />;
+}
+
+function LobsterPage() {
+  const { agentKey } = useParams();
+  return <LobsterView agentKey={agentKey} />;
 }
 
 export function App({ client }: { client: QueryClient }) {

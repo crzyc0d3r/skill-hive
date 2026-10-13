@@ -1,0 +1,48 @@
+{
+  "nodes": [
+    {
+      "id": "n1_rust",
+      "kind": "code",
+      "scope": "Run the Rust workspace tests and record the result.",
+      "reads": ["crates/hive-core/src/lib.rs", "crates/hive-cli/src/lib.rs"],
+      "writes": "automations/skill-hive-p2/out/n1_rust.md",
+      "run": "bash automations/skill-hive-p2/code/n1_rust.sh",
+      "check": { "cmd": "grep -q 'exit 0' automations/skill-hive-p2/out/n1_rust.md" },
+      "deps": []
+    },
+    {
+      "id": "n2_frontend",
+      "kind": "code",
+      "scope": "Run the frontend unit tests, lint, types, i18n lint, and Playwright flows.",
+      "reads": ["src/App.tsx", "src/locales/en.json"],
+      "writes": "automations/skill-hive-p2/out/n2_frontend.md",
+      "run": "bash automations/skill-hive-p2/code/n2_frontend.sh",
+      "check": { "cmd": "grep -q '| npm test | 0 |' automations/skill-hive-p2/out/n2_frontend.md" },
+      "deps": []
+    },
+    {
+      "id": "n3_ledger",
+      "kind": "code",
+      "scope": "Confirm the Phase 2 ledger names the done rows and the deferred rows.",
+      "reads": ["docs/parity/m2-ledger.md"],
+      "writes": "automations/skill-hive-p2/out/n3_ledger.md",
+      "run": "bash automations/skill-hive-p2/code/n3_ledger.sh",
+      "check": { "cmd": "grep -q 'missing none' automations/skill-hive-p2/out/n3_ledger.md" },
+      "deps": []
+    },
+    {
+      "id": "n4_result",
+      "kind": "code",
+      "scope": "Write the Phase 2 result from the rust, frontend, and ledger reports.",
+      "reads": [
+        "automations/skill-hive-p2/out/n1_rust.md",
+        "automations/skill-hive-p2/out/n2_frontend.md",
+        "automations/skill-hive-p2/out/n3_ledger.md"
+      ],
+      "writes": "automations/skill-hive-p2/out/result.md",
+      "run": "bash automations/skill-hive-p2/code/n4_result.sh",
+      "check": { "cmd": "python3 automations/skill-hive-p2/code/check_result.py" },
+      "deps": ["n1_rust", "n2_frontend", "n3_ledger"]
+    }
+  ]
+}

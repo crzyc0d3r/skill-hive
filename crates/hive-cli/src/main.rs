@@ -1,14 +1,8 @@
-use clap::Parser;
-
-#[derive(Parser)]
-#[command(name = "skill-hive-cli", version, about = "Skill Hive command line")]
-struct Cli {
-    /// Reserved for the reference command tree. Phase 0 prints the version.
-    #[arg(long, hide = true)]
-    _placeholder: bool,
-}
-
 fn main() {
-    let _cli = Cli::parse();
-    println!("skill-hive-cli {}", env!("CARGO_PKG_VERSION"));
+    let output = hive_cli::execute(std::env::args());
+    print!("{}", output.stdout);
+    if !output.stdout.is_empty() && !output.stdout.ends_with('\n') {
+        println!();
+    }
+    std::process::exit(output.code);
 }
