@@ -17,14 +17,14 @@ const screens = [
 
 async function prepare(page: Page, theme: "light" | "dark") {
   await page.addInitScript((choice) => {
-    localStorage.setItem("skill-studio-demo", "1");
+    localStorage.setItem("skill-hive-demo", "1");
     localStorage.setItem("demo-setting:theme", choice);
   }, theme);
   await page.setViewportSize({ width: 1100, height: 640 });
 }
 
 async function assertFrame(page: Page, theme: "light" | "dark", name: string) {
-  await expect(page.getByTestId("status-bar")).toContainText("Skill Studio 0.0.1");
+  await expect(page.getByTestId("status-bar")).toContainText("Skill Hive 0.0.1");
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
   if (theme === "dark") await expect(page.locator("html")).toHaveClass(/dark/);
   const overflow = await page.evaluate(

@@ -1,3 +1,0 @@
-$ bash automations/skill-studio-p1/code/n2_frontend.sh
-(exit 0)
-

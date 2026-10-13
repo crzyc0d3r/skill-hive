@@ -59,5 +59,5 @@ export const DEMO: DemoState = {
 };
 
 export function demoEnabled(): boolean {
-  return typeof localStorage !== "undefined" && localStorage.getItem("skill-studio-demo") === "1";
+  return typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-demo") === "1";
 }

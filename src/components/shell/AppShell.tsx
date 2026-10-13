@@ -152,7 +152,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     queryFn: () => listBaseEntries().catch(() => [] as string[]),
   });
 
-  const title = NAV_ITEMS.find((item) => item.path === location.pathname)?.nav ?? "Skill Studio";
+  const title = NAV_ITEMS.find((item) => item.path === location.pathname)?.nav ?? "Skill Hive";
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -168,7 +168,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           style={{ width: collapsed ? "56px" : "240px" }}
         >
           <div className="flex h-11 items-center px-3 font-mono text-sm font-medium">
-            {collapsed ? "SS" : "Skill Studio"}
+            {collapsed ? "SH" : "Skill Hive"}
           </div>
           <nav aria-label="Primary" className="flex flex-1 flex-col gap-1 overflow-auto px-2">
             {NAV_ITEMS.map((item) => (
@@ -239,7 +239,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         className="flex h-6 items-center justify-between border-t border-border bg-sidebar px-3 text-xs text-muted-foreground"
       >
         <span>Ready</span>
-        <span>Skill Studio 0.0.1</span>
+        <span>Skill Hive 0.0.1</span>
       </footer>
       {paletteOpen ? (
         <div

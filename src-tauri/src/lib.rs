@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use studio_core::db::skill_store::SkillStore;
-use studio_core::library::central_repo;
-use studio_core::util::error::AppError;
-use studio_core::util::file_watcher::start_file_watcher;
-use studio_core::util::notifier::Notifier;
+use hive_core::db::skill_store::SkillStore;
+use hive_core::library::central_repo;
+use hive_core::util::error::AppError;
+use hive_core::util::file_watcher::start_file_watcher;
+use hive_core::util::notifier::Notifier;
 use tauri::{Emitter, Manager};
 
 struct TauriNotifier(tauri::AppHandle);
@@ -85,7 +85,7 @@ pub fn run() {
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
-            if let Ok(base) = std::env::var("SKILL_STUDIO_BASE") {
+            if let Ok(base) = std::env::var("SKILL_HIVE_BASE") {
                 if !base.is_empty() {
                     central_repo::set_runtime_base_dir_override(Some(PathBuf::from(base)));
                 }
@@ -99,7 +99,7 @@ pub fn run() {
             app.manage(store.clone());
             start_file_watcher(Arc::new(TauriNotifier(app.handle().clone())), store);
             if let Ok(dir) = app.path().app_log_dir() {
-                studio_core::util::panic_log::install_panic_hook(dir);
+                hive_core::util::panic_log::install_panic_hook(dir);
             }
             Ok(())
         })
@@ -110,5 +110,5 @@ pub fn run() {
             list_base_entries
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Skill Studio");
+        .expect("error while running Skill Hive");
 }

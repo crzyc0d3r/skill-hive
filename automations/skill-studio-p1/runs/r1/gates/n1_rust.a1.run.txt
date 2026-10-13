@@ -1,3 +1,0 @@
-$ bash automations/skill-studio-p1/code/n1_rust.sh
-(exit 0)
-

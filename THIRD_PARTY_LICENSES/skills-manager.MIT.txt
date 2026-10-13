@@ -1,5 +1,5 @@
-Derived Rust modules under crates/studio-core/src/library, crates/studio-core/src/deploy,
-and crates/studio-core/src/backup (when present) are adapted from skills-manager.
+Derived Rust modules under crates/hive-core/src/library, crates/hive-core/src/deploy,
+and crates/hive-core/src/backup (when present) are adapted from skills-manager.
 
 Origin: https://github.com/xingkongliang/skills-manager
 Commit: 73d6b8f77bba6719924885c1f3be56b828d5a192

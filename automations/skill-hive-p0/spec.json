@@ -1,0 +1,92 @@
+{
+  "nodes": [
+    {
+      "id": "n1_inventory",
+      "kind": "code",
+      "scope": "Inventory the vendored skills-manager modules that Phase 0 ports and write the file list.",
+      "reads": ["automations/skill-hive-p0/sources/reference"],
+      "run": "python3 automations/skill-hive-p0/code/port_phase0.py inventory",
+      "writes": "automations/skill-hive-p0/out/n1_inventory.json",
+      "check": {"cmd": "python3 -c \"import json; p=json.load(open('automations/skill-hive-p0/out/n1_inventory.json')); assert p\""},
+      "deps": [],
+      "timeout": 120
+    },
+    {
+      "id": "n2_port_util",
+      "kind": "code",
+      "scope": "Port the util modules (error, path guard, crypto, log sanitiser, panic log, timing, audit) into hive-core with the derived-file header and the extra token patterns.",
+      "reads": ["automations/skill-hive-p0/out/n1_inventory.json"],
+      "run": "python3 automations/skill-hive-p0/code/port_phase0.py port_util",
+      "writes": "automations/skill-hive-p0/out/n2_port_util.md",
+      "check": {"cmd": "grep -q 'ported util' automations/skill-hive-p0/out/n2_port_util.md"},
+      "deps": ["n1_inventory"],
+      "timeout": 120
+    },
+    {
+      "id": "n3_port_db",
+      "kind": "code",
+      "scope": "Port migrations v1 through v8 and the skill store into hive-core::db.",
+      "reads": ["automations/skill-hive-p0/out/n2_port_util.md"],
+      "run": "python3 automations/skill-hive-p0/code/port_phase0.py port_db",
+      "writes": "automations/skill-hive-p0/out/n3_port_db.md",
+      "check": {"cmd": "grep -q 'hive.db' automations/skill-hive-p0/out/n3_port_db.md"},
+      "deps": ["n2_port_util"],
+      "timeout": 120
+    },
+    {
+      "id": "n4_port_repo",
+      "kind": "code",
+      "scope": "Port the central repository, repo lock, and CLI bridge with the skill-hive paths and the legacy sidecar fallback.",
+      "reads": ["automations/skill-hive-p0/out/n2_port_util.md"],
+      "run": "python3 automations/skill-hive-p0/code/port_phase0.py port_repo",
+      "writes": "automations/skill-hive-p0/out/n4_port_repo.md",
+      "check": {"cmd": "grep -q '.skill-hive' automations/skill-hive-p0/out/n4_port_repo.md"},
+      "deps": ["n2_port_util"],
+      "timeout": 120
+    },
+    {
+      "id": "n5_port_watch",
+      "kind": "code",
+      "scope": "Port the file watcher onto the Notifier trait and the adapter table its unit tests call.",
+      "reads": ["automations/skill-hive-p0/out/n3_port_db.md", "automations/skill-hive-p0/out/n4_port_repo.md"],
+      "run": "python3 automations/skill-hive-p0/code/port_phase0.py port_watch",
+      "writes": "automations/skill-hive-p0/out/n5_port_watch.md",
+      "check": {"cmd": "grep -q 'app-files-changed' crates/hive-core/src/util/file_watcher.rs && grep -q Notifier automations/skill-hive-p0/out/n5_port_watch.md"},
+      "deps": ["n3_port_db", "n4_port_repo"],
+      "timeout": 120
+    },
+    {
+      "id": "n6_shell",
+      "kind": "code",
+      "scope": "Check the Tauri window config and the React shell (sidebar, header, status bar, command palette, tokens, shadcn primitives, mockIPC).",
+      "reads": ["src/components/shell/AppShell.tsx", "src-tauri/tauri.conf.json"],
+      "run": "python3 automations/skill-hive-p0/code/check_shell.py",
+      "writes": "automations/skill-hive-p0/out/n6_shell.md",
+      "check": {"cmd": "grep -q 'command palette' automations/skill-hive-p0/out/n6_shell.md"},
+      "deps": [],
+      "timeout": 60
+    },
+    {
+      "id": "n7_ci",
+      "kind": "code",
+      "scope": "Check the three-OS test workflow, the five-target unsigned release workflow, MIT attribution, fixtures, and procurement notes.",
+      "reads": [".github/workflows/release.yml", "NOTICE"],
+      "run": "python3 automations/skill-hive-p0/code/check_ci.py",
+      "writes": "automations/skill-hive-p0/out/n7_ci.md",
+      "check": {"cmd": "grep -q 'release workflow' automations/skill-hive-p0/out/n7_ci.md"},
+      "deps": [],
+      "timeout": 60
+    },
+    {
+      "id": "n8_verify",
+      "kind": "code",
+      "scope": "Format the workspace and run cargo test, npm test, tsc, the contrast helper, and the header check. Write the Phase 0 result.",
+      "reads": ["automations/skill-hive-p0/out/n5_port_watch.md", "automations/skill-hive-p0/out/n6_shell.md", "automations/skill-hive-p0/out/n7_ci.md"],
+      "run": "python3 automations/skill-hive-p0/code/verify_phase0.py",
+      "writes": "automations/skill-hive-p0/out/result.md",
+      "check": {"cmd": "grep -q 'schema v8' automations/skill-hive-p0/out/result.md && grep -q '| cargo test | 0 |' automations/skill-hive-p0/out/result.md && grep -q '| npm test | 0 |' automations/skill-hive-p0/out/result.md"},
+      "deps": ["n5_port_watch", "n6_shell", "n7_ci"],
+      "timeout": 1800
+    }
+  ]
+}

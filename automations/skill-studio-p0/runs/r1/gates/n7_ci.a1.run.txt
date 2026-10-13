@@ -1,3 +1,0 @@
-$ python3 automations/skill-studio-p0/code/check_ci.py
-(exit 0)
-/workspace/automations/skill-studio-p0/out/n7_ci.md

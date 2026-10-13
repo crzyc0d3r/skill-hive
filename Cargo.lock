@@ -1866,6 +1866,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hive-cli"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "hive-core",
+]
+
+[[package]]
+name = "hive-core"
+version = "0.0.1"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "chrono",
+ "dirs 5.0.1",
+ "fs2",
+ "hex",
+ "log",
+ "notify",
+ "rand",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "walkdir",
+ "zip 2.4.2",
+]
+
+[[package]]
 name = "html5ever"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4072,13 +4103,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
-name = "skill-studio"
+name = "skill-hive"
 version = "0.0.1"
 dependencies = [
+ "hive-core",
  "log",
  "serde",
  "serde_json",
- "studio-core",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -4195,37 +4226,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "studio-cli"
-version = "0.0.1"
-dependencies = [
- "clap",
- "studio-core",
-]
-
-[[package]]
-name = "studio-core"
-version = "0.0.1"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "chrono",
- "dirs 5.0.1",
- "fs2",
- "hex",
- "log",
- "notify",
- "rand",
- "regex",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "walkdir",
- "zip 2.4.2",
-]
 
 [[package]]
 name = "subtle"

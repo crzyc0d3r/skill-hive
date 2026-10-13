@@ -12,7 +12,7 @@ Phase 0 pins the engines the three CI operating systems share.
 
 `rust-toolchain.toml` tracks the stable channel so a security release of rustc is picked up without editing the file. The workspace `rust-version` stays two stable releases behind that channel. When stable moves, raise `rust-version` by the same step and note it in the pull request.
 
-Do not reuse the skills-manager identifier `com.agentskills.desktop`, its icons, its updater public key, or its product name. Skill Studio's identifier is `com.skillstudio.desktop`.
+Do not reuse the skills-manager identifier `com.agentskills.desktop`, its icons, its updater public key, or its product name. Skill Hive's identifier is `com.skillhive.desktop`.
 
 ## Platform packages
 

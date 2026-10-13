@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Skill Studio",
+  "productName": "Skill Hive",
   "version": "0.0.1",
-  "identifier": "com.skillstudio.desktop",
+  "identifier": "com.skillhive.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Skill Studio",
+        "title": "Skill Hive",
         "width": 1440,
         "height": 860,
         "minWidth": 1100,

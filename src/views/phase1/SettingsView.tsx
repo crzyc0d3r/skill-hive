@@ -24,7 +24,7 @@ export function SettingsView({
     ? ((params.get("tab") ?? "appearance") as (typeof TABS)[number])
     : "appearance";
   const [notice, setNotice] = useState<string | null>(null);
-  const [path, setPath] = useState("~/.skill-studio");
+  const [path, setPath] = useState("~/.skill-hive");
   const [agentName, setAgentName] = useState("Field Notes");
   const [agentPath, setAgentPath] = useState("~/.field-notes/skills");
   const choices: ThemeChoice[] = ["light", "dark", "system"];

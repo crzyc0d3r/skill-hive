@@ -1,0 +1,6 @@
+$ python3 automations/skill-hive-p0/code/port_phase0.py port_db
+(exit 0)
+wrote crates/hive-core/src/db/migrations.rs
+wrote crates/hive-core/src/db/skill_store.rs
+wrote crates/hive-core/src/db/mod.rs
+wrote automations/skill-hive-p0/out/n3_port_db.md

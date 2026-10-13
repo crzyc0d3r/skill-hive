@@ -8,9 +8,9 @@ const header = [
 ].join("\n");
 
 const roots = [
-  "crates/studio-core/src/library",
-  "crates/studio-core/src/deploy",
-  "crates/studio-core/src/backup",
+  "crates/hive-core/src/library",
+  "crates/hive-core/src/deploy",
+  "crates/hive-core/src/backup",
 ];
 
 function walk(dir, out) {

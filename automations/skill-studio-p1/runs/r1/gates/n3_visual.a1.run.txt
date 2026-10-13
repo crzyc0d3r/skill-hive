@@ -1,3 +1,0 @@
-$ bash automations/skill-studio-p1/code/n3_visual.sh
-(exit 0)
-

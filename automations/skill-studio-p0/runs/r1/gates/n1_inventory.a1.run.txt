@@ -1,3 +1,0 @@
-$ python3 automations/skill-studio-p0/code/port_phase0.py inventory
-(exit 0)
-wrote automations/skill-studio-p0/out/n1_inventory.json

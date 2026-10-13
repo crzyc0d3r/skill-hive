@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["crates/studio-core", "crates/studio-cli", "src-tauri"]
+members = ["crates/hive-core", "crates/hive-cli", "src-tauri"]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
-authors = ["Skill Studio"]
+authors = ["Skill Hive"]
 rust-version = "1.97"
-description = "Skill Studio — create, generate and test agent skills"
+description = "Skill Hive — create, generate and test agent skills"
 
 [workspace.dependencies]
 anyhow = "1"
