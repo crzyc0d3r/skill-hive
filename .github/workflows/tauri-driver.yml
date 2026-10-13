@@ -44,7 +44,7 @@ jobs:
         run: npm ci
 
       - name: Build the desktop shell
-        run: npx tauri build --debug --bundles none
+        run: npx tauri build --debug --no-bundle
 
       - name: Install tauri-driver
         run: cargo install tauri-driver --version 2.1.0 --locked
