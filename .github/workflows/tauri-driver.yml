@@ -98,6 +98,7 @@ jobs:
         env:
           WEBKIT_DISABLE_COMPOSITING_MODE: "1"
           LIBGL_ALWAYS_SOFTWARE: "1"
+          SKILL_HIVE_DRIVER_LOG: "1"
         run: |
           set -euo pipefail
           test -f "${{ matrix.binary }}"
@@ -106,3 +107,13 @@ jobs:
           else
             node scripts/tauri-driver-suite.mjs "${{ matrix.binary }}"
           fi
+
+      - name: Show WebView2 driver traces
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "TEMP=$env:TEMP"
+          Get-ChildItem $env:TEMP -Directory -Filter 'scoped_dir*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          Get-ChildItem $env:TEMP -Recurse -Filter DevToolsActivePort -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $log = Join-Path $env:TEMP 'skill-hive-driver.log'
+          if (Test-Path $log) { Get-Content $log }

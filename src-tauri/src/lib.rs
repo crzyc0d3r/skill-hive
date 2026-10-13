@@ -126,8 +126,25 @@ where
     })
 }
 
+fn driver_log(line: &str) {
+    if std::env::var("SKILL_HIVE_DRIVER_LOG").ok().as_deref() != Some("1") {
+        return;
+    }
+    let path = std::env::temp_dir().join("skill-hive-driver.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        use std::io::Write;
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let args = std::env::args().collect::<Vec<_>>().join(" | ");
+    driver_log(&format!("args {args}"));
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -160,7 +177,11 @@ pub fn run() {
             } else {
                 window
             };
-            window.build().map_err(box_err)?;
+            if let Err(err) = window.build() {
+                driver_log(&format!("window build failed: {err}"));
+                return Err(box_err(err));
+            }
+            driver_log("window built");
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log::LevelFilter::Info)

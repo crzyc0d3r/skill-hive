@@ -31,8 +31,10 @@ async function call(method, urlPath, body) {
 }
 
 function promoteDevToolsPort() {
-  const roots = [process.env.TEMP, process.env.TMP, tmpdir()].filter(Boolean);
+  promoteDevToolsPort.scans += 1;
+  const roots = [process.env.TEMP, process.env.TMP, process.env.LOCALAPPDATA && path.win32.join(process.env.LOCALAPPDATA, "Temp"), tmpdir()].filter(Boolean);
   const seen = new Set();
+  const scoped = [];
   for (const root of roots) {
     if (seen.has(root)) continue;
     seen.add(root);
@@ -44,6 +46,7 @@ function promoteDevToolsPort() {
     }
     for (const name of names) {
       if (!name.toLowerCase().includes("scoped_dir")) continue;
+      scoped.push(path.join(root, name));
       const nested = path.join(root, name, "EBWebView", "DevToolsActivePort");
       const dest = path.join(root, name, "DevToolsActivePort");
       if (!existsSync(nested) || existsSync(dest)) continue;
@@ -55,7 +58,11 @@ function promoteDevToolsPort() {
       }
     }
   }
+  if (promoteDevToolsPort.scans === 1 || promoteDevToolsPort.scans % 20 === 0) {
+    console.log(`devtools scan ${promoteDevToolsPort.scans} roots ${[...seen].join(" ; ")} scoped ${scoped.join(" ; ") || "(none)"}`);
+  }
 }
+promoteDevToolsPort.scans = 0;
 
 let session;
 const promoter = process.platform === "win32" ? setInterval(promoteDevToolsPort, 200) : null;
