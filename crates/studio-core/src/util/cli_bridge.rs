@@ -263,7 +263,7 @@ fn rename_retrying_sharing_violation(from: &Path, to: &Path) -> std::io::Result<
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use tempfile::tempdir;

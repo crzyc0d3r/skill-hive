@@ -376,6 +376,12 @@ def port_cli_bridge(text: str) -> str:
         "use super::central_repo;",
         "use crate::library::central_repo;",
     )
+    # The bundled-CLI tests shell out to a Unix script. Compiling the module
+    # on Windows leaves its imports unused under -D warnings.
+    text = text.replace(
+        "#[cfg(test)]\nmod tests {",
+        "#[cfg(all(test, unix))]\nmod tests {",
+    )
     return text
 
 
