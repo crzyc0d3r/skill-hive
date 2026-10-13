@@ -6,7 +6,7 @@ use hive_core::library::central_repo;
 use hive_core::util::error::AppError;
 use hive_core::util::file_watcher::start_file_watcher;
 use hive_core::util::notifier::Notifier;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WebviewWindowBuilder};
 
 mod tray;
 
@@ -68,6 +68,64 @@ fn box_err(err: impl std::fmt::Display) -> Box<dyn std::error::Error> {
     err.to_string().into()
 }
 
+#[cfg(any(windows, test))]
+struct WebviewDriverOverrides {
+    browser_args: String,
+    data_directory: Option<PathBuf>,
+}
+
+/// msedgedriver launches the executable with a debugging port and a user-data
+/// directory, then waits for `DevToolsActivePort` in that directory. WebView2
+/// only honors those switches when they are applied before the webview exists.
+#[cfg(any(windows, test))]
+fn webview_driver_overrides<I, S>(args: I) -> Option<WebviewDriverOverrides>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut forwarded = Vec::new();
+    let mut data_directory = None;
+    let mut argv = args.into_iter().peekable();
+    while let Some(arg) = argv.next() {
+        let arg = arg.as_ref();
+        if let Some(path) = arg.strip_prefix("--user-data-dir=") {
+            data_directory = Some(PathBuf::from(path));
+            continue;
+        }
+        if arg == "--user-data-dir" {
+            if let Some(path) = argv.next() {
+                data_directory = Some(PathBuf::from(path.as_ref()));
+            }
+            continue;
+        }
+        if arg.starts_with("--remote-debugging-port") || arg.starts_with("--remote-allow-origins") {
+            forwarded.push(arg.to_string());
+        }
+    }
+    if forwarded.is_empty() && data_directory.is_none() {
+        return None;
+    }
+    let mut browser_args =
+        String::from("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection");
+    for arg in forwarded {
+        browser_args.push(' ');
+        if arg.contains(' ') {
+            if let Some((flag, value)) = arg.split_once('=') {
+                browser_args.push_str(flag);
+                browser_args.push_str("=\"");
+                browser_args.push_str(value);
+                browser_args.push('"');
+                continue;
+            }
+        }
+        browser_args.push_str(&arg);
+    }
+    Some(WebviewDriverOverrides {
+        browser_args,
+        data_directory,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -82,6 +140,27 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
+            let window_config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .ok_or_else(|| box_err("missing the main window config"))?;
+            let window = WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
+            #[cfg(windows)]
+            let window = if let Some(overrides) = webview_driver_overrides(std::env::args().skip(1))
+            {
+                let window = window.additional_browser_args(&overrides.browser_args);
+                if let Some(dir) = overrides.data_directory {
+                    window.data_directory(dir)
+                } else {
+                    window
+                }
+            } else {
+                window
+            };
+            window.build().map_err(box_err)?;
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log::LevelFilter::Info)
@@ -117,4 +196,33 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Skill Hive");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::webview_driver_overrides;
+
+    #[test]
+    fn driver_switches_become_webview_arguments() {
+        let overrides = webview_driver_overrides([
+            "--remote-debugging-port=9222",
+            "--user-data-dir=C:\\temp\\edge-profile",
+            "--unrelated",
+        ])
+        .expect("driver switches");
+        assert!(overrides
+            .browser_args
+            .contains("--remote-debugging-port=9222"));
+        assert!(overrides.browser_args.contains("msSmartScreenProtection"));
+        assert!(!overrides.browser_args.contains("unrelated"));
+        assert_eq!(
+            overrides.data_directory.unwrap(),
+            std::path::PathBuf::from("C:\\temp\\edge-profile")
+        );
+    }
+
+    #[test]
+    fn a_normal_launch_does_not_override_the_webview() {
+        assert!(webview_driver_overrides(["--help"]).is_none());
+    }
 }
