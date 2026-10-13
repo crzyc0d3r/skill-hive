@@ -136,7 +136,12 @@ pub fn deploy_skill(
         remove_target(target).map_err(AppError::io)?;
     }
     if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).map_err(AppError::io)?;
+        // Creating a UNC parent asks the network for a share that is not
+        // there (os error 53) and never reaches the copy step. The copy
+        // backend creates a local parent itself when the target is local.
+        if !is_unc_path(target) {
+            fs::create_dir_all(parent).map_err(AppError::io)?;
+        }
     }
     let chain = fallback_chain(preference, is_unc_path(target), os);
     let mut last_error = None;
@@ -214,9 +219,8 @@ pub fn undeploy_target(target: &Path, still_claimed: bool) -> Result<bool, AppEr
 pub fn remove_copy_target(target: &Path) -> Result<(), AppError> {
     match classify_target(target) {
         TargetClass::Missing => Ok(()),
-        TargetClass::RealDirectory | TargetClass::Symlink | TargetClass::Junction => {
-            fs::remove_dir_all(target).map_err(AppError::io)
-        }
+        TargetClass::Symlink | TargetClass::Junction => remove_target(target).map_err(AppError::io),
+        TargetClass::RealDirectory => fs::remove_dir_all(target).map_err(AppError::io),
         TargetClass::File => fs::remove_file(target).map_err(AppError::io),
     }
 }
@@ -239,7 +243,7 @@ fn remove_target(path: &Path) -> io::Result<()> {
         Err(err) => return Err(err),
     };
     if meta.file_type().is_symlink() {
-        return fs::remove_file(path);
+        return remove_symlink(path);
     }
     #[cfg(windows)]
     if is_junction(path) {
@@ -250,6 +254,23 @@ fn remove_target(path: &Path) -> io::Result<()> {
         fs::remove_dir_all(path)
     } else {
         fs::remove_file(path)
+    }
+}
+
+/// Drop a symlink or junction without following it.
+///
+/// On Windows, `DeleteFile` refuses a directory symlink with os error 5.
+/// `RemoveDirectory` removes that link and leaves the target directory alone.
+pub(crate) fn remove_deployed_link(path: &Path) -> io::Result<()> {
+    remove_target(path)
+}
+
+fn remove_symlink(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        #[cfg(windows)]
+        Err(err) if err.raw_os_error() == Some(5) => fs::remove_dir(path),
+        Err(err) => Err(err),
     }
 }
 

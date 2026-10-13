@@ -8,7 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::db::skill_store::SkillStore;
-use crate::deploy::sync_engine::{deploy_skill, link_points_at, NativeBackend, OsKind, SyncMode};
+use crate::deploy::sync_engine::{
+    deploy_skill, link_points_at, remove_deployed_link, NativeBackend, OsKind, SyncMode,
+};
 use crate::library::content_hash::hash_skill_dir;
 use crate::library::installer::install_local;
 use crate::library::skill_metadata::read_skill_document;
@@ -119,7 +121,7 @@ pub fn import_agent_local_skill_to_center(
     if disk_path.exists() {
         let meta = fs::symlink_metadata(disk_path)?;
         if meta.file_type().is_symlink() {
-            fs::remove_file(disk_path)?;
+            remove_deployed_link(disk_path)?;
         } else if meta.is_dir() {
             fs::remove_dir_all(disk_path)?;
         }

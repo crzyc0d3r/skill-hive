@@ -591,7 +591,8 @@ fn workspace_upload_adopts_and_pull_returns_to_in_sync() {
     )
     .unwrap();
     // A symlink follows the center, so copy-mode is what can drift.
-    fs::remove_file(&local).unwrap();
+    // Windows DeleteFile refuses a directory symlink; RemoveDirectory does not.
+    crate::deploy::sync_engine::remove_deployed_link(&local).unwrap();
     let center = store.get_skill_by_id(&id).unwrap().unwrap().central_path;
     crate::library::installer::copy_dir(std::path::Path::new(&center), &local).unwrap();
     fs::write(local.join("SKILL.md"), "---\nname: notes\n---\nv1\n").unwrap();
