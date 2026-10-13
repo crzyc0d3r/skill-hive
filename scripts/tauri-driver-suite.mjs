@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -30,7 +30,35 @@ async function call(method, urlPath, body) {
   return text ? JSON.parse(text) : {};
 }
 
+function promoteDevToolsPort() {
+  const roots = [process.env.TEMP, process.env.TMP, tmpdir()].filter(Boolean);
+  const seen = new Set();
+  for (const root of roots) {
+    if (seen.has(root)) continue;
+    seen.add(root);
+    let names = [];
+    try {
+      names = readdirSync(root);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!name.toLowerCase().includes("scoped_dir")) continue;
+      const nested = path.join(root, name, "EBWebView", "DevToolsActivePort");
+      const dest = path.join(root, name, "DevToolsActivePort");
+      if (!existsSync(nested) || existsSync(dest)) continue;
+      try {
+        copyFileSync(nested, dest);
+        console.log(`promoted DevToolsActivePort from ${nested}`);
+      } catch (err) {
+        console.log(`could not promote DevToolsActivePort: ${err}`);
+      }
+    }
+  }
+}
+
 let session;
+const promoter = process.platform === "win32" ? setInterval(promoteDevToolsPort, 200) : null;
 try {
   const created = await call("POST", "/session", {
     capabilities: {
@@ -101,6 +129,7 @@ try {
   await find("[data-testid=backup]");
   console.log("tauri-driver suite: phase 1 routes plus project, marketplace, update, and backup");
 } finally {
+  if (promoter) clearInterval(promoter);
   if (session) {
     await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE" }).catch(() => {});
   }
