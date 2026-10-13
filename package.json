@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --exclude e2e/**",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "node scripts/tauri-dev.mjs",
@@ -18,6 +18,8 @@
     "contrast": "node scripts/contrast.mjs",
     "check:headers": "node scripts/check-headers.mjs",
     "check:palette": "node scripts/check-palette.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "test:visual": "playwright test",
     "gen:ipc": "node scripts/gen-ipc-types.mjs"
   },
   "dependencies": {
@@ -43,6 +45,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/vite": "^4.1.13",
     "@tauri-apps/cli": "^2.8.4",
     "@testing-library/jest-dom": "^6.8.0",

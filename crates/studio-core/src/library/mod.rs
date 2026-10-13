@@ -3,4 +3,11 @@
 // Copyright (c) 2026 Tianliang Zhang
 
 pub mod central_repo;
+pub mod content_hash;
+pub mod git_fetcher;
+pub mod index;
+pub mod installer;
+pub mod scanner;
+pub mod skill_metadata;
 pub mod sync_metadata;
+pub mod workspace;

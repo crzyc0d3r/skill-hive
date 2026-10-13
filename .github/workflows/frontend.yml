@@ -45,8 +45,17 @@ jobs:
       - name: Typecheck
         run: npx tsc -b
 
+      - name: English i18n
+        run: npm run check:i18n
+
       - name: Test
         run: npm test
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Visual checks
+        run: npm run test:visual
 
       - name: npm audit
         run: npm audit --audit-level=high

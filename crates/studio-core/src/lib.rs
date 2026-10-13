@@ -6,3 +6,5 @@ pub mod util;
 
 #[cfg(test)]
 mod phase0_tests;
+#[cfg(test)]
+mod phase1_tests;

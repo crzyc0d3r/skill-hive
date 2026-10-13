@@ -9,9 +9,13 @@ import "./styles/tokens.css";
 const queryClient = new QueryClient();
 
 const started = performance.now();
-void logStartupEvent("first-paint", Math.round(performance.now() - started)).catch(() => {
-  /* The webview is not present under Vite alone. */
-});
+try {
+  void logStartupEvent("first-paint", Math.round(performance.now() - started)).catch(() => {
+    /* The webview is not present under Vite alone. */
+  });
+} catch {
+  /* invoke can throw before it returns a promise outside the webview. */
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
