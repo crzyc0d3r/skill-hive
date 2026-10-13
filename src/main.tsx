@@ -1,0 +1,22 @@
+import { QueryClient } from "@tanstack/react-query";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { App } from "./App";
+import { logStartupEvent } from "./lib/ipc/settings";
+import "./styles/tokens.css";
+
+const queryClient = new QueryClient();
+
+const started = performance.now();
+void logStartupEvent("first-paint", Math.round(performance.now() - started)).catch(() => {
+  /* The webview is not present under Vite alone. */
+});
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App client={queryClient} />
+    </BrowserRouter>
+  </StrictMode>,
+);

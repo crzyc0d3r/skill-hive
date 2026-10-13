@@ -1,0 +1,92 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            label: macOS-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            label: macOS-x64
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: Linux-x64
+          - platform: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            label: Linux-arm64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: Windows-x64
+    runs-on: ${{ matrix.platform }}
+    name: Build (${{ matrix.label }})
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: false
+
+      - name: Install Linux system dependencies
+        if: startsWith(matrix.platform, 'ubuntu-')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf xdg-utils build-essential pkg-config
+          sudo apt-get install -y libayatana-appindicator3-dev || sudo apt-get install -y libappindicator3-dev
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build CLI binary
+        run: cargo build --release -p studio-cli --target ${{ matrix.target }}
+
+      - name: Build unsigned bundles
+        uses: tauri-apps/tauri-action@1ddc7b49b13c3038297360482fcb3e058764d7c9 # v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
+          releaseName: Skill Studio ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
+          releaseBody: Unsigned Phase 0 bundles. Signing and notarization are intentionally absent.
+          releaseDraft: true
+          prerelease: true
+          args: --target ${{ matrix.target }}
+
+      - name: Attach CLI binary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}"
+          bin="target/${{ matrix.target }}/release/skill-studio-cli"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            bin="${bin}.exe"
+          fi
+          gh release upload "$tag" "$bin" --clobber
