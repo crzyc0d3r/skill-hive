@@ -42,4 +42,20 @@ describe("application shell", () => {
     expect(dark).toHaveAttribute("aria-pressed", "true");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
+
+  it("routes numbered shortcuts, focuses search, and stores a remap", async () => {
+    const user = userEvent.setup();
+    renderApp("/my-skills");
+    await user.keyboard("{Control>}f{/Control}");
+    expect(screen.getByLabelText("Search skills")).toHaveFocus();
+    await user.keyboard("{Control>}/{/Control}");
+    expect(screen.getByRole("dialog", { name: "Shortcuts" })).toBeInTheDocument();
+    const first = screen.getByRole("textbox", { name: "Shortcut 1" });
+    await user.clear(first);
+    await user.type(first, "/settings");
+    await user.click(screen.getByRole("button", { name: "Save shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.keyboard("{Control>}1{/Control}");
+    expect(await screen.findByTestId("settings")).toBeInTheDocument();
+  });
 });

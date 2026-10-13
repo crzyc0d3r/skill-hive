@@ -65,11 +65,12 @@ test("extra large library names stay inside 1100x640", async ({ page }) => {
   await page.goto("/settings");
   await page.getByRole("button", { name: "Extra Large" }).click();
   await page.goto("/my-skills");
-  await expect(page.getByText("research-notes")).toBeVisible();
+  const name = page.getByRole("button", { name: "research-notes Collect sources" }).locator("span").first();
+  await expect(name).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(1);
-  const truncated = await page.getByText("research-notes").evaluate((node) => node.className.includes("truncate"));
+  const truncated = await name.evaluate((node) => node.className.includes("truncate"));
   expect(truncated).toBe(false);
 });

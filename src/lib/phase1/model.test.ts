@@ -1,4 +1,4 @@
-import { filterSkills, lcsDiff, presetFill, presetLabel, type SkillCard } from "./model";
+import { fileDiffs, filterSkills, lcsDiff, moveById, presetFill, presetLabel, type SkillCard } from "./model";
 
 const skills: SkillCard[] = [
   {
@@ -36,6 +36,14 @@ describe("library filter and diff", () => {
       { kind: "same", text: "same" },
       { kind: "del", text: "old" },
       { kind: "add", text: "new" },
+    ]);
+  });
+
+  it("reorders by id and diffs each source file", () => {
+    expect(moveById(["a", "b", "c"], "c", "a", (item) => item)).toEqual(["c", "a", "b"]);
+    expect(fileDiffs([{ path: "SKILL.md", local: "left", remote: "right" }])[0].rows).toEqual([
+      { kind: "del", text: "left" },
+      { kind: "add", text: "right" },
     ]);
   });
 

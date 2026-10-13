@@ -9,7 +9,8 @@ import { listBaseEntries } from "../../lib/ipc/settings";
 import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, t } from "../../lib/i18n";
-import { listPresets, listSkills } from "../../lib/phase1/client";
+import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "../../lib/phase1/client";
+import { moveById } from "../../lib/phase1/model";
 import { Kbd } from "../Kbd";
 import { StatusBanner } from "../StatusBanner";
 
@@ -37,6 +38,11 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const [banner, setBanner] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [shortcutRows, setShortcutRows] = useState(SHORTCUTS);
+  const [presetRows, setPresetRows] = useState<PresetRow[] | null>(null);
+  const [dragPreset, setDragPreset] = useState<string | null>(null);
+  const [editingPreset, setEditingPreset] = useState<string | null>(null);
+  const [presetName, setPresetName] = useState("");
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -91,6 +97,15 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       .catch(() => {
         /* text size is optional */
       });
+    getSettings("shortcuts")
+      .then((value) => {
+        if (cancelled || !value) return;
+        const parsed = JSON.parse(value) as { id: string; href: string }[];
+        if (Array.isArray(parsed) && parsed.every((item) => item.id && item.href)) setShortcutRows(parsed);
+      })
+      .catch(() => {
+        /* shortcuts stay on the defaults */
+      });
     return () => {
       cancelled = true;
     };
@@ -118,7 +133,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         event.preventDefault();
         setShortcutsOpen(true);
       } else {
-        const shortcut = SHORTCUTS.find((item) => item.id === key);
+        const shortcut = shortcutRows.find((item) => item.id === key);
         if (shortcut) {
           event.preventDefault();
           navigate(shortcut.href);
@@ -127,17 +142,19 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate]);
+  }, [navigate, shortcutRows]);
 
   const skills = useQuery({ queryKey: SKILLS_KEY, queryFn: listSkills });
   const presets = useQuery({ queryKey: ["presets"], queryFn: listPresets });
+  const agents = useQuery({ queryKey: ["agents"], queryFn: listAgents });
+  const shownPresets = useMemo(() => presetRows ?? presets.data ?? [], [presetRows, presets.data]);
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const skillHits = (skills.data ?? [])
       .filter((skill) => !needle || skill.name.toLowerCase().includes(needle))
       .map((skill) => ({ id: skill.id, label: skill.name, href: `/my-skills?skill=${skill.id}`, group: "Skills" }));
-    const presetHits = (presets.data ?? [])
+    const presetHits = shownPresets
       .filter((preset) => !needle || preset.name.toLowerCase().includes(needle))
       .map((preset) => ({ id: preset.id, label: preset.name, href: "/global-workspace", group: "Presets" }));
     const actionHits = ACTIONS.filter((action) => !needle || action.label.toLowerCase().includes(needle)).map((action) => ({
@@ -145,7 +162,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       group: "Actions",
     }));
     return [...skillHits, ...presetHits, ...actionHits];
-  }, [query, skills.data, presets.data]);
+  }, [query, skills.data, shownPresets]);
 
   const listing = useQuery({
     queryKey: BASE_LISTING_KEY,
@@ -187,14 +204,52 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             ))}
             <div className="mt-3 px-2 text-xs text-muted-foreground">{t("workspace.title")}</div>
             <NavLink to="/global-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
-              {collapsed ? "G" : "All Agents"}
+              {collapsed ? "G" : t("workspace.allAgents")}
             </NavLink>
-            <div className="mt-3 px-2 text-xs text-muted-foreground">Presets</div>
-            {(presets.data ?? []).map((preset) => (
-              <NavLink key={preset.id} to="/global-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
-                {collapsed ? preset.name.slice(0, 1) : preset.name}
+            {(agents.data ?? []).map((agent) => (
+              <NavLink key={agent.key} to={`/global-workspace/${agent.key}`} className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
+                {collapsed ? agent.name.slice(0, 1) : agent.name}
               </NavLink>
             ))}
+            <div className="mt-3 px-2 text-xs text-muted-foreground">Presets</div>
+            {shownPresets.map((preset) => (
+              <div
+                key={preset.id}
+                draggable
+                data-preset={preset.id}
+                onDragStart={() => setDragPreset(preset.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (!dragPreset) return;
+                  setPresetRows(moveById(shownPresets, dragPreset, preset.id, (item) => item.id));
+                  setDragPreset(null);
+                }}
+                className="flex items-center gap-1"
+              >
+                <NavLink to="/global-workspace" className="flex h-8 min-w-0 flex-1 items-center rounded-md px-2 text-sm hover:bg-accent">
+                  {collapsed ? preset.name.slice(0, 1) : preset.name}
+                </NavLink>
+                {collapsed ? null : (
+                  <>
+                    <button type="button" className="text-xs" aria-label={`${t("preset.edit")} ${preset.name}`} onClick={() => { setEditingPreset(preset.id); setPresetName(preset.name); }}>{t("preset.edit")}</button>
+                    <button type="button" className="text-xs" aria-label={`${t("preset.delete")} ${preset.name}`} onClick={() => setPresetRows(shownPresets.filter((item) => item.id !== preset.id))}>{t("preset.delete")}</button>
+                  </>
+                )}
+              </div>
+            ))}
+            {editingPreset ? (
+              <form
+                className="flex gap-1 px-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setPresetRows(shownPresets.map((preset) => preset.id === editingPreset ? { ...preset, name: presetName } : preset));
+                  setEditingPreset(null);
+                }}
+              >
+                <input aria-label={t("preset.edit")} value={presetName} onChange={(event) => setPresetName(event.target.value)} className="w-full rounded-md border border-input px-1 py-0.5 text-xs" />
+                <button type="submit" className="text-xs">{t("preset.save")}</button>
+              </form>
+            ) : null}
             <NavLink to="/global-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
               {collapsed ? "+" : t("preset.new")}
             </NavLink>
@@ -221,7 +276,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
               context={{
                 listing: listing.data ?? [],
                 skills: skills.data ?? [],
-                presets: presets.data ?? [],
+                presets: shownPresets,
+                setPresets: (next: PresetRow[]) => setPresetRows(next),
+                agents: (agents.data ?? []) as AgentRow[],
                 theme,
                 setTheme: (choice: ThemeChoice) => {
                   setTheme(choice);
@@ -296,12 +353,31 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         <div role="dialog" aria-label={t("shortcuts.title")} className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
           <div className="rounded-lg border border-border bg-popover p-4">
             <h2 className="font-medium">{t("shortcuts.title")}</h2>
-            <ul className="mt-2 text-sm">
-              {SHORTCUTS.map((item) => (
-                <li key={item.id}>Mod+{item.id} {item.href}</li>
+            <ul className="mt-2 space-y-1 text-sm">
+              {shortcutRows.map((item) => (
+                <li key={item.id} className="flex items-center gap-2">
+                  <span>Mod+{item.id}</span>
+                  <input
+                    aria-label={`Shortcut ${item.id}`}
+                    value={item.href}
+                    onChange={(event) => setShortcutRows((current) => current.map((row) => row.id === item.id ? { ...row, href: event.target.value } : row))}
+                    className="rounded-md border border-input px-1 py-0.5"
+                  />
+                </li>
               ))}
+              <li>Mod+F</li>
+              <li>Mod+/</li>
             </ul>
-            <button type="button" className="mt-3 rounded-md border border-border px-2 py-1 text-sm" onClick={() => setShortcutsOpen(false)}>
+            <button
+              type="button"
+              className="mt-3 rounded-md border border-border px-2 py-1 text-sm"
+              onClick={() => {
+                void setSettings("shortcuts", JSON.stringify(shortcutRows));
+              }}
+            >
+              {t("shortcuts.save")}
+            </button>
+            <button type="button" className="mt-3 ml-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => setShortcutsOpen(false)}>
               Close
             </button>
           </div>
@@ -315,7 +391,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
 export interface ShellOutletContext {
   listing: string[];
   skills: import("../../lib/phase1/model").SkillCard[];
-  presets: import("../../lib/phase1/client").PresetRow[];
+  presets: PresetRow[];
+  setPresets: (next: PresetRow[]) => void;
+  agents: AgentRow[];
   theme: ThemeChoice;
   setTheme: (choice: ThemeChoice) => void;
 }

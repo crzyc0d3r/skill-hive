@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { MemoryRouter } from "react-router-dom";
@@ -28,6 +28,7 @@ const SKILLS: SkillCard[] = [
     body: "left",
     sourceBody: "right",
     agents: [],
+    files: [{ path: "SKILL.md", local: "left", remote: "right" }],
   },
   {
     id: "skill-plain",
@@ -53,7 +54,12 @@ function installIpc(skills = SKILLS, failSettings = false) {
     if (cmd === "log_startup_event") return null;
     if (cmd === "list_base_entries") return [];
     if (cmd === "get_managed_skills") return skills;
-    if (cmd === "list_presets") return [{ id: "research", name: "Research", skillIds: ["skill-research", "skill-review"], synced: 0 }];
+    if (cmd === "list_presets") {
+      return [
+        { id: "research", name: "Research", skillIds: ["skill-research", "skill-review"], synced: 0 },
+        { id: "tools", name: "Tools", skillIds: ["skill-plain"], synced: 0 },
+      ];
+    }
     if (cmd === "get_tool_status") {
       return [{ key: "claude_code", name: "Claude Code", installed: true, enabled: true, path: "~/.claude/skills", projectPath: ".claude/skills", custom: false }];
     }
@@ -157,5 +163,186 @@ describe("phase 1 screens", () => {
     renderAt("/my-skills");
     const name = await screen.findByText("research-notes");
     expect(name.className).not.toContain("truncate");
+  });
+
+  it("reorders a preset, uses the card menu, and deletes a tag", async () => {
+    installIpc();
+    const user = userEvent.setup();
+    renderAt("/my-skills");
+    expect(await screen.findByText("research-notes")).toBeInTheDocument();
+    const members = document.querySelectorAll("[data-member]");
+    fireEvent.dragStart(members[1]);
+    fireEvent.drop(members[0]);
+    expect(screen.getByTestId("preset-order").textContent?.indexOf("review-diff")).toBeLessThan(
+      screen.getByTestId("preset-order").textContent?.indexOf("research-notes") ?? 0,
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Preset membership research-notes" }));
+    expect(screen.getByTestId("preset-order")).not.toHaveTextContent("research-notes");
+    await user.click(screen.getAllByRole("button", { name: "Card menu" })[0]);
+    await user.click(screen.getByRole("button", { name: "Check" }));
+    expect(screen.getByText("Checked research-notes")).toBeInTheDocument();
+    await act(async () => {
+      screen.getByRole("button", { name: "research" }).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    });
+    await user.click(screen.getByRole("button", { name: "Delete tag" }));
+    expect(screen.queryByRole("button", { name: "research" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByText("research-notes")).not.toBeInTheDocument();
+  });
+
+  it("runs batch actions, agent toggles, and the per-file diff", async () => {
+    installIpc();
+    const user = userEvent.setup();
+    renderAt("/my-skills");
+    await screen.findByText("plain");
+    await user.click(screen.getByRole("checkbox", { name: "Select plain" }));
+    await user.click(screen.getByRole("button", { name: "Enable" }));
+    await user.click(screen.getByRole("button", { name: "Available" }));
+    expect(screen.queryByText("plain")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "All" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select plain" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select research-notes" }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await user.type(screen.getByRole("textbox", { name: "Tags" }), "batch");
+    await user.click(screen.getAllByRole("button", { name: "Tags" })[1]);
+    expect(screen.getByRole("button", { name: "Remove tag batch" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /research-notes/ }));
+    await user.click(screen.getByRole("button", { name: "claude_code" }));
+    expect(screen.getByRole("button", { name: "claude_code" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /review-diff/ }));
+    await user.click(screen.getByRole("button", { name: "Diff" }));
+    expect(screen.getByTestId("file-diff")).toHaveTextContent("SKILL.md");
+    expect(screen.getByTestId("file-diff")).toHaveTextContent("right");
+    await user.click(screen.getByRole("checkbox", { name: "Select plain" }));
+    await user.click(screen.getByRole("button", { name: "Delete selected" }));
+    expect(screen.queryByText("plain")).not.toBeInTheDocument();
+  });
+
+  it("deep-links install tabs, installs a folder, and imports one scanned skill", async () => {
+    installIpc();
+    const user = userEvent.setup();
+    const leaderboard = renderAt("/install?tab=leaderboard");
+    expect(await screen.findByRole("tab", { name: "Leaderboard" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("The marketplace arrives in a later phase.")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Local Install" }));
+    await user.click(screen.getByRole("button", { name: "Install local" }));
+    expect(screen.getByText("Imported demo")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Install archive" }));
+    expect(screen.getByText("Imported demo.skill")).toBeInTheDocument();
+    leaderboard.unmount();
+    renderAt("/install?tab=scan");
+    const rename = await screen.findByLabelText("Rename scan cursor-skill");
+    await user.clear(rename);
+    await user.type(rename, "renamed-cursor");
+    await user.click(screen.getByRole("button", { name: "Import cursor-skill" }));
+    expect(screen.getByText("Imported renamed-cursor")).toBeInTheDocument();
+  });
+
+  it("previews, renames, and cancels a git clone", async () => {
+    installIpc();
+    const user = userEvent.setup();
+    renderAt("/install?tab=git");
+    expect(await screen.findByLabelText("Git URL")).toHaveValue("https://github.com/acme/skills/tree/feature/slash/tools/demo");
+    await user.click(screen.getByRole("button", { name: "Clone & Preview" }));
+    expect(screen.getByTestId("git-preview")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Import Selected" }));
+    expect(screen.getByText("Imported renamed-demo")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel clone" }));
+    expect(screen.getByText("Temporary clone directory removed.")).toBeInTheDocument();
+  });
+
+  it("stores agent order, sync mode, motion, and the update notice", async () => {
+    installIpc();
+    const user = userEvent.setup();
+    renderAt("/settings?tab=agents");
+    expect(await screen.findByText("Claude Code")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Disable All" }));
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Enable All" }));
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.getByText("Agents refreshed")).toBeInTheDocument();
+    const path = screen.getByRole("textbox", { name: "Reset path Claude Code" });
+    await user.clear(path);
+    await user.type(path, "/tmp/claude");
+    await user.click(screen.getByRole("button", { name: "Reset path" }));
+    expect(path).toHaveValue("~/.claude/skills");
+    await user.clear(screen.getByRole("textbox", { name: "Project path Claude Code" }));
+    await user.type(screen.getByRole("textbox", { name: "Project path Claude Code" }), "custom/skills");
+    expect(screen.getByRole("textbox", { name: "Project path Claude Code" })).toHaveValue("custom/skills");
+    await user.click(screen.getByRole("button", { name: "New Agent" }));
+    const rows = document.querySelectorAll("[data-agent]");
+    fireEvent.dragStart(rows[1]);
+    fireEvent.drop(rows[0]);
+    expect(document.querySelector("[data-testid='agent-order']")?.textContent?.indexOf("Field Notes")).toBeLessThan(
+      document.querySelector("[data-testid='agent-order']")?.textContent?.indexOf("Claude Code") ?? 0,
+    );
+    await user.click(screen.getByRole("button", { name: "Remove Field Notes" }));
+    expect(screen.queryByText("Field Notes")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "General" }));
+    await user.click(screen.getByRole("button", { name: "File Copy" }));
+    expect(screen.getByRole("button", { name: "File Copy" })).toHaveAttribute("aria-pressed", "true");
+    await user.clear(screen.getByRole("textbox", { name: "Central repository path" }));
+    await user.type(screen.getByRole("textbox", { name: "Central repository path" }), "/tmp/hive");
+    await user.click(screen.getByRole("button", { name: "Reset repository path" }));
+    expect(screen.getByRole("textbox", { name: "Central repository path" })).toHaveValue("~/.skill-hive");
+    await user.click(screen.getByRole("tab", { name: "Appearance" }));
+    await user.click(screen.getByRole("button", { name: "Reduce motion" }));
+    expect(document.documentElement.dataset.reduceMotion).toBe("on");
+    await user.click(screen.getByRole("tab", { name: "About" }));
+    await user.click(screen.getByRole("button", { name: "Check for Updates" }));
+    expect(screen.getByText("You are on the latest version.")).toBeInTheDocument();
+  });
+
+  it("opens the agent page and confirms upload, pull, remove, and a refused delete", async () => {
+    installIpc([{ ...SKILLS[0], agents: ["claude_code"] }, SKILLS[1], SKILLS[2]]);
+    const user = userEvent.setup();
+    const overview = renderAt("/global-workspace");
+    expect(await within(await screen.findByTestId("agent-catalog")).findByRole("link", { name: "Claude Code" })).toHaveAttribute("href", "/global-workspace/claude_code");
+    const tools = document.querySelector("[data-preset='tools']");
+    const research = document.querySelector("[data-preset='research']");
+    fireEvent.dragStart(tools!);
+    fireEvent.drop(research!);
+    const order = [...document.querySelectorAll("[data-preset]")].map((node) => node.getAttribute("data-preset"));
+    expect(order).toEqual(["tools", "research"]);
+    await user.click(screen.getByRole("button", { name: "Edit preset Research" }));
+    const editor = screen.getByRole("textbox", { name: "Edit preset" });
+    await user.clear(editor);
+    await user.type(editor, "Sources");
+    await user.click(screen.getByRole("button", { name: "Save preset" }));
+    expect(screen.getByRole("link", { name: "Sources" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete preset Tools" }));
+    expect(screen.queryByRole("link", { name: "Tools" })).not.toBeInTheDocument();
+    overview.unmount();
+
+    renderAt("/global-workspace/claude_code");
+    expect(await screen.findByTestId("agent-page")).toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Search agent skills" }), "review");
+    expect(screen.queryByText("research-notes")).not.toBeInTheDocument();
+    await user.clear(screen.getByRole("textbox", { name: "Search agent skills" }));
+    await user.click(screen.getByRole("button", { name: "research" }));
+    expect(screen.queryByText("plain")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "research" }));
+    await user.click(screen.getByRole("button", { name: "List" }));
+    expect(document.querySelector("[data-layout='list']")).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: "Delete local skill" })[0]);
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(screen.getByText("refusing to delete managed skill")).toBeInTheDocument();
+    expect(screen.getByText("research-notes")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Pull" })[1]);
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getAllByRole("button", { name: "Remove from agent" })[2]);
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(screen.queryByText("plain")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add from Library" }));
+    await user.click(within(screen.getByTestId("add-sheet")).getByRole("button", { name: "plain" }));
+    expect(screen.getByText("plain")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "review-diff" }));
+    await user.click(screen.getByRole("button", { name: "Center" }));
+    expect(screen.getByTestId("workspace-detail")).toHaveTextContent("right");
+    await user.click(screen.getByRole("checkbox", { name: "Select review-diff" }));
+    await user.click(screen.getByRole("button", { name: "Batch remove" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(screen.queryByText("review-diff")).not.toBeInTheDocument();
   });
 });

@@ -1,3 +1,9 @@
+export interface SkillFile {
+  path: string;
+  local: string;
+  remote: string;
+}
+
 export interface SkillCard {
   id: string;
   name: string;
@@ -8,6 +14,7 @@ export interface SkillCard {
   body: string;
   sourceBody: string;
   agents: string[];
+  files?: SkillFile[];
 }
 
 export type LibraryFilter = "all" | "enabled" | "available";
@@ -84,6 +91,22 @@ export function presetFill(synced: number, total: number): PresetFill {
   if (total > 0 && synced === total) return "active";
   if (synced > 0) return "partial";
   return "inactive";
+}
+
+export function moveItem<T>(items: T[], from: number, to: number): T[] {
+  if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return items;
+  const next = items.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+export function moveById<T>(items: T[], fromId: string, toId: string, idOf: (item: T) => string): T[] {
+  return moveItem(items, items.findIndex((item) => idOf(item) === fromId), items.findIndex((item) => idOf(item) === toId));
+}
+
+export function fileDiffs(files: SkillFile[]): { path: string; rows: DiffRow[] }[] {
+  return files.map((file) => ({ path: file.path, rows: lcsDiff(file.local, file.remote) }));
 }
 
 export function presetLabel(name: string, synced: number, total: number): string {

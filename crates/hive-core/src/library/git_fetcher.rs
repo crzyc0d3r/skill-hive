@@ -8,6 +8,97 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+pub const CLONE_TIMEOUT_SECS: u64 = 300;
+pub const CACHE_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheSlot {
+    pub id: String,
+    pub bytes: u64,
+    pub last_used: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClonePlan {
+    pub timeout_secs: u64,
+    pub sparse: bool,
+    pub subpath: Option<String>,
+}
+
+/// Drop the least-recently-used cache slots until `incoming` bytes fit under `limit`.
+pub fn cache_evictions(slots: &[CacheSlot], incoming: u64, limit: u64) -> Vec<String> {
+    let mut ordered: Vec<&CacheSlot> = slots.iter().collect();
+    ordered.sort_by_key(|slot| slot.last_used);
+    let mut used = slots
+        .iter()
+        .map(|slot| slot.bytes)
+        .fold(0u64, u64::saturating_add)
+        .saturating_add(incoming);
+    let mut drop = Vec::new();
+    for slot in ordered {
+        if used <= limit {
+            break;
+        }
+        drop.push(slot.id.clone());
+        used = used.saturating_sub(slot.bytes);
+    }
+    drop
+}
+
+pub fn plan_clone(parsed: &ParsedGit) -> ClonePlan {
+    ClonePlan {
+        timeout_secs: CLONE_TIMEOUT_SECS,
+        sparse: parsed.subpath.is_some(),
+        subpath: parsed.subpath.clone(),
+    }
+}
+
+/// Clone `repo` and check out only `subpath`. The command is killed at `timeout`.
+pub fn materialise_sparse(
+    repo: &Path,
+    dest: &Path,
+    subpath: &str,
+    timeout: Duration,
+) -> Result<()> {
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if dest.exists() {
+        fs::remove_dir_all(dest)?;
+    }
+    let mut clone = Command::new("git");
+    clone
+        .args(["clone", "--sparse", "--depth", "1"])
+        .arg(repo)
+        .arg(dest);
+    run_bounded(clone, timeout)?;
+    let mut checkout = Command::new("git");
+    checkout
+        .args(["sparse-checkout", "set", "--cone"])
+        .arg(subpath)
+        .current_dir(dest);
+    run_bounded(checkout, timeout)?;
+    Ok(())
+}
+
+pub fn run_bounded(mut command: Command, timeout: Duration) -> Result<()> {
+    let mut child = command.spawn().context("spawn")?;
+    let start = Instant::now();
+    loop {
+        match child.try_wait()? {
+            Some(status) if status.success() => return Ok(()),
+            Some(status) => return Err(anyhow!("command failed: {status}")),
+            None if start.elapsed() > timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(anyhow!("clone timed out after {}s", timeout.as_secs()));
+            }
+            None => std::thread::sleep(Duration::from_millis(20)),
+        }
+    }
+}
 
 use crate::db::skill_store::SkillStore;
 use crate::library::installer::install_local;
@@ -275,4 +366,99 @@ fn copy_repo(from: &Path, to: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git(repo: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .status()
+            .expect("git");
+        assert!(status.success(), "git {args:?}");
+    }
+
+    #[test]
+    fn sparse_checkout_keeps_only_the_subpath_and_cache_stays_under_one_gib() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path().join("repo");
+        fs::create_dir_all(repo.join("tools/keep")).unwrap();
+        fs::create_dir_all(repo.join("other/skip")).unwrap();
+        fs::write(repo.join("tools/keep/SKILL.md"), "---\nname: keep\n---\n").unwrap();
+        fs::write(repo.join("other/skip/SKILL.md"), "---\nname: skip\n---\n").unwrap();
+        git(&repo, &["init"]);
+        git(&repo, &["add", "."]);
+        git(
+            &repo,
+            &[
+                "-c",
+                "user.email=test@example.com",
+                "-c",
+                "user.name=Test",
+                "commit",
+                "-m",
+                "init",
+            ],
+        );
+        let dest = tmp.path().join("sparse");
+        materialise_sparse(
+            &repo,
+            &dest,
+            "tools/keep",
+            Duration::from_secs(CLONE_TIMEOUT_SECS),
+        )
+        .unwrap();
+        assert!(dest.join("tools/keep/SKILL.md").is_file());
+        assert!(!dest.join("other/skip/SKILL.md").exists());
+
+        let incoming = CACHE_LIMIT_BYTES / 2;
+        let slots = vec![
+            CacheSlot {
+                id: "old".into(),
+                bytes: CACHE_LIMIT_BYTES / 2 + 8,
+                last_used: 1,
+            },
+            CacheSlot {
+                id: "new".into(),
+                bytes: CACHE_LIMIT_BYTES / 2,
+                last_used: 2,
+            },
+        ];
+        let dropped = cache_evictions(&slots, incoming, CACHE_LIMIT_BYTES);
+        assert_eq!(dropped, vec!["old".to_string()]);
+        let kept = slots
+            .iter()
+            .filter(|slot| !dropped.contains(&slot.id))
+            .map(|slot| slot.bytes)
+            .sum::<u64>()
+            + incoming;
+        assert!(kept <= CACHE_LIMIT_BYTES);
+
+        let plan = plan_clone(&ParsedGit {
+            repo_url: "https://example.test/skills".into(),
+            branch: Some("main".into()),
+            subpath: Some("tools/keep".into()),
+        });
+        assert!(plan.sparse);
+        assert_eq!(plan.timeout_secs, 300);
+        assert_eq!(plan.subpath.as_deref(), Some("tools/keep"));
+    }
+
+    #[test]
+    fn clone_timeout_kills_a_slow_command() {
+        let command = if cfg!(windows) {
+            let mut ping = Command::new("ping");
+            ping.args(["-n", "30", "127.0.0.1"]);
+            ping
+        } else {
+            let mut sleep = Command::new("sleep");
+            sleep.arg("30");
+            sleep
+        };
+        let err = run_bounded(command, Duration::from_millis(200)).unwrap_err();
+        assert!(err.to_string().contains("timed out"));
+    }
 }
