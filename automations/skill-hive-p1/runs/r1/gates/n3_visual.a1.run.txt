@@ -1,0 +1,3 @@
+$ bash automations/skill-hive-p1/code/n3_visual.sh
+(exit 0)
+

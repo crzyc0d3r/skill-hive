@@ -21,7 +21,7 @@ describe("application shell", () => {
     renderApp();
     expect(screen.getByTestId("sidebar")).toBeInTheDocument();
     expect(screen.getByTestId("header")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Skill Studio 0.0.1");
+    expect(screen.getByRole("status")).toHaveTextContent("Skill Hive 0.0.1");
     expect(screen.getByTestId("status-banner")).toBeInTheDocument();
 
     await user.keyboard("{Control>}k{/Control}");
@@ -41,5 +41,21 @@ describe("application shell", () => {
     await user.click(dark);
     expect(dark).toHaveAttribute("aria-pressed", "true");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+
+  it("routes numbered shortcuts, focuses search, and stores a remap", async () => {
+    const user = userEvent.setup();
+    renderApp("/my-skills");
+    await user.keyboard("{Control>}f{/Control}");
+    expect(screen.getByLabelText("Search skills")).toHaveFocus();
+    await user.keyboard("{Control>}/{/Control}");
+    expect(screen.getByRole("dialog", { name: "Shortcuts" })).toBeInTheDocument();
+    const first = screen.getByRole("textbox", { name: "Shortcut 1" });
+    await user.clear(first);
+    await user.type(first, "/settings");
+    await user.click(screen.getByRole("button", { name: "Save shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.keyboard("{Control>}1{/Control}");
+    expect(await screen.findByTestId("settings")).toBeInTheDocument();
   });
 });

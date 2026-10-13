@@ -21,7 +21,7 @@ function replaceVersion(file, pattern) {
 replaceVersion("src-tauri/tauri.conf.json", /("version": ")([^"]+)(")/);
 replaceVersion("Cargo.toml", /(\nversion = ")([^"]+)(")/);
 
-const members = ["crates/studio-core/Cargo.toml", "crates/studio-cli/Cargo.toml", "src-tauri/Cargo.toml"];
+const members = ["crates/hive-core/Cargo.toml", "crates/hive-cli/Cargo.toml", "src-tauri/Cargo.toml"];
 for (const file of members) {
   const text = fs.readFileSync(file, "utf8");
   if (!text.includes("version.workspace = true")) {

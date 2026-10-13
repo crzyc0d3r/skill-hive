@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-const base = resolve(process.env.SKILL_STUDIO_DEV_BASE ?? ".dev-base");
+const base = resolve(process.env.SKILL_HIVE_DEV_BASE ?? ".dev-base");
 mkdirSync(base, { recursive: true });
 
 const child = spawn(
@@ -10,7 +10,7 @@ const child = spawn(
   ["tauri", "dev", "--config", "src-tauri/tauri.dev.conf.json"],
   {
     stdio: "inherit",
-    env: { ...process.env, SKILL_STUDIO_BASE: base },
+    env: { ...process.env, SKILL_HIVE_BASE: base },
   },
 );
 child.on("exit", (code) => process.exit(code ?? 1));

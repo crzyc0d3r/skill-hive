@@ -1,0 +1,12 @@
+$ python3 automations/skill-hive-p0/code/port_phase0.py port_util
+(exit 0)
+wrote crates/hive-core/src/util/error.rs
+wrote crates/hive-core/src/util/path_guard.rs
+wrote crates/hive-core/src/util/crypto.rs
+wrote crates/hive-core/src/util/log_sanitize.rs
+wrote crates/hive-core/src/util/panic_log.rs
+wrote crates/hive-core/src/util/timing.rs
+wrote crates/hive-core/src/util/audit_log.rs
+wrote crates/hive-core/src/util/notifier.rs
+wrote crates/hive-core/src/util/mod.rs
+wrote automations/skill-hive-p0/out/n2_port_util.md

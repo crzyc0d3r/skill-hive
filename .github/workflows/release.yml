@@ -64,7 +64,7 @@ jobs:
         run: npm ci
 
       - name: Build CLI binary
-        run: cargo build --release -p studio-cli --target ${{ matrix.target }}
+        run: cargo build --release -p hive-cli --target ${{ matrix.target }}
 
       - name: Build unsigned bundles
         uses: tauri-apps/tauri-action@1ddc7b49b13c3038297360482fcb3e058764d7c9 # v0.6.2
@@ -72,7 +72,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
-          releaseName: Skill Studio ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
+          releaseName: Skill Hive ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
           releaseBody: Unsigned Phase 0 bundles. Signing and notarization are intentionally absent.
           releaseDraft: true
           prerelease: true
@@ -85,7 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}"
-          bin="target/${{ matrix.target }}/release/skill-studio-cli"
+          bin="target/${{ matrix.target }}/release/skill-hive-cli"
           if [ "${{ runner.os }}" = "Windows" ]; then
             bin="${bin}.exe"
           fi

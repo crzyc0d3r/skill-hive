@@ -1,18 +1,18 @@
-# Skill Studio
+# Skill Hive
 
 Desktop studio for creating, generating, and testing agent skills. The repository is `skill-hive`. Phase 0 is the shell, the design tokens, the IPC plumbing, and the infrastructure ported from skills-manager. Later phases are specified in `PLAN.md` and are not implemented here.
 
-Identifier: `com.skillstudio.desktop`. Database: `studio.db`. Default base directory: `~/.skill-studio`. Development base: `.dev-base` via `npm run tauri:dev`.
+Identifier: `com.skillhive.desktop`. Database: `hive.db`. Default base directory: `~/.skill-hive`. Development base: `.dev-base` via `npm run tauri:dev`.
 
 ## Module map
 
 ```
-crates/studio-core/     library, no Tauri dependency
+crates/hive-core/     library, no Tauri dependency
   src/util/             errors, path guard, lock, crypto, log sanitiser, panic log, timing, audit, watcher, notifier
-  src/db/               migrations v1–v8 and skill store (studio.db)
+  src/db/               migrations v1–v8 and skill store (hive.db)
   src/library/          central repository layout and the adapter table the watcher tests need
   src/deploy/           ported deploy helpers kept so the reference tests still compile
-crates/studio-cli/      skill-studio-cli (version command in Phase 0)
+crates/hive-cli/      skill-hive-cli (version command in Phase 0)
 src-tauri/              Tauri 2 shell, commands, capabilities, tightened CSP
 src/                    React 19 shell: sidebar, header, status bar, command palette, tokens
 src/components/ui/      shadcn/ui new-york primitives
@@ -20,7 +20,7 @@ src/lib/ipc/            typed invoke wrappers and generated ipc.d.ts
 fixtures/skills/        valid, warnings, and errors samples
 ```
 
-`studio-core` talks to the window through the `Notifier` trait. The Tauri app implements that trait and emits `app-files-changed`.
+`hive-core` talks to the window through the `Notifier` trait. The Tauri app implements that trait and emits `app-files-changed`.
 
 ## Attribution
 

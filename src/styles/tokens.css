@@ -245,3 +245,10 @@ body,
     --duration-exit: 0.01ms;
   }
 }
+
+html[data-reduce-motion="on"] {
+  --duration-fast: 0.01ms;
+  --duration-base: 0.01ms;
+  --duration-enter: 0.01ms;
+  --duration-exit: 0.01ms;
+}

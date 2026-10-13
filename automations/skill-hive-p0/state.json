@@ -1,0 +1,808 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-13T19:10:58+00:00",
+  "finished": "2026-10-13T19:11:31+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n1_inventory": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "55cf9717de33190b28720c74b23efc0ee67cca8a6c5cb86cab9341e5a6cce3ed",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 -c \"import json; p=json.load(open('automations/skill-hive-p0/out/n1_inventory.json')); assert p\"` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: wrote automations/skill-hive-p0/out/n1_inventory.json"
+          ]
+        ],
+        "at": "2026-10-13T19:11:03+00:00",
+        "output_hash": "55cf9717de33190b28720c74b23efc0ee67cca8a6c5cb86cab9341e5a6cce3ed",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n1_inventory.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 -c \"import json; p=json.load(open('automations/skill-hive-p0/out/n1_inventory.json')); assert p\"` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote automations/skill-hive-p0/out/n1_inventory.json"
+            ]
+          ],
+          "at": "2026-10-13T19:11:03+00:00",
+          "output_hash": "55cf9717de33190b28720c74b23efc0ee67cca8a6c5cb86cab9341e5a6cce3ed",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n1_inventory.a1.md"
+        }
+      ]
+    },
+    "n6_shell": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "5a28812c70032f6dc385c88b74ec50d88fdf84e4c462045a87fcd41912a91ac0",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'command palette' automations/skill-hive-p0/out/n6_shell.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: /workspace/automations/skill-hive-p0/out/n6_shell.md"
+          ]
+        ],
+        "at": "2026-10-13T19:11:03+00:00",
+        "output_hash": "5a28812c70032f6dc385c88b74ec50d88fdf84e4c462045a87fcd41912a91ac0",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n6_shell.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'command palette' automations/skill-hive-p0/out/n6_shell.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: /workspace/automations/skill-hive-p0/out/n6_shell.md"
+            ]
+          ],
+          "at": "2026-10-13T19:11:03+00:00",
+          "output_hash": "5a28812c70032f6dc385c88b74ec50d88fdf84e4c462045a87fcd41912a91ac0",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n6_shell.a1.md"
+        }
+      ]
+    },
+    "n7_ci": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "1b06580dcf8f92dfe63f58cc80c2cc24e8716d9aae34a5bdf86dcb3f0cc9c9d1",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'release workflow' automations/skill-hive-p0/out/n7_ci.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: /workspace/automations/skill-hive-p0/out/n7_ci.md"
+          ]
+        ],
+        "at": "2026-10-13T19:11:03+00:00",
+        "output_hash": "1b06580dcf8f92dfe63f58cc80c2cc24e8716d9aae34a5bdf86dcb3f0cc9c9d1",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n7_ci.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'release workflow' automations/skill-hive-p0/out/n7_ci.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: /workspace/automations/skill-hive-p0/out/n7_ci.md"
+            ]
+          ],
+          "at": "2026-10-13T19:11:03+00:00",
+          "output_hash": "1b06580dcf8f92dfe63f58cc80c2cc24e8716d9aae34a5bdf86dcb3f0cc9c9d1",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n7_ci.a1.md"
+        }
+      ]
+    },
+    "n2_port_util": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "1d96b931875dd61e7cb315f0e27ce5ab82d8cd04d755b493a58cc0e7577584eb",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'ported util' automations/skill-hive-p0/out/n2_port_util.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: wrote crates/hive-core/src/util/error.rs\nwrote crates/hive-core/src/util/path_guard.rs\nwrote crates/hive-core/src/util/crypto.rs\nwrote crates/hive-core/src/util/log_sanitize.rs\nwrote crates/hive-core/src/util/panic_log.rs\nwrote crates/hive-core/src/util/timing.rs\nwrote crates/hive-core/src/util/audit_log.rs\nwrote crates/hive-core/src/util/notifier.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote automations/skill-hive-p0/out/n2_port_util.md"
+          ]
+        ],
+        "at": "2026-10-13T19:11:03+00:00",
+        "output_hash": "1d96b931875dd61e7cb315f0e27ce5ab82d8cd04d755b493a58cc0e7577584eb",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n2_port_util.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'ported util' automations/skill-hive-p0/out/n2_port_util.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote crates/hive-core/src/util/error.rs\nwrote crates/hive-core/src/util/path_guard.rs\nwrote crates/hive-core/src/util/crypto.rs\nwrote crates/hive-core/src/util/log_sanitize.rs\nwrote crates/hive-core/src/util/panic_log.rs\nwrote crates/hive-core/src/util/timing.rs\nwrote crates/hive-core/src/util/audit_log.rs\nwrote crates/hive-core/src/util/notifier.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote automations/skill-hive-p0/out/n2_port_util.md"
+            ]
+          ],
+          "at": "2026-10-13T19:11:03+00:00",
+          "output_hash": "1d96b931875dd61e7cb315f0e27ce5ab82d8cd04d755b493a58cc0e7577584eb",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n2_port_util.a1.md"
+        }
+      ]
+    },
+    "n3_port_db": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "9e6517424a499ef56d1233da664135bf3448dd20c657b5b88201d291daf04c84",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'hive.db' automations/skill-hive-p0/out/n3_port_db.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: wrote crates/hive-core/src/db/migrations.rs\nwrote crates/hive-core/src/db/skill_store.rs\nwrote crates/hive-core/src/db/mod.rs\nwrote automations/skill-hive-p0/out/n3_port_db.md"
+          ]
+        ],
+        "at": "2026-10-13T19:11:03+00:00",
+        "output_hash": "9e6517424a499ef56d1233da664135bf3448dd20c657b5b88201d291daf04c84",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n3_port_db.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'hive.db' automations/skill-hive-p0/out/n3_port_db.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote crates/hive-core/src/db/migrations.rs\nwrote crates/hive-core/src/db/skill_store.rs\nwrote crates/hive-core/src/db/mod.rs\nwrote automations/skill-hive-p0/out/n3_port_db.md"
+            ]
+          ],
+          "at": "2026-10-13T19:11:03+00:00",
+          "output_hash": "9e6517424a499ef56d1233da664135bf3448dd20c657b5b88201d291daf04c84",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n3_port_db.a1.md"
+        }
+      ]
+    },
+    "n4_port_repo": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "9a3edb18bf6b5674e474418bce57b055a23a6ba630440ba185893377ba57ec42",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q '.skill-hive' automations/skill-hive-p0/out/n4_port_repo.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: wrote crates/hive-core/src/library/central_repo.rs\nwrote crates/hive-core/src/util/repo_lock.rs\nwrote crates/hive-core/src/util/cli_bridge.rs\nwrote crates/hive-core/src/library/sync_metadata.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote crates/hive-core/src/library/mod.rs\nwrote automations/skill-hive-p0/out/n4_port_repo.md"
+          ]
+        ],
+        "at": "2026-10-13T19:11:03+00:00",
+        "output_hash": "9a3edb18bf6b5674e474418bce57b055a23a6ba630440ba185893377ba57ec42",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n4_port_repo.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q '.skill-hive' automations/skill-hive-p0/out/n4_port_repo.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote crates/hive-core/src/library/central_repo.rs\nwrote crates/hive-core/src/util/repo_lock.rs\nwrote crates/hive-core/src/util/cli_bridge.rs\nwrote crates/hive-core/src/library/sync_metadata.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote crates/hive-core/src/library/mod.rs\nwrote automations/skill-hive-p0/out/n4_port_repo.md"
+            ]
+          ],
+          "at": "2026-10-13T19:11:03+00:00",
+          "output_hash": "9a3edb18bf6b5674e474418bce57b055a23a6ba630440ba185893377ba57ec42",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n4_port_repo.a1.md"
+        }
+      ]
+    },
+    "n5_port_watch": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "80241e474f579b047749a136fece4d0e27e40f4a1cc5517fb92f3eb096e97020",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'app-files-changed' crates/hive-core/src/util/file_watcher.rs && grep -q Notifier automations/skill-hive-p0/out/n5_port_watch.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: wrote crates/hive-core/src/deploy/tool_adapters.rs\nwrote crates/hive-core/src/util/file_watcher.rs\nwrote crates/hive-core/src/deploy/mod.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote crates/hive-core/src/lib.rs\nwrote automations/skill-hive-p0/out/n5_port_watch.md"
+          ]
+        ],
+        "at": "2026-10-13T19:11:03+00:00",
+        "output_hash": "80241e474f579b047749a136fece4d0e27e40f4a1cc5517fb92f3eb096e97020",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n5_port_watch.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'app-files-changed' crates/hive-core/src/util/file_watcher.rs && grep -q Notifier automations/skill-hive-p0/out/n5_port_watch.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote crates/hive-core/src/deploy/tool_adapters.rs\nwrote crates/hive-core/src/util/file_watcher.rs\nwrote crates/hive-core/src/deploy/mod.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote crates/hive-core/src/lib.rs\nwrote automations/skill-hive-p0/out/n5_port_watch.md"
+            ]
+          ],
+          "at": "2026-10-13T19:11:03+00:00",
+          "output_hash": "80241e474f579b047749a136fece4d0e27e40f4a1cc5517fb92f3eb096e97020",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n5_port_watch.a1.md"
+        }
+      ]
+    },
+    "n8_verify": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "6bee267db355b76f3adf46a1e5b508bdc0cd1f664c64a47867d3f53679002c45",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'schema v8' automations/skill-hive-p0/out/result.md && grep -q '| cargo test | 0 |' automations/skill-hive-p0/out/result.md && grep -q '| npm test | 0 |' automations/skill-hive-p0/out/result.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: /workspace/automations/skill-hive-p0/out/result.md"
+          ]
+        ],
+        "at": "2026-10-13T19:11:20+00:00",
+        "output_hash": "6bee267db355b76f3adf46a1e5b508bdc0cd1f664c64a47867d3f53679002c45",
+        "log": "automations/skill-hive-p0/runs/r1/gates/n8_verify.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'schema v8' automations/skill-hive-p0/out/result.md && grep -q '| cargo test | 0 |' automations/skill-hive-p0/out/result.md && grep -q '| npm test | 0 |' automations/skill-hive-p0/out/result.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: /workspace/automations/skill-hive-p0/out/result.md"
+            ]
+          ],
+          "at": "2026-10-13T19:11:20+00:00",
+          "output_hash": "6bee267db355b76f3adf46a1e5b508bdc0cd1f664c64a47867d3f53679002c45",
+          "log": "automations/skill-hive-p0/runs/r1/gates/n8_verify.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_inventory",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:03+00:00",
+      "finished": "2026-10-13T19:11:03+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/n1_inventory.json",
+      "evidence": "exit 0: wrote automations/skill-hive-p0/out/n1_inventory.json",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "automations/skill-hive-p0/runs/r1/snapshots/n1_inventory/a1/n1_inventory.json"
+    },
+    {
+      "node": "n6_shell",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:03+00:00",
+      "finished": "2026-10-13T19:11:03+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/n6_shell.md",
+      "evidence": "exit 0: /workspace/automations/skill-hive-p0/out/n6_shell.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n7_ci",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:03+00:00",
+      "finished": "2026-10-13T19:11:03+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/n7_ci.md",
+      "evidence": "exit 0: /workspace/automations/skill-hive-p0/out/n7_ci.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n2_port_util",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:03+00:00",
+      "finished": "2026-10-13T19:11:03+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/n2_port_util.md",
+      "evidence": "exit 0: wrote crates/hive-core/src/util/error.rs\nwrote crates/hive-core/src/util/path_guard.rs\nwrote crates/hive-core/src/util/crypto.rs\nwrote crates/hive-core/src/util/log_sanitize.rs\nwrote crates/hive-core/src/util/panic_log.rs\nwrote crates/hive-core/src/util/timing.rs\nwrote crates/hive-core/src/util/audit_log.rs\nwrote crates/hive-core/src/util/notifier.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote automations/skill-hive-p0/out/n2_port_util.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "automations/skill-hive-p0/runs/r1/snapshots/n2_port_util/a1/n2_port_util.md"
+    },
+    {
+      "node": "n3_port_db",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:03+00:00",
+      "finished": "2026-10-13T19:11:03+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/n3_port_db.md",
+      "evidence": "exit 0: wrote crates/hive-core/src/db/migrations.rs\nwrote crates/hive-core/src/db/skill_store.rs\nwrote crates/hive-core/src/db/mod.rs\nwrote automations/skill-hive-p0/out/n3_port_db.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "automations/skill-hive-p0/runs/r1/snapshots/n3_port_db/a1/n3_port_db.md"
+    },
+    {
+      "node": "n4_port_repo",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:03+00:00",
+      "finished": "2026-10-13T19:11:03+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/n4_port_repo.md",
+      "evidence": "exit 0: wrote crates/hive-core/src/library/central_repo.rs\nwrote crates/hive-core/src/util/repo_lock.rs\nwrote crates/hive-core/src/util/cli_bridge.rs\nwrote crates/hive-core/src/library/sync_metadata.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote crates/hive-core/src/library/mod.rs\nwrote automations/skill-hive-p0/out/n4_port_repo.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "automations/skill-hive-p0/runs/r1/snapshots/n4_port_repo/a1/n4_port_repo.md"
+    },
+    {
+      "node": "n5_port_watch",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:03+00:00",
+      "finished": "2026-10-13T19:11:03+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/n5_port_watch.md",
+      "evidence": "exit 0: wrote crates/hive-core/src/deploy/tool_adapters.rs\nwrote crates/hive-core/src/util/file_watcher.rs\nwrote crates/hive-core/src/deploy/mod.rs\nwrote crates/hive-core/src/util/mod.rs\nwrote crates/hive-core/src/lib.rs\nwrote automations/skill-hive-p0/out/n5_port_watch.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "automations/skill-hive-p0/runs/r1/snapshots/n5_port_watch/a1/n5_port_watch.md"
+    },
+    {
+      "node": "n8_verify",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-13T19:11:09+00:00",
+      "finished": "2026-10-13T19:11:20+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p0/out/result.md",
+      "evidence": "exit 0: /workspace/automations/skill-hive-p0/out/result.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`grep -q \"schema v8\" automations/skill-hive-p0/out/result.md && grep -q \"| cargo test | 0 |\" automations/skill-hive-p0/out/result.md && grep -q \"| npm test | 0 |\" automations/skill-hive-p0/out/result.md` → exit 0: (no output)",
+      "at": "2026-10-13T19:11:30+00:00"
+    },
+    {
+      "index": 1,
+      "verdict": "pass",
+      "evidence": "`test -s THIRD_PARTY_LICENSES/skills-manager.MIT.txt` → exit 0: (no output)",
+      "at": "2026-10-13T19:11:30+00:00"
+    },
+    {
+      "index": 2,
+      "verdict": "pass",
+      "evidence": "`grep -q ubuntu-24.04-arm .github/workflows/release.yml` → exit 0: (no output)",
+      "at": "2026-10-13T19:11:30+00:00"
+    },
+    {
+      "index": 3,
+      "verdict": "pass",
+      "evidence": "`grep -q com.skillhive.desktop src-tauri/tauri.conf.json` → exit 0: (no output)",
+      "at": "2026-10-13T19:11:30+00:00"
+    },
+    {
+      "index": 4,
+      "verdict": "pass",
+      "evidence": "`node scripts/contrast.mjs` → exit 0: pass light foreground/background: 17.85:1 (min 4.5:1)\npass light muted-foreground/background: 7.58:1 (min 4.5:1)\npass light primary/primary-foreground: 13.98:1 (min 4.5:1)\npass light success text: 5.02:1 (min 4.5:1)\npass light warning text: 5.02:1 (min 4.5:1)\npass light destructive text: 6.47:1 (min 4.5:1)\npass light info text: 6.70:1 (min 4.5:1)\npass dark foreground/background: 17.06:1 (min 4.5:1)\npass dark muted-foreground/background: 6.96:1 (min 4.5:1)\npass dark success text: 10.25:1 (min 4.5:1)\npass dark warning text: 10.69:1 (min 4.5:1)\npass dark destructive text: 6.45:1 (min 4.5:1)\npass dark info text: 7.02:1 (min 4.5:1)",
+      "at": "2026-10-13T19:11:30+00:00"
+    },
+    {
+      "index": 5,
+      "verdict": "pass",
+      "evidence": "`node scripts/check-headers.mjs` → exit 0: crates/hive-core/src/deploy/mod.rs\ncrates/hive-core/src/deploy/tool_adapters.rs\ncrates/hive-core/src/library/central_repo.rs\ncrates/hive-core/src/library/mod.rs\ncrates/hive-core/src/library/sync_metadata.rs\n5 derived files carry the skills-manager header",
+      "at": "2026-10-13T19:11:31+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-13T19:10:58+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash 9f911c6dd5af7623)"
+    },
+    {
+      "at": "2026-10-13T19:10:58+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-13T19:10:58+00:00",
+      "type": "decision",
+      "msg": "PLAN.md graphify extract had no LLM API key, so the split uses the code map at graphify-out/graph.json (reference Rust modules) plus the Phase 0 task list. The porter and shell were validated once before this graphctl loop; the code nodes re-execute those programs."
+    },
+    {
+      "at": "2026-10-13T19:10:58+00:00",
+      "type": "baseline",
+      "msg": "5/8 pass before the run"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "snapshot",
+      "msg": "n1_inventory: saved automations/skill-hive-p0/out/n1_inventory.json to automations/skill-hive-p0/runs/r1/snapshots/n1_inventory/a1/n1_inventory.json"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "gate",
+      "msg": "n1_inventory attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "gate",
+      "msg": "n6_shell attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "gate",
+      "msg": "n7_ci attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "snapshot",
+      "msg": "n2_port_util: saved automations/skill-hive-p0/out/n2_port_util.md to automations/skill-hive-p0/runs/r1/snapshots/n2_port_util/a1/n2_port_util.md"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "gate",
+      "msg": "n2_port_util attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "snapshot",
+      "msg": "n3_port_db: saved automations/skill-hive-p0/out/n3_port_db.md to automations/skill-hive-p0/runs/r1/snapshots/n3_port_db/a1/n3_port_db.md"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "gate",
+      "msg": "n3_port_db attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "snapshot",
+      "msg": "n4_port_repo: saved automations/skill-hive-p0/out/n4_port_repo.md to automations/skill-hive-p0/runs/r1/snapshots/n4_port_repo/a1/n4_port_repo.md"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "gate",
+      "msg": "n4_port_repo attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "snapshot",
+      "msg": "n5_port_watch: saved automations/skill-hive-p0/out/n5_port_watch.md to automations/skill-hive-p0/runs/r1/snapshots/n5_port_watch/a1/n5_port_watch.md"
+    },
+    {
+      "at": "2026-10-13T19:11:03+00:00",
+      "type": "gate",
+      "msg": "n5_port_watch attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:20+00:00",
+      "type": "gate",
+      "msg": "n8_verify attempt 1: pass"
+    },
+    {
+      "at": "2026-10-13T19:11:31+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-13T19:11:31+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 9f911c6dd5af7623"
+      ],
+      [
+        "n1_inventory: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/n1_inventory.json (639 bytes)"
+      ],
+      [
+        "n1_inventory: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:03+00:00"
+      ],
+      [
+        "n2_port_util: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/n2_port_util.md (101 bytes)"
+      ],
+      [
+        "n2_port_util: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:03+00:00"
+      ],
+      [
+        "n3_port_db: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/n3_port_db.md (98 bytes)"
+      ],
+      [
+        "n3_port_db: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:03+00:00"
+      ],
+      [
+        "n4_port_repo: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/n4_port_repo.md (101 bytes)"
+      ],
+      [
+        "n4_port_repo: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:03+00:00"
+      ],
+      [
+        "n5_port_watch: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/n5_port_watch.md (109 bytes)"
+      ],
+      [
+        "n5_port_watch: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:03+00:00"
+      ],
+      [
+        "n6_shell: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/n6_shell.md (219 bytes)"
+      ],
+      [
+        "n6_shell: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:03+00:00"
+      ],
+      [
+        "n7_ci: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/n7_ci.md (155 bytes)"
+      ],
+      [
+        "n7_ci: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:03+00:00"
+      ],
+      [
+        "n8_verify: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p0/out/result.md (3057 bytes)"
+      ],
+      [
+        "n8_verify: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-13T19:11:20+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 8 of 8 declared nodes"
+      ],
+      [
+        "acceptance 0: result records schema v8 and local test exits",
+        "pass",
+        "`grep -q \"schema v8\" automations/skill-hive-p0/out/result.md && grep -q \"| cargo test | 0 |\" automations/skill-hive-p0/out/result.md && grep -q \"| npm test | 0 |\" automations/skill-hive-p0/out/result.md` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 1: MIT attribution file exists",
+        "pass",
+        "`test -s THIRD_PARTY_LICENSES/skills-manager.MIT.txt` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 2: release workflow lists the arm runner",
+        "pass",
+        "`grep -q ubuntu-24.04-arm .github/workflows/release.yml` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 3: product identifier is com.skillhive.desktop",
+        "pass",
+        "`grep -q com.skillhive.desktop src-tauri/tauri.conf.json` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 4: contrast helper passes",
+        "pass",
+        "`node scripts/contrast.mjs` → exit 0: pass light foreground/background: 17.85:1 (min 4.5:1)\npass light muted-foreground/background: 7.58:1 (min 4.5:1)\npass light primary/primary-foreground: 13.98:1 (min 4.5:1)\npass light success text: 5.02:1 (min 4.5:1)\npass light warning text: 5.02:1 (min 4.5:1)\npass light destructive text: 6.47:1 (min 4.5:1)\npass light info text: 6.70:1 (min 4.5:1)\npass dark foreground/background: 17.06:1 (min 4.5:1)\npass dark muted-foreground/background: 6.96:1 (min 4.5:1)\npass dark success text: 10.25:1 (min 4.5:1)\npass dark warning text: 10.69:1 (min 4.5:1)\npass dark destructive text: 6.45:1 (min 4.5:1)\npass dark info text: 7.02:1 (min 4.5:1)"
+      ],
+      [
+        "acceptance 5: derived-file headers pass",
+        "pass",
+        "`node scripts/check-headers.mjs` → exit 0: crates/hive-core/src/deploy/mod.rs\ncrates/hive-core/src/deploy/tool_adapters.rs\ncrates/hive-core/src/library/central_repo.rs\ncrates/hive-core/src/library/mod.rs\ncrates/hive-core/src/library/sync_metadata.rs\n5 derived files carry the skills-manager header"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/skill-hive-p0/out/result.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-13T19:10:58+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "automations/skill-hive-p0/out/result.md absent"
+      ],
+      [
+        "acceptance 0: result records schema v8 and local test exits",
+        "fail",
+        "`grep -q \"schema v8\" automations/skill-hive-p0/out/result.md && grep -q \"| cargo test | 0 |\" automations/skill-hive-p0/out/result.md && grep -q \"| npm test | 0 |\" automations/skill-hive-p0/out/result.md` → exit 2: [stderr]\ngrep: automations/skill-hive-p0/out/result.md: No such file or directory"
+      ],
+      [
+        "acceptance 1: MIT attribution file exists",
+        "pass",
+        "`test -s THIRD_PARTY_LICENSES/skills-manager.MIT.txt` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 2: release workflow lists the arm runner",
+        "pass",
+        "`grep -q ubuntu-24.04-arm .github/workflows/release.yml` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 3: product identifier is com.skillhive.desktop",
+        "pass",
+        "`grep -q com.skillhive.desktop src-tauri/tauri.conf.json` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 4: contrast helper passes",
+        "pass",
+        "`node scripts/contrast.mjs` → exit 0: pass light foreground/background: 17.85:1 (min 4.5:1)\npass light muted-foreground/background: 7.58:1 (min 4.5:1)\npass light primary/primary-foreground: 13.98:1 (min 4.5:1)\npass light success text: 5.02:1 (min 4.5:1)\npass light warning text: 5.02:1 (min 4.5:1)\npass light destructive text: 6.47:1 (min 4.5:1)\npass light info text: 6.70:1 (min 4.5:1)\npass dark foreground/background: 17.06:1 (min 4.5:1)\npass dark muted-foreground/background: 6.96:1 (min 4.5:1)\npass dark success text: 10.25:1 (min 4.5:1)\npass dark warning text: 10.69:1 (min 4.5:1)\npass dark destructive text: 6.45:1 (min 4.5:1)\npass dark info text: 7.02:1 (min 4.5:1)"
+      ],
+      [
+        "acceptance 5: derived-file headers pass",
+        "pass",
+        "`node scripts/check-headers.mjs` → exit 0: crates/hive-core/src/deploy/mod.rs\ncrates/hive-core/src/deploy/tool_adapters.rs\ncrates/hive-core/src/library/central_repo.rs\ncrates/hive-core/src/library/mod.rs\ncrates/hive-core/src/library/sync_metadata.rs\n5 derived files carry the skills-manager header"
+      ],
+      [
+        "note",
+        "noted",
+        "hive-core tests were already green on this machine before the graph run"
+      ]
+    ]
+  }
+}
