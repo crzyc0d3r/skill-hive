@@ -1,0 +1,120 @@
+name: Tauri driver
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  driver:
+    name: tauri-driver (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: Linux
+            binary: target/debug/skill-hive
+          - os: windows-latest
+            label: Windows
+            binary: target/debug/skill-hive.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf build-essential pkg-config xvfb webkit2gtk-driver at-spi2-core dbus
+          sudo apt-get install -y libayatana-appindicator3-dev || sudo apt-get install -y libappindicator3-dev
+          if ! command -v WebKitWebDriver >/dev/null 2>&1; then
+            found=$(find /usr -name 'WebKitWebDriver' -type f | head -1)
+            test -n "$found"
+            sudo ln -sf "$found" /usr/local/bin/WebKitWebDriver
+          fi
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build the desktop shell
+        run: npx tauri build --debug --no-bundle
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --version 2.1.0 --locked
+
+      - name: Install the WebView2-matched Edge driver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $keys = @(
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+            'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+            'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          )
+          $ver = $null
+          foreach ($key in $keys) {
+            if (Test-Path $key) {
+              $ver = (Get-ItemProperty $key).pv
+              if ($ver) { break }
+            }
+          }
+          if (-not $ver) { throw 'WebView2 runtime version was not found' }
+          Write-Host "WebView2 $ver"
+          $dest = Join-Path $env:RUNNER_TEMP 'msedgedriver'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP 'edgedriver.zip'
+          $urls = @(
+            "https://msedgedriver.azureedge.net/$ver/edgedriver_win64.zip",
+            "https://msedgedriver.microsoft.com/$ver/edgedriver_win64.zip"
+          )
+          $downloaded = $false
+          foreach ($url in $urls) {
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $zip
+              $downloaded = $true
+              break
+            } catch {
+              Write-Host "could not download $url"
+            }
+          }
+          if (-not $downloaded) { throw "could not download msedgedriver $ver" }
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          "TAURI_NATIVE_DRIVER=$dest\msedgedriver.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Drive the shell
+        shell: bash
+        env:
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          SKILL_HIVE_DRIVER_LOG: "1"
+        run: |
+          set -euo pipefail
+          test -f "${{ matrix.binary }}"
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            xvfb-run -a node scripts/tauri-driver-suite.mjs "${{ matrix.binary }}"
+          else
+            node scripts/tauri-driver-suite.mjs "${{ matrix.binary }}"
+          fi
+
+      - name: Show WebView2 driver traces
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "TEMP=$env:TEMP"
+          Get-ChildItem $env:TEMP -Directory -Filter 'scoped_dir*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          Get-ChildItem $env:TEMP -Recurse -Filter DevToolsActivePort -Depth 6 -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          Get-ChildItem $env:LOCALAPPDATA -Recurse -Filter DevToolsActivePort -Depth 5 -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $log = Join-Path $env:TEMP 'skill-hive-driver.log'
+          if (Test-Path $log) { Get-Content $log }

@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run --exclude e2e/**",
+    "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "node scripts/tauri-dev.mjs",

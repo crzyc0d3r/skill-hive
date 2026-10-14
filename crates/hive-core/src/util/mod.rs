@@ -1,6 +1,7 @@
 pub mod audit_log;
 pub mod cli_bridge;
 pub mod crypto;
+pub mod diagnostics;
 pub mod error;
 pub mod file_watcher;
 pub mod log_sanitize;
@@ -9,3 +10,4 @@ pub mod panic_log;
 pub mod path_guard;
 pub mod repo_lock;
 pub mod timing;
+pub mod tray_menu;

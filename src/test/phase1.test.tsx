@@ -223,7 +223,8 @@ describe("phase 1 screens", () => {
     const user = userEvent.setup();
     const leaderboard = renderAt("/install?tab=leaderboard");
     expect(await screen.findByRole("tab", { name: "Leaderboard" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("The marketplace arrives in a later phase.")).toBeInTheDocument();
+    expect(screen.getByTestId("marketplace")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search marketplace")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Local Install" }));
     await user.click(screen.getByRole("button", { name: "Install local" }));
     expect(screen.getByText("Imported demo")).toBeInTheDocument();

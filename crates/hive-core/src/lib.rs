@@ -1,4 +1,5 @@
 //! Skill Hive core. No Tauri dependency: the app and the CLI both link this crate.
+pub mod backup;
 pub mod db;
 pub mod deploy;
 pub mod library;

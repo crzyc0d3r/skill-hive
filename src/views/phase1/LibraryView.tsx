@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard } from "@/lib/phase1/model";
 import { t } from "@/lib/i18n";
+import { GitStatusButton, UpdateFlow } from "@/views/phase2/screens";
 
 export function LibraryView({
   skills,
@@ -66,6 +67,11 @@ export function LibraryView({
   return (
     <section data-testid="library">
       <h1 className="font-mono text-[22px] font-semibold">{t("library.title")}</h1>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <GitStatusButton />
+        <span aria-disabled="true" className="rounded-md border border-border px-2 py-1 text-sm text-muted-foreground">{t("library.needsAttention")}</span>
+      </div>
+      <UpdateFlow />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
           aria-label={t("library.search")}
@@ -314,6 +320,7 @@ export function LibraryView({
               </ul>
             </>
           ) : null}
+          <p className="mt-3 text-sm">{t("library.detail.projects")}</p>
         </aside>
       ) : null}
     </section>

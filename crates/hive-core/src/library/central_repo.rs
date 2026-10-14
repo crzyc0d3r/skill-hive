@@ -146,6 +146,11 @@ pub(crate) fn set_test_home_dir_override(path: Option<PathBuf>) {
 }
 
 fn config_file_path() -> PathBuf {
+    if let Some(dir) = std::env::var_os("SKILL_HIVE_CONFIG_DIR") {
+        if !dir.is_empty() {
+            return PathBuf::from(dir).join(CONFIG_FILE_NAME);
+        }
+    }
     dirs::config_dir()
         .unwrap_or_else(default_base_dir)
         .join("skill-hive")
