@@ -1,7 +1,7 @@
 {
   "run_id": "r1",
   "started": "2026-10-14T05:49:51+00:00",
-  "finished": null,
+  "finished": "2026-10-14T06:17:16+00:00",
   "project_root": "/workspace",
   "dispatches": 0,
   "nodes": {
@@ -145,6 +145,53 @@
           "log": "automations/skill-hive-p6/runs/r1/gates/n3_docs.a1.md"
         }
       ]
+    },
+    "n4_result": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "a42a7f5235f16ce5c0fe28a6dff2c1c9d57b7bc475f5b21f56f1aa8f05ad59fe",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/skill-hive-p6/code/check_result.py` → exit 0: result.md records five Phase 6 criteria and the graphify communities"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-14T06:17:16+00:00",
+        "output_hash": "a42a7f5235f16ce5c0fe28a6dff2c1c9d57b7bc475f5b21f56f1aa8f05ad59fe",
+        "log": "automations/skill-hive-p6/runs/r1/gates/n4_result.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/skill-hive-p6/code/check_result.py` → exit 0: result.md records five Phase 6 criteria and the graphify communities"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-14T06:17:16+00:00",
+          "output_hash": "a42a7f5235f16ce5c0fe28a6dff2c1c9d57b7bc475f5b21f56f1aa8f05ad59fe",
+          "log": "automations/skill-hive-p6/runs/r1/gates/n4_result.a1.md"
+        }
+      ]
     }
   },
   "attempts": [
@@ -186,9 +233,29 @@
       "tokens": null,
       "reason": null,
       "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n4_result",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T06:17:16+00:00",
+      "finished": "2026-10-14T06:17:16+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p6/out/result.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
     }
   ],
-  "acceptance": [],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/skill-hive-p6/code/check_result.py` → exit 0: result.md records five Phase 6 criteria and the graphify communities",
+      "at": "2026-10-14T06:17:16+00:00"
+    }
+  ],
   "events": [
     {
       "at": "2026-10-14T05:49:51+00:00",
@@ -224,9 +291,100 @@
       "at": "2026-10-14T05:50:23+00:00",
       "type": "gate",
       "msg": "n3_docs attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T06:17:16+00:00",
+      "type": "gate",
+      "msg": "n4_result attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T06:17:16+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    },
+    {
+      "at": "2026-10-14T06:17:16+00:00",
+      "type": "learn",
+      "msg": "Empty APPLE_CERTIFICATE must be omitted from the tauri-action environment. Tauri treats an empty value as a certificate and tries to import it."
     }
   ],
-  "completion": null,
+  "completion": {
+    "at": "2026-10-14T06:17:16+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 2be7e7acd22a8a24"
+      ],
+      [
+        "n1_pipeline: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p6/out/n1_pipeline.md (2320 bytes)"
+      ],
+      [
+        "n1_pipeline: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T05:50:17+00:00"
+      ],
+      [
+        "n2_updater: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p6/out/n2_updater.md (1385 bytes)"
+      ],
+      [
+        "n2_updater: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T05:50:23+00:00"
+      ],
+      [
+        "n3_docs: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p6/out/n3_docs.md (154 bytes)"
+      ],
+      [
+        "n3_docs: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T05:50:23+00:00"
+      ],
+      [
+        "n4_result: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p6/out/result.md (7810 bytes)"
+      ],
+      [
+        "n4_result: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T06:17:16+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 4 of 4 declared nodes"
+      ],
+      [
+        "acceptance 0: Phase 6 result records five exit criteria and the communities that fed each node",
+        "pass",
+        "`python3 automations/skill-hive-p6/code/check_result.py` → exit 0: result.md records five Phase 6 criteria and the graphify communities"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/skill-hive-p6/out/result.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
   "baseline": {
     "at": "2026-10-14T05:49:52+00:00",
     "rows": [

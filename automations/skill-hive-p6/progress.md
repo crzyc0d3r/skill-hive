@@ -1,7 +1,7 @@
 # progress: skill-hive-p6
 
 <!-- graphctl:auto:begin status -->
-Updated 2026-10-14T05:51:08+00:00 · run `r1` · model dispatches 0/3
+Updated 2026-10-14T06:17:16+00:00 · run `r1` · model dispatches 0/3
 
 ### Graph
 
@@ -10,17 +10,17 @@ Updated 2026-10-14T05:51:08+00:00 · run `r1` · model dispatches 0/3
 | n1_pipeline | code | passed | 1/3 | gate:pass |
 | n2_updater | code | passed | 1/3 | gate:pass |
 | n3_docs | code | passed | 1/3 | gate:pass |
-| n4_result | code | pending | 0/3 | — |
+| n4_result | code | passed | 1/3 | gate:pass |
 
-Done: n1_pipeline, n2_updater, n3_docs · Running: — · Blocked: — · Failed: — · Unresolved: — · Pending: n4_result
+Done: n1_pipeline, n2_updater, n3_docs, n4_result · Running: — · Blocked: — · Failed: — · Unresolved: — · Pending: —
 
 ### Outputs
 
 - n1_pipeline → `automations/skill-hive-p6/out/n1_pipeline.md` (2320 bytes, sha 79648904)
 - n2_updater → `automations/skill-hive-p6/out/n2_updater.md` (1385 bytes, sha 81691f37)
 - n3_docs → `automations/skill-hive-p6/out/n3_docs.md` (154 bytes, sha 25cba41d)
-- n4_result → `automations/skill-hive-p6/out/result.md` (not written yet)
-- deliverable → `automations/skill-hive-p6/out/result.md` (not written yet)
+- n4_result → `automations/skill-hive-p6/out/result.md` (7810 bytes, sha a42a7f52)
+- deliverable → `automations/skill-hive-p6/out/result.md` (exists)
 <!-- graphctl:auto:end status -->
 
 ## Decisions
@@ -37,5 +37,5 @@ Done: n1_pipeline, n2_updater, n3_docs · Running: — · Blocked: — · Failed
 ## Next action
 
 <!-- graphctl:auto:begin next -->
-- ready now: n4_result (code)
+- complete: run `graphctl complete` again only after outputs change
 <!-- graphctl:auto:end next -->

@@ -169,3 +169,6 @@ Engine: `/workspace/.claude/skills/graph-automation/scripts/graphctl.py` — run
 - 2026-10-14T05:49:52+00:00: Nodes are verification commands. The product edits were already in the working tree; each node records exit codes and n4_result merges them. Communities were taken from graphify-out/graph.json after extract --code-only --force and cluster-only. Shadcn communities were not given nodes. release.yml and the markdown guides have no graph symbols.
 
 ## Learned rules
+
+- 2026-10-14T06:17:16+00:00 (proved by n1_pipeline): Empty APPLE_CERTIFICATE must be omitted from the tauri-action environment. Tauri treats an empty value as a certificate and tries to import it.
+

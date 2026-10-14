@@ -1,0 +1,7 @@
+Draft release Skill Hive v1.0.0 is draft true.
+Workflow https://github.com/crzyc0d3r/skill-hive/actions/runs/38520168174 concluded success.
+verify-updater-assets passed for five unsigned targets.
+Assets: skill-hive-cli-aarch64-apple-darwin, skill-hive-cli-x86_64-apple-darwin, skill-hive-cli-x86_64-unknown-linux-gnu, skill-hive-cli-aarch64-unknown-linux-gnu, skill-hive-cli-x86_64-pc-windows-msvc.exe, Skill.Hive_1.0.0_aarch64.dmg, Skill.Hive_aarch64.app.tar.gz, Skill.Hive_1.0.0_x64.dmg, Skill.Hive_x64.app.tar.gz, Skill.Hive_1.0.0_x64_en-US.msi, Skill.Hive_1.0.0_x64-setup.exe, Skill.Hive_1.0.0_amd64.AppImage, Skill.Hive_1.0.0_amd64.deb, Skill.Hive-1.0.0-1.x86_64.rpm, Skill.Hive_1.0.0_aarch64.AppImage, Skill.Hive_1.0.0_arm64.deb, Skill.Hive-1.0.0-1.aarch64.rpm.
+publish-release skipped because Apple, Windows, and updater signing are unsigned.
+brew and winget live install: not run. The tag stays a draft, so the cask and winget package are not public.
+unsigned macOS build: codesign, spctl, and stapler were skipped on both macOS legs.
