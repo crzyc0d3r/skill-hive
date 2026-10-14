@@ -1,0 +1,34 @@
+{
+  "nodes": [
+    {
+      "id": "n1_commands",
+      "kind": "code",
+      "scope": "Confirm the Tauri command module is registered and the generated IPC types match it. graphify community files for src-tauri/src/lib.rs and crates/hive-core are the shared command surface, so this node owns that check.",
+      "reads": ["src-tauri/src/lib.rs", "src-tauri/src/commands.rs", "scripts/gen-ipc-types.mjs"],
+      "writes": "automations/skill-hive-wiring/out/n1_commands.md",
+      "run": "bash automations/skill-hive-wiring/code/n1_commands.sh",
+      "check": { "cmd": "grep -q 'ipc-ok' automations/skill-hive-wiring/out/n1_commands.md" },
+      "deps": []
+    },
+    {
+      "id": "n2_audit",
+      "kind": "code",
+      "scope": "Confirm docs/wiring-audit.md lists every required screen and records before and after status. This node owns the audit deliverable check.",
+      "reads": ["docs/wiring-audit.md"],
+      "writes": "automations/skill-hive-wiring/out/n2_audit.md",
+      "run": "bash automations/skill-hive-wiring/code/n2_audit.sh",
+      "check": { "cmd": "grep -q 'audit-ok' automations/skill-hive-wiring/out/n2_audit.md" },
+      "deps": []
+    },
+    {
+      "id": "n3_result",
+      "kind": "code",
+      "scope": "Merge the command and audit checks into the wiring result. The split follows graphify-out/graph.json: the shell command community and the React screen community stay separate until this merge.",
+      "reads": ["automations/skill-hive-wiring/out/n1_commands.md", "automations/skill-hive-wiring/out/n2_audit.md"],
+      "writes": "automations/skill-hive-wiring/out/result.md",
+      "run": "bash automations/skill-hive-wiring/code/n3_result.sh",
+      "check": { "cmd": "python3 automations/skill-hive-wiring/code/check_result.py" },
+      "deps": ["n1_commands", "n2_audit"]
+    }
+  ]
+}

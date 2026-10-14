@@ -7,7 +7,7 @@ import { decideUpdate } from "@/lib/updater";
 function renderAbout() {
   return render(
     <MemoryRouter initialEntries={["/settings?tab=about"]}>
-      <SettingsView theme="light" setTheme={() => {}} agents={[]} />
+      <SettingsView theme="light" setTheme={() => {}} agents={[]} onAddAgent={() => {}} onRepoPath={() => {}} onAgents={() => {}} onResetPath={() => "~/.claude/skills"} />
     </MemoryRouter>,
   );
 }
@@ -35,7 +35,7 @@ describe("updater", () => {
     localStorage.setItem("skill-hive-platform", "macos");
     render(
       <MemoryRouter initialEntries={["/settings?tab=about"]}>
-        <SettingsView theme="light" setTheme={() => {}} agents={[]} />
+        <SettingsView theme="light" setTheme={() => {}} agents={[]} onAddAgent={() => {}} onRepoPath={() => {}} onAgents={() => {}} onResetPath={() => "~/.claude/skills"} />
       </MemoryRouter>,
     );
     await user.click(screen.getAllByRole("button", { name: "Check for Updates" })[1]);

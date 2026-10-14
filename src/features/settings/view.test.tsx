@@ -7,7 +7,9 @@ describe("settings", () => {
     installIpc();
     const user = userEvent.setup();
     renderAt("/settings?tab=agents");
-    await user.click(await screen.findByRole("button", { name: "New Agent" }));
+    await user.type(await screen.findByRole("textbox", { name: "Agent name" }), "Field Notes");
+    await user.type(screen.getByRole("textbox", { name: "Agent path" }), "~/.field-notes/skills");
+    await user.click(screen.getByRole("button", { name: "New Agent" }));
     expect(screen.getByText("Field Notes")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "General" }));
     await user.click(screen.getByRole("button", { name: "Save path" }));
@@ -33,6 +35,8 @@ describe("settings", () => {
     await user.clear(screen.getByRole("textbox", { name: "Project path Claude Code" }));
     await user.type(screen.getByRole("textbox", { name: "Project path Claude Code" }), "custom/skills");
     expect(screen.getByRole("textbox", { name: "Project path Claude Code" })).toHaveValue("custom/skills");
+    await user.type(screen.getByRole("textbox", { name: "Agent name" }), "Field Notes");
+    await user.type(screen.getByRole("textbox", { name: "Agent path" }), "~/.field-notes/skills");
     await user.click(screen.getByRole("button", { name: "New Agent" }));
     const rows = document.querySelectorAll("[data-agent]");
     fireEvent.dragStart(rows[1]);

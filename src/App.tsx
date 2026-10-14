@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,6 +6,30 @@ import { APP_ROUTES } from "./app/routes";
 import { AppShell, type ShellOutletContext } from "./components/shell/AppShell";
 import { bindFileWatcher } from "./lib/events/files";
 import { listAgents, listScanned, type AgentRow } from "@/lib/ipc/catalog";
+import {
+  addCustomTool,
+  addSkillToPreset,
+  applyPreset,
+  cancelInstall,
+  confirmGitInstall,
+  createPreset,
+  deleteManagedSkills,
+  deleteTag,
+  importAllDiscovered,
+  importExistingSkill,
+  installArchiveSkill,
+  installLocalSkill,
+  previewGitInstall,
+  removeSkillFromPreset,
+  renameTag,
+  reorderPresetSkills,
+  resetCustomToolPath,
+  setCentralRepoPath,
+  setSkillTags,
+  setSkillsEnabled,
+  syncSkillToTool,
+  unsyncSkillFromTool,
+} from "@/lib/ipc/actions";
 import type { SkillCard } from "@/features/library/model";
 import type { WorkspaceCard } from "./features/workspace/WorkspaceView";
 import { PlaceholderView, TokensView } from "./views/Screens";
@@ -34,6 +58,7 @@ function DashboardPage() {
 }
 
 function LibraryPage() {
+  const client = useQueryClient();
   const { skills, presets, setPresets } = useOutletContext<ShellOutletContext>();
   useAuthoring();
   const drafts = draftSkillCards();
@@ -42,68 +67,94 @@ function LibraryPage() {
   useEffect(() => {
     setRows(skills);
   }, [skills]);
-  const memberIds = presets.find((preset) => preset.id === "research")?.skillIds ?? presets[0]?.skillIds ?? [];
+  const preset = presets.find((item) => item.id === "research") ?? presets[0];
+  const memberIds = preset?.skillIds ?? [];
+  const refresh = () => client.invalidateQueries({ queryKey: ["skills"] });
   return (
     <LibraryView
       skills={[...drafts.filter((draft) => !rows.some((skill) => skill.id === draft.id)), ...rows.map((skill) => (drafts.some((draft) => draft.id === skill.id) ? { ...skill, draft: true } : skill))]}
       initialId={params.get("skill")}
       memberIds={memberIds}
-      onAddTag={(skillId, tag) =>
-        setRows((current) =>
-          current.map((skill) => (skill.id === skillId ? { ...skill, tags: [...skill.tags, tag] } : skill)),
-        )
-      }
-      onRenameTag={(from, to) =>
-        setRows((current) =>
-          current.map((skill) => ({ ...skill, tags: skill.tags.map((tag) => (tag === from ? to : tag)) })),
-        )
-      }
-      onDeleteTag={(tag) => setRows((current) => current.map((skill) => ({ ...skill, tags: skill.tags.filter((item) => item !== tag) })))}
-      onRemoveTag={(skillId, tag) =>
-        setRows((current) => current.map((skill) => (skill.id === skillId ? { ...skill, tags: skill.tags.filter((item) => item !== tag) } : skill)))
-      }
-      onSync={(ids, agents) =>
-        setRows((current) => current.map((skill) => (ids.includes(skill.id) ? { ...skill, agents } : skill)))
-      }
-      onToggleMember={(skillId) =>
-        setPresets(
-          presets.map((preset) =>
-            preset.id === (presets.find((item) => item.id === "research")?.id ?? presets[0]?.id)
-              ? {
-                  ...preset,
-                  skillIds: preset.skillIds.includes(skillId)
-                    ? preset.skillIds.filter((id) => id !== skillId)
-                    : [...preset.skillIds, skillId],
-                }
-              : preset,
-          ),
-        )
-      }
-      onReorderMembers={(ids) => {
-        const presetId = presets.find((preset) => preset.id === "research")?.id ?? presets[0]?.id;
-        setPresets(presets.map((preset) => (preset.id === presetId ? { ...preset, skillIds: ids } : preset)));
+      onAddTag={(skillId, tag) => {
+        const next = [...(rows.find((skill) => skill.id === skillId)?.tags ?? []), tag];
+        setRows((current) => current.map((skill) => (skill.id === skillId ? { ...skill, tags: next } : skill)));
+        return setSkillTags(skillId, next).then(refresh);
       }}
-      onDeleteSkills={(ids) => setRows((current) => current.filter((skill) => !ids.includes(skill.id)))}
-      onSetEnabled={(ids, enabled) => setRows((current) => current.map((skill) => (ids.includes(skill.id) ? { ...skill, enabled } : skill)))}
-      onBatchTag={(ids, tag) =>
-        setRows((current) => current.map((skill) => (ids.includes(skill.id) ? { ...skill, tags: [...skill.tags, tag] } : skill)))
-      }
-      onToggleAgent={(skillId, agent) =>
-        setRows((current) =>
-          current.map((skill) => {
+      onRenameTag={(from, to) => {
+        setRows((current) => current.map((skill) => ({ ...skill, tags: skill.tags.map((tag) => (tag === from ? to : tag)) })));
+        return renameTag(from, to).then(refresh);
+      }}
+      onDeleteTag={(tag) => {
+        setRows((current) => current.map((skill) => ({ ...skill, tags: skill.tags.filter((item) => item !== tag) })));
+        return deleteTag(tag).then(refresh);
+      }}
+      onRemoveTag={(skillId, tag) => {
+        const next = (rows.find((skill) => skill.id === skillId)?.tags ?? []).filter((item) => item !== tag);
+        setRows((current) => current.map((skill) => (skill.id === skillId ? { ...skill, tags: next } : skill)));
+        return setSkillTags(skillId, next).then(refresh);
+      }}
+      onSync={(ids, agents) => {
+        setRows((current) => current.map((skill) => (ids.includes(skill.id) ? { ...skill, agents } : skill)));
+        return Promise.all(ids.flatMap((id) => agents.map((agent) => syncSkillToTool(id, agent)))).then(refresh);
+      }}
+      onToggleMember={(skillId) => {
+        if (!preset) return;
+        const has = preset.skillIds.includes(skillId);
+        const skillIds = has ? preset.skillIds.filter((id) => id !== skillId) : [...preset.skillIds, skillId];
+        setPresets(presets.map((item) => (item.id === preset.id ? { ...item, skillIds } : item)));
+        return (has ? removeSkillFromPreset(preset.id, skillId) : addSkillToPreset(preset.id, skillId)).then(() =>
+          client.invalidateQueries({ queryKey: ["presets"] }),
+        );
+      }}
+      onReorderMembers={(ids) => {
+        if (!preset) return;
+        setPresets(presets.map((item) => (item.id === preset.id ? { ...item, skillIds: ids } : item)));
+        return reorderPresetSkills(preset.id, ids).then(() => undefined);
+      }}
+      onDeleteSkills={(ids) => {
+        setRows((current) => current.filter((skill) => !ids.includes(skill.id)));
+        return deleteManagedSkills(ids).then(refresh);
+      }}
+      onSetEnabled={(ids, enabled) => {
+        setRows((current) => current.map((skill) => (ids.includes(skill.id) ? { ...skill, enabled } : skill)));
+        return setSkillsEnabled(ids, enabled).then(refresh);
+      }}
+      onBatchTag={(ids, tag) => {
+        setRows((current) => current.map((skill) => (ids.includes(skill.id) ? { ...skill, tags: [...skill.tags, tag] } : skill)));
+        return Promise.all(ids.map((id) => setSkillTags(id, [...(rows.find((skill) => skill.id === id)?.tags ?? []), tag]))).then(refresh);
+      }}
+      onToggleAgent={(skillId, agent) => {
+        const current = rows.find((skill) => skill.id === skillId);
+        const present = current?.agents.includes(agent) ?? false;
+        setRows((list) =>
+          list.map((skill) => {
             if (skill.id !== skillId) return skill;
-            const agents = skill.agents.includes(agent) ? skill.agents.filter((item) => item !== agent) : [...skill.agents, agent];
+            const agents = present ? skill.agents.filter((item) => item !== agent) : [...skill.agents, agent];
             return { ...skill, agents };
           }),
-        )
-      }
+        );
+        return (present ? unsyncSkillFromTool(skillId, agent) : syncSkillToTool(skillId, agent)).then(refresh);
+      }}
     />
   );
 }
 
 function InstallPage() {
+  const client = useQueryClient();
   const scanned = useQuery({ queryKey: ["scan"], queryFn: listScanned });
-  return <InstallView scanned={scanned.data ?? []} />;
+  const refresh = () => Promise.all([client.invalidateQueries({ queryKey: ["skills"] }), client.invalidateQueries({ queryKey: ["scan"] })]).then(() => undefined);
+  return (
+    <InstallView
+      scanned={scanned.data ?? []}
+      onInstallLocal={(path) => installLocalSkill(path).then(refresh)}
+      onInstallArchive={(path) => installArchiveSkill(path).then(refresh)}
+      onImportAll={() => importAllDiscovered().then(refresh)}
+      onImportOne={(row, name) => importExistingSkill(row.path, name).then(refresh)}
+      onPreview={(url) => previewGitInstall(url)}
+      onImportGit={(_url, rename, previewId, relative) => confirmGitInstall(previewId, relative, rename).then(refresh)}
+      onCancel={(previewId) => cancelInstall(previewId).then(() => undefined)}
+    />
+  );
 }
 
 function workspaceCards(skills: SkillCard[], agentKey: string): WorkspaceCard[] {
@@ -135,6 +186,8 @@ function WorkspacePage() {
       library={skills}
       agentKey={agentKey}
       cards={agentKey ? workspaceCards(skills, agentKey) : []}
+      onApply={(id) => applyPreset(id, agentKey).then(() => undefined)}
+      onCreate={(name) => createPreset(name).then(() => undefined)}
     />
   );
 }
@@ -151,21 +204,15 @@ function SettingsPage() {
       theme={theme}
       setTheme={setTheme}
       agents={extra}
-      onAddAgent={(name, path) =>
-        setExtra((current) => [
-          ...current,
-          {
-            key: name.toLowerCase().replace(/\s+/g, "_"),
-            name,
-            installed: true,
-            enabled: true,
-            path,
-            projectPath: "",
-            custom: true,
-          },
-        ])
-      }
-      onAgents={(next: AgentRow[]) => setExtra(next)}
+      onAddAgent={async (name, path) => {
+        const added = await addCustomTool(name, path);
+        setExtra((current) => [...current.filter((agent) => agent.key !== added.key), added]);
+      }}
+      onRepoPath={(path) => setCentralRepoPath(path).then(() => undefined)}
+      onResetPath={(key) => resetCustomToolPath(key)}
+      onAgents={(next: AgentRow[]) => {
+        setExtra(next);
+      }}
     />
   );
 }

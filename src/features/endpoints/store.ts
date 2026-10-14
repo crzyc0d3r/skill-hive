@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { persistEffect } from "@/lib/ipc/persist";
 import { FIXTURE_ENDPOINTS, type EndpointRow, publicEndpoint } from "./model";
 
 let endpoints: EndpointRow[] = FIXTURE_ENDPOINTS.map((row) => ({ ...row }));
@@ -13,6 +14,7 @@ export function setEndpointSecret(value: string) {
   secret = value;
   endpoints = endpoints.map((row) => ({ ...row, hasSecret: value.length > 0 }));
   emit();
+  persistEffect("provider", "endpoint", value);
 }
 
 export function endpointSecret(): string {

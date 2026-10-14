@@ -16,6 +16,9 @@ jobs:
           - os: ubuntu-22.04
             label: Linux
             binary: target/debug/skill-hive
+          - os: macos-latest
+            label: macOS
+            binary: target/debug/skill-hive
           - os: windows-latest
             label: Windows
             binary: target/debug/skill-hive.exe

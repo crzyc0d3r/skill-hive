@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { persistEffect } from "@/lib/ipc/persist";
 import { EMPTY_SEED, parseSeed, type GenerateSeed } from "./model";
 
 export type WizardStep = "goal" | "interview" | "drafting" | "review" | "save";
@@ -113,6 +114,7 @@ export function saveDraft(): void {
   if (!wizard.diffOpened) return;
   wizard = { ...wizard, saved: true, step: "save" };
   publish();
+  persistEffect("generate", "draft", wizard.goal);
 }
 
 export function askDiscard(): void {
@@ -139,11 +141,13 @@ export function applyOptimized(): void {
   if (!wizard.optimized) return;
   wizard = { ...wizard, applied: true };
   publish();
+  persistEffect("suite", "optimized", wizard.goal);
 }
 
 export function recordVerdict(verdict: string): void {
   wizard = { ...wizard, verdict };
   publish();
+  persistEffect("compare", "verdict", verdict);
 }
 
 export function resetGenerate(): void {

@@ -8,7 +8,7 @@ const rawPalette =
   "\\b(?:bg|text|border|ring|from|to|via|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d{2,3}\\b";
 
 export default tseslint.config(
-  { ignores: ["dist", "src-tauri", "node_modules", "scripts/fixtures", ".claude", "automations", "graphify-out"] },
+  { ignores: ["dist", "target", "src-tauri", "node_modules", "scripts/fixtures", ".claude", "automations", "graphify-out"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["src/**/*.{ts,tsx}"],

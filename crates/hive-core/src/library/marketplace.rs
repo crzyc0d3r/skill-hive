@@ -211,6 +211,18 @@ pub fn http_get(url: &str) -> Result<String> {
     Ok(body.to_string())
 }
 
+/// HTTPS GET used by the skills.sh leaderboard and search commands.
+pub fn fetch_https(url: &str) -> Result<String> {
+    let response = ureq::get(url)
+        .timeout(Duration::from_secs(20))
+        .set("user-agent", "skill-hive")
+        .call()
+        .with_context(|| format!("GET {url}"))?;
+    response
+        .into_string()
+        .with_context(|| format!("read {url}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

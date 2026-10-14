@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { persistEffect } from "@/lib/ipc/persist";
 import type { SkillCard } from "@/features/library/model";
 import {
   applyAgentFix,
@@ -119,6 +120,7 @@ export function ensureSkill(id: string): SkillDraft | null {
 export function saveSkill(draft: SkillDraft): void {
   const versions = saveAutosave(state.versions[draft.id] ?? [], filesRecord(draft));
   update({ skills: { ...state.skills, [draft.id]: draft }, versions: { ...state.versions, [draft.id]: versions } });
+  persistEffect("skill", draft.id, draft.files.map((file) => file.content).join("\n"));
 }
 
 export function snapshotSkill(id: string, label: string): void {
@@ -192,6 +194,7 @@ export function ensureAgent(id: string): AgentDraft | null {
 
 export function saveAgent(agent: AgentDraft): void {
   update({ agents: { ...state.agents, [agent.id]: agent } });
+  persistEffect("agent", agent.id, agent.text);
 }
 
 export function fixAgent(id: string): void {

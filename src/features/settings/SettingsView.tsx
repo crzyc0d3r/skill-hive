@@ -5,6 +5,18 @@ import { applyTextSize, setLocale, t, type TextSize } from "@/lib/i18n";
 import { moveById } from "@/features/library/model";
 import { EDITOR_SHORTCUTS } from "@/lib/authoring/model";
 import { proxyOk } from "@/features/settings/proxy";
+import { pickPath } from "@/lib/ipc/pick";
+import { writeSetting } from "@/lib/ipc/catalog";
+import {
+  gitBackupRemoveRemote,
+  gitBackupSetRemote,
+  setAllToolsEnabled,
+  setCustomToolPath,
+  setCustomToolProjectPath,
+  setToolOrder,
+  removeCustomTool,
+} from "@/lib/ipc/actions";
+import { persistEffect } from "@/lib/ipc/persist";
 import type { ThemeChoice } from "@/lib/theme";
 import { decideUpdate, desktopPlatform, LINUX_DOWNLOAD_URL } from "@/lib/updater";
 
@@ -17,13 +29,15 @@ export function SettingsView({
   onAddAgent,
   onRepoPath,
   onAgents,
+  onResetPath,
 }: {
   theme: ThemeChoice;
   setTheme: (choice: ThemeChoice) => void;
   agents: AgentRow[];
-  onAddAgent?: (name: string, path: string) => void;
-  onRepoPath?: (path: string) => void;
-  onAgents?: (agents: AgentRow[]) => void;
+  onAddAgent: (name: string, path: string) => void | Promise<void>;
+  onRepoPath: (path: string) => void | Promise<void>;
+  onAgents: (agents: AgentRow[]) => void | Promise<void>;
+  onResetPath: (key: string) => Promise<string> | string;
 }) {
   const [params, setParams] = useSearchParams();
   const tab = TABS.includes((params.get("tab") ?? "appearance") as (typeof TABS)[number])
@@ -31,8 +45,8 @@ export function SettingsView({
     : "appearance";
   const [notice, setNotice] = useState<string | null>(null);
   const [path, setPath] = useState("~/.skill-hive");
-  const [agentName, setAgentName] = useState("Field Notes");
-  const [agentPath, setAgentPath] = useState("~/.field-notes/skills");
+  const [agentName, setAgentName] = useState("");
+  const [agentPath, setAgentPath] = useState("");
   const [syncMode, setSyncMode] = useState<"symlink" | "copy">("symlink");
   const [updateNote, setUpdateNote] = useState<string | null>(null);
   const [updateAction, setUpdateAction] = useState<"install" | "download" | null>(null);
@@ -129,7 +143,7 @@ export function SettingsView({
           className="mt-4 space-y-2"
           onSubmit={(event) => {
             event.preventDefault();
-            onRepoPath?.(path);
+            void onRepoPath(path);
             setNotice(t("settings.restart"));
           }}
         >
@@ -138,25 +152,28 @@ export function SettingsView({
             <input aria-label={t("settings.path")} value={path} onChange={(event) => setPath(event.target.value)} className="mt-1 block w-full rounded-md border border-input px-2 py-1" />
           </label>
           <div className="flex gap-2 text-sm">
-            <button type="button" aria-pressed={syncMode === "symlink"} className="rounded-md border border-border px-2 py-1" onClick={() => setSyncMode("symlink")}>{t("settings.sync.symlink")}</button>
-            <button type="button" aria-pressed={syncMode === "copy"} className="rounded-md border border-border px-2 py-1" onClick={() => setSyncMode("copy")}>{t("settings.sync.copy")}</button>
+            <button type="button" aria-pressed={syncMode === "symlink"} className="rounded-md border border-border px-2 py-1" onClick={() => { setSyncMode("symlink"); void writeSetting("sync_mode", "symlink"); }}>{t("settings.sync.symlink")}</button>
+            <button type="button" aria-pressed={syncMode === "copy"} className="rounded-md border border-border px-2 py-1" onClick={() => { setSyncMode("copy"); void writeSetting("sync_mode", "copy"); }}>{t("settings.sync.copy")}</button>
           </div>
           <button type="submit" className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground">Save path</button>
           <button
             type="button"
             className="ml-2 rounded-md border border-border px-3 py-1 text-sm"
-            onClick={() => setPath("~/.skill-hive")}
+            onClick={() => {
+              setPath("~/.skill-hive");
+              void onRepoPath("~/.skill-hive");
+            }}
           >
             {t("settings.path.reset")}
           </button>
           {notice ? <p role="status">{notice}</p> : null}
           <div className="mt-4 space-y-2 text-sm">
             <p>{t("settings.close")}</p>
-            <button type="button" aria-pressed={closeChoice === "ask"} className="rounded-md border border-border px-2 py-1" onClick={() => setCloseChoice("ask")}>{t("close.dialog")}</button>
-            <button type="button" aria-pressed={closeChoice === "minimize"} className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setCloseChoice(trayOn ? "minimize" : "ask")}>{t("settings.close.minimize")}</button>
-            <button type="button" aria-pressed={closeChoice === "quit"} className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setCloseChoice("quit")}>{t("settings.close.quit")}</button>
+            <button type="button" aria-pressed={closeChoice === "ask"} className="rounded-md border border-border px-2 py-1" onClick={() => { setCloseChoice("ask"); void writeSetting("close_behavior", "ask"); }}>{t("close.dialog")}</button>
+            <button type="button" aria-pressed={closeChoice === "minimize"} className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { const next = trayOn ? "minimize" : "ask"; setCloseChoice(next); void writeSetting("close_behavior", next); }}>{t("settings.close.minimize")}</button>
+            <button type="button" aria-pressed={closeChoice === "quit"} className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { setCloseChoice("quit"); void writeSetting("close_behavior", "quit"); }}>{t("settings.close.quit")}</button>
             <label className="mt-2 block">
-              <input type="checkbox" checked={trayOn} onChange={(event) => setTrayOn(event.target.checked)} /> {t("settings.tray")}
+              <input type="checkbox" checked={trayOn} onChange={(event) => { setTrayOn(event.target.checked); void writeSetting("tray", event.target.checked ? "1" : "0"); }} /> {t("settings.tray")}
             </label>
             <p>{t("settings.autoUpdate")}</p>
             <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => setAutoApply(false)}>{t("settings.autoUpdate.off")}</button>
@@ -169,7 +186,7 @@ export function SettingsView({
                 {t("settings.proxy")}
                 <input aria-label={t("settings.proxy")} value={proxy} onChange={(event) => setProxy(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
               </label>
-              <button type="button" className="mt-2 rounded-md border border-border px-2 py-1" onClick={() => setProxyNote(proxyOk(proxy) ? t("settings.proxy.save") : t("settings.proxy.invalid"))}>{t("settings.proxy.save")}</button>
+              <button type="button" className="mt-2 rounded-md border border-border px-2 py-1" onClick={() => { const ok = proxyOk(proxy); setProxyNote(ok ? t("settings.proxy.save") : t("settings.proxy.invalid")); if (ok) void writeSetting("proxy", proxy.trim()); }}>{t("settings.proxy.save")}</button>
               {proxyNote ? <p role="status">{proxyNote}</p> : null}
             </div>
           </div>
@@ -178,8 +195,8 @@ export function SettingsView({
       {tab === "agents" ? (
         <div className="mt-4">
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onAgents?.(agents.map((agent) => ({ ...agent, enabled: true })))}>{t("settings.agents.enableAll")}</button>
-            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onAgents?.(agents.map((agent) => ({ ...agent, enabled: false })))}>{t("settings.agents.disableAll")}</button>
+            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: true }))); void setAllToolsEnabled(true); }}>{t("settings.agents.enableAll")}</button>
+            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: false }))); void setAllToolsEnabled(false); }}>{t("settings.agents.disableAll")}</button>
             <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setRefreshed(true)}>{t("settings.agents.refresh")}</button>
           </div>
           {refreshed ? <p role="status">{t("settings.agents.refreshed")}</p> : null}
@@ -193,7 +210,9 @@ export function SettingsView({
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
                   if (!dragKey) return;
-                  onAgents?.(moveById(agents, dragKey, agent.key, (item) => item.key));
+                  const next = moveById(agents, dragKey, agent.key, (item) => item.key);
+                  void onAgents(next);
+                  void setToolOrder(next.map((item) => item.key));
                   setDragKey(null);
                 }}
                 className="rounded-md border border-border p-2 text-sm"
@@ -203,15 +222,15 @@ export function SettingsView({
                 <span className="ml-2 text-muted-foreground">{agent.installed ? "Detected" : "Other supported"}</span>
                 <label className="mt-1 block">
                   {t("settings.agents.reset")}
-                  <input aria-label={`${t("settings.agents.reset")} ${agent.name}`} value={agent.path} onChange={(event) => onAgents?.(agents.map((item) => item.key === agent.key ? { ...item, path: event.target.value } : item))} className="ml-2 rounded-md border border-input px-2 py-1" />
+                  <input aria-label={`${t("settings.agents.reset")} ${agent.name}`} value={agent.path} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: pathValue } : item)); void setCustomToolPath(agent.key, pathValue); }} className="ml-2 rounded-md border border-input px-2 py-1" />
                 </label>
                 <label className="mt-1 block">
                   {t("settings.agents.project")}
-                  <input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => onAgents?.(agents.map((item) => item.key === agent.key ? { ...item, projectPath: event.target.value } : item))} className="ml-2 rounded-md border border-input px-2 py-1" />
+                  <input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, projectPath: pathValue } : item)); void setCustomToolProjectPath(agent.key, pathValue); }} className="ml-2 rounded-md border border-input px-2 py-1" />
                 </label>
-                <button type="button" className="mt-1 rounded-md border border-border px-2 py-1" onClick={() => onAgents?.(agents.map((item) => item.key === agent.key ? { ...item, path: "~/.claude/skills" } : item))}>{t("settings.agents.reset")}</button>
+                <button type="button" className="mt-1 rounded-md border border-border px-2 py-1" onClick={() => Promise.resolve(onResetPath(agent.key)).then((next) => { if (next) return onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: next } : item)); })}>{t("settings.agents.reset")}</button>
                 {agent.custom ? (
-                  <button type="button" className="ml-2 mt-1 rounded-md border border-border px-2 py-1" onClick={() => onAgents?.(agents.filter((item) => item.key !== agent.key))}>{t("settings.agents.remove")} {agent.name}</button>
+                  <button type="button" className="ml-2 mt-1 rounded-md border border-border px-2 py-1" onClick={() => { void onAgents(agents.filter((item) => item.key !== agent.key)); void removeCustomTool(agent.key); }}>{t("settings.agents.remove")} {agent.name}</button>
                 ) : null}
               </li>
             ))}
@@ -220,11 +239,12 @@ export function SettingsView({
             className="mt-3 flex flex-wrap gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              onAddAgent?.(agentName, agentPath);
+              void onAddAgent(agentName, agentPath);
             }}
           >
             <input aria-label="Agent name" value={agentName} onChange={(event) => setAgentName(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
             <input aria-label="Agent path" value={agentPath} onChange={(event) => setAgentPath(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
+            <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</button>
             <button type="submit" className="rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground">{t("settings.agents.new")}</button>
           </form>
         </div>
@@ -234,9 +254,9 @@ export function SettingsView({
           <p>{t("backup.advanced")}</p>
           <label className="block">
             {t("backup.remote")}
-            <input aria-label={t("backup.remote")} defaultValue="git@localhost:hive.git" className="ml-2 rounded-md border border-input px-2 py-1" />
+            <input aria-label={t("backup.remote")} className="ml-2 rounded-md border border-input px-2 py-1" onBlur={(event) => { if (event.target.value.trim()) void gitBackupSetRemote(event.target.value.trim()); }} />
           </label>
-          <button type="button" className="rounded-md border border-border px-2 py-1">{t("backup.disconnect")}</button>
+          <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void gitBackupRemoveRemote()}>{t("backup.disconnect")}</button>
           <button type="button" disabled className="ml-2 rounded-md border border-border px-2 py-1">{t("settings.engine.libgit2")}</button>
           <p className="text-muted-foreground">{t("settings.engine.note")}</p>
         </div>
@@ -287,7 +307,7 @@ export function SettingsView({
           {crash ? <p role="alert">{t("settings.about.crash")}</p> : null}
           {repoWarn ? <p role="alert">{t("settings.about.repo")}</p> : null}
           <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href="https://github.com/crzyc0d3r/skill-hive/issues/new" target="_blank" rel="noreferrer">{t("settings.about.report")}</a>
-          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setExported(true)}>{t("settings.about.export")}</button>
+          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { persistEffect("export", "diagnostics", JSON.stringify({ theme, agents: agents.map((agent) => agent.key) })); setExported(true); }}>{t("settings.about.export")}</button>
           {exported ? <p role="status">{t("settings.about.exported")}</p> : null}
           {restartArmed ? <p role="status"><button type="button">{t("settings.about.restart")}</button></p> : null}
           <h2 className="mt-4 text-sm font-medium">{t("settings.about.ack")}</h2>

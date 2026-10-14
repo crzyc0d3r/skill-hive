@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
+import type { GitPreview } from "@/lib/ipc/actions";
+import { pickPath } from "@/lib/ipc/pick";
 import { t } from "@/lib/i18n";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
@@ -11,31 +13,49 @@ export function InstallView({
   onImportAll,
   onImportOne,
   onPreview,
+  onImportGit,
   onCancel,
   onInstallLocal,
   onInstallArchive,
   marketplaceReachable = true,
 }: {
   scanned: ScanRow[];
-  onImportAll?: (names: string[]) => void;
-  onImportOne?: (name: string) => void;
-  onPreview?: (url: string, rename: string) => void;
-  onCancel?: () => void;
-  onInstallLocal?: (path: string) => void;
-  onInstallArchive?: (path: string) => void;
+  onImportAll: (names: string[]) => void | Promise<void>;
+  onImportOne: (row: ScanRow, name: string) => void | Promise<void>;
+  onPreview: (url: string, rename: string) => void | Promise<GitPreview | void>;
+  onImportGit: (url: string, rename: string, previewId: string, relative: string) => void | Promise<void>;
+  onCancel: (previewId: string) => void | Promise<void>;
+  onInstallLocal: (path: string) => void | Promise<void>;
+  onInstallArchive: (path: string) => void | Promise<void>;
   marketplaceReachable?: boolean;
 }) {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "local";
-  const [url, setUrl] = useState("https://github.com/acme/skills/tree/feature/slash/tools/demo");
-  const [rename, setRename] = useState("renamed-demo");
+  const [url, setUrl] = useState("");
+  const [rename, setRename] = useState("");
   const [preview, setPreview] = useState(false);
+  const [previewId, setPreviewId] = useState("");
+  const [relative, setRelative] = useState(".");
   const [cancelled, setCancelled] = useState(false);
-  const [folder, setFolder] = useState("/path/to/demo");
-  const [archive, setArchive] = useState("/path/to/demo.skill");
+  const [folder, setFolder] = useState("");
+  const [archive, setArchive] = useState("");
   const [installed, setInstalled] = useState<string | null>(null);
   const [imported, setImported] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [scanNames, setScanNames] = useState<Record<string, string>>({});
+  async function act(work: () => Promise<void>, done?: () => void) {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+      done?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
   const reachable = marketplaceReachable !== false;
   const tabs = (reachable ? TABS : TABS.filter((item) => item !== "leaderboard")) as readonly string[];
   const active = useMemo(() => (tabs.includes(tab) ? tab : "local"), [tab, tabs]);
@@ -64,25 +84,32 @@ export function InstallView({
           className="mt-4 space-y-2"
           onSubmit={(event) => {
             event.preventDefault();
-            onInstallLocal?.(folder);
-            setInstalled(folder.split("/").filter(Boolean).pop() ?? folder);
+            const label = folder.split(/[/\\]/).filter(Boolean).pop() ?? folder;
+            return act(async () => {
+              await onInstallLocal(folder);
+            }, () => setInstalled(label));
           }}
         >
           <label className="block text-sm">
             {t("install.local.folder")}
             <input aria-label={t("install.local.folder")} value={folder} onChange={(event) => setFolder(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
+            <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => void pickPath(true).then((path) => path && setFolder(path))}>Browse</button>
           </label>
           <label className="block text-sm">
             {t("install.local.archive")}
             <input aria-label={t("install.local.archive")} value={archive} onChange={(event) => setArchive(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
+            <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => void pickPath(false).then((path) => path && setArchive(path))}>Browse</button>
           </label>
-          <button type="submit" className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground">{t("install.local.submit")}</button>
+          <button type="submit" disabled={busy} className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground">{t("install.local.submit")}</button>
           <button
             type="button"
+            disabled={busy}
             className="ml-2 rounded-md border border-border px-3 py-1 text-sm"
             onClick={() => {
-              onInstallArchive?.(archive);
-              setInstalled(archive.split("/").filter(Boolean).pop() ?? archive);
+              const label = archive.split(/[/\\]/).filter(Boolean).pop() ?? archive;
+              void act(async () => {
+                await onInstallArchive(archive);
+              }, () => setInstalled(label));
             }}
           >
             {t("install.local.archiveSubmit")}
@@ -95,9 +122,15 @@ export function InstallView({
           className="mt-4 space-y-2"
           onSubmit={(event) => {
             event.preventDefault();
-            setPreview(true);
-            setCancelled(false);
-            onPreview?.(url, rename);
+            return act(async () => {
+              const result = await onPreview(url, rename);
+              setPreview(true);
+              setCancelled(false);
+              if (result?.id) {
+                setPreviewId(result.id);
+                setRelative(result.skills[0]?.relative ?? ".");
+              }
+            });
           }}
         >
           <input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} className="w-full rounded-md border border-input px-2 py-1 text-sm" />
@@ -114,8 +147,10 @@ export function InstallView({
                   type="button"
                   className="rounded-md border border-border px-2 py-1 text-sm"
                   onClick={() => {
-                    onPreview?.(url, rename);
-                    setImported(rename);
+                    const label = rename || "skill";
+                    void act(async () => {
+                      await onImportGit(url, rename, previewId, relative);
+                    }, () => setImported(label));
                   }}
                 >
                   {t("install.git.import")}
@@ -125,7 +160,7 @@ export function InstallView({
                   className="rounded-md border border-border px-2 py-1 text-sm"
                   onClick={() => {
                     setCancelled(true);
-                    onCancel?.();
+                    void onCancel(previewId);
                   }}
                 >
                   {t("install.git.cancel")}
@@ -153,8 +188,9 @@ export function InstallView({
                     type="button"
                     className="rounded-md border border-border px-2 py-1"
                     onClick={() => {
-                      onImportOne?.(name);
-                      setImported(name);
+                      void act(async () => {
+                        await onImportOne(row, name);
+                      }, () => setImported(name));
                     }}
                   >
                     {t("install.scan.one")} {row.name}
@@ -163,11 +199,12 @@ export function InstallView({
               );
             })}
           </ul>
-          <button type="button" className="mt-2 rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground" onClick={() => onImportAll?.(scanned.map((row) => row.name))}>
+          <button type="button" disabled={busy} className="mt-2 rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground" onClick={() => void act(() => Promise.resolve(onImportAll(scanned.map((row) => row.name))))}>
             {t("install.scan.all")}
           </button>
         </div>
       ) : null}
+      {error ? <p role="alert">{error}</p> : null}
       {imported ? <p>{t("install.git.imported")} {imported}</p> : null}
     </section>
   );
