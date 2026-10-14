@@ -106,12 +106,9 @@ where
             forwarded.push(arg.to_string());
         }
     }
-    if let Some(extra) = extra_arguments
+    let extra = extra_arguments
         .map(str::trim)
-        .filter(|extra| !extra.is_empty())
-    {
-        forwarded.push(extra.to_string());
-    }
+        .filter(|extra| !extra.is_empty());
     if data_directory.is_none() {
         if let Some(dir) = configured_directory
             .map(str::trim)
@@ -120,7 +117,7 @@ where
             data_directory = Some(PathBuf::from(dir));
         }
     }
-    if forwarded.is_empty() && data_directory.is_none() {
+    if forwarded.is_empty() && extra.is_none() && data_directory.is_none() {
         return None;
     }
     let mut browser_args =
@@ -137,6 +134,13 @@ where
             }
         }
         browser_args.push_str(&arg);
+    }
+    // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is already a browser-argument
+    // string. Appending it as one token would quote the first flag's value
+    // and swallow every flag after the first space.
+    if let Some(extra) = extra {
+        browser_args.push(' ');
+        browser_args.push_str(extra);
     }
     Some(WebviewDriverOverrides {
         browser_args,
@@ -293,5 +297,19 @@ mod tests {
             overrides.data_directory.unwrap(),
             std::path::PathBuf::from("C:\\temp\\webview")
         );
+    }
+
+    #[test]
+    fn an_environment_argument_string_keeps_every_flag() {
+        let overrides = webview_driver_overrides(
+            std::iter::empty::<&str>(),
+            Some("--remote-debugging-port=9222 --remote-allow-origins=*"),
+            None,
+        )
+        .expect("environment arguments");
+        assert!(overrides
+            .browser_args
+            .contains("--remote-debugging-port=9222 --remote-allow-origins=*"));
+        assert!(!overrides.browser_args.contains('"'));
     }
 }

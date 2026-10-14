@@ -35,49 +35,62 @@ async function call(method, urlPath, body) {
   return text ? JSON.parse(text) : {};
 }
 
+function promotePortFile(nested) {
+  const parent = path.dirname(nested);
+  if (path.basename(parent).toLowerCase() !== "ebwebview") return;
+  const dest = path.join(path.dirname(parent), "DevToolsActivePort");
+  if (existsSync(dest)) return;
+  try {
+    copyFileSync(nested, dest);
+    console.log(`promoted DevToolsActivePort from ${nested}`);
+  } catch (err) {
+    console.log(`could not promote DevToolsActivePort: ${err}`);
+  }
+}
+
+function walkForPort(dir, depth, found) {
+  if (depth < 0) return;
+  let entries = [];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.name.toLowerCase() === "ebwebview") {
+      const nested = path.join(full, "DevToolsActivePort");
+      if (existsSync(nested)) {
+        found.push(nested);
+        promotePortFile(nested);
+      }
+      continue;
+    }
+    walkForPort(full, depth - 1, found);
+  }
+}
+
 function promoteDevToolsPort() {
   promoteDevToolsPort.scans += 1;
-  const roots = [process.env.TEMP, process.env.TMP, process.env.LOCALAPPDATA && path.win32.join(process.env.LOCALAPPDATA, "Temp"), tmpdir()].filter(Boolean);
-  const profile = process.env.SKILL_HIVE_WEBVIEW_DATA_DIR;
-  if (profile) {
-    const nested = path.join(profile, "EBWebView", "DevToolsActivePort");
-    const dest = path.join(profile, "DevToolsActivePort");
-    if (existsSync(nested) && !existsSync(dest)) {
-      try {
-        copyFileSync(nested, dest);
-        console.log(`promoted DevToolsActivePort from ${nested}`);
-      } catch (err) {
-        console.log(`could not promote DevToolsActivePort: ${err}`);
-      }
-    }
-  }
+  const roots = [
+    process.env.SKILL_HIVE_WEBVIEW_DATA_DIR,
+    process.env.TEMP,
+    process.env.TMP,
+    process.env.LOCALAPPDATA && path.win32.join(process.env.LOCALAPPDATA, "Temp"),
+    tmpdir(),
+  ].filter(Boolean);
   const seen = new Set();
-  const scoped = [];
+  const found = [];
   for (const root of roots) {
     if (seen.has(root)) continue;
     seen.add(root);
-    let names = [];
-    try {
-      names = readdirSync(root);
-    } catch {
-      continue;
-    }
-    for (const name of names) {
-      if (!name.toLowerCase().includes("scoped_dir")) continue;
-      scoped.push(path.join(root, name));
-      const nested = path.join(root, name, "EBWebView", "DevToolsActivePort");
-      const dest = path.join(root, name, "DevToolsActivePort");
-      if (!existsSync(nested) || existsSync(dest)) continue;
-      try {
-        copyFileSync(nested, dest);
-        console.log(`promoted DevToolsActivePort from ${nested}`);
-      } catch (err) {
-        console.log(`could not promote DevToolsActivePort: ${err}`);
-      }
-    }
+    walkForPort(root, 4, found);
   }
-  if (promoteDevToolsPort.scans === 1 || promoteDevToolsPort.scans % 20 === 0) {
-    console.log(`devtools scan ${promoteDevToolsPort.scans} roots ${[...seen].join(" ; ")} scoped ${scoped.join(" ; ") || "(none)"}`);
+  if (promoteDevToolsPort.scans === 1 || promoteDevToolsPort.scans % 20 === 0 || found.length) {
+    console.log(
+      `devtools scan ${promoteDevToolsPort.scans} roots ${[...seen].join(" ; ")} ports ${found.join(" ; ") || "(none)"}`,
+    );
   }
 }
 promoteDevToolsPort.scans = 0;
@@ -93,7 +106,7 @@ try {
           application: path.resolve(application),
           webviewOptions: {
             userDataFolder: webviewProfile,
-            additionalBrowserArguments: "--remote-debugging-port=9222 --remote-allow-origins=*",
+            additionalBrowserArguments: ["--remote-debugging-port=9222", "--remote-allow-origins=*"],
           },
         },
       },
