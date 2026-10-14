@@ -16,8 +16,8 @@ Engine: `/workspace/.claude/skills/graph-automation/scripts/graphctl.py` — run
 {
   "slug": "skill-hive-p3",
   "version": 1,
-  "approved": false,
-  "approved_hash": null,
+  "approved": true,
+  "approved_hash": "52a0e66209d8ba22",
   "inputs": {
     "task": "Execute Phase 3 authoring for Skill Hive: skill and agent editors, draft versioning, and validation rules S-01..S-34, A-01..A-19, C-01..C-02. Do not start Phase 4.",
     "output": "automations/skill-hive-p3/out/result.md",
@@ -104,7 +104,8 @@ Engine: `/workspace/.claude/skills/graph-automation/scripts/graphctl.py` — run
         "n2_editors"
       ]
     }
-  ]
+  ],
+  "approved_at": "2026-10-14T02:10:09+00:00"
 }
 ```
 
@@ -157,5 +158,6 @@ The split uses that map. Communities 1, 7, 8, 9, 10, and 63 all contain `crates/
 ## Decisions that changed the graph
 
 - 2026-10-14T01:57:37+00:00: graphifyy 0.9.90 provides the graphify CLI. extract --code-only --force and cluster-only --no-viz --no-label wrote graphify-out/graph.json (172 communities). n1 owns communities 1, 7, 8, 9, 10, 63, and 76 because they share tests.rs. n2 owns communities 31, 46, 60, and 64 because they share App.tsx. Shadcn communities and the vendored reference skill_store were not given nodes.
+- 2026-10-14T02:10:09+00:00: auto-approved by --auto
 
 ## Learned rules

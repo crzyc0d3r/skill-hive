@@ -1,18 +1,328 @@
 {
   "run_id": "r1",
   "started": "2026-10-14T01:36:58+00:00",
-  "finished": null,
+  "finished": "2026-10-14T02:11:06+00:00",
   "project_root": "/workspace",
   "dispatches": 0,
-  "nodes": {},
-  "attempts": [],
-  "acceptance": [],
+  "nodes": {
+    "n1_authoring": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "e0f5f36c2934bc149f1369c22b5c07eff89565067df445f73a77e311ab69c635",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'exit 0' automations/skill-hive-p3/out/n1_authoring.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-14T02:10:16+00:00",
+        "output_hash": "e0f5f36c2934bc149f1369c22b5c07eff89565067df445f73a77e311ab69c635",
+        "log": "automations/skill-hive-p3/runs/r1/gates/n1_authoring.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'exit 0' automations/skill-hive-p3/out/n1_authoring.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-14T02:10:16+00:00",
+          "output_hash": "e0f5f36c2934bc149f1369c22b5c07eff89565067df445f73a77e311ab69c635",
+          "log": "automations/skill-hive-p3/runs/r1/gates/n1_authoring.a1.md"
+        }
+      ]
+    },
+    "n2_editors": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "5b90e289a34e7992b2e3009db69de3aa6c5bbb6b853adb1e76f5ab44dcc53a8b",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q '| npm test | 0 |' automations/skill-hive-p3/out/n2_editors.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-14T02:10:44+00:00",
+        "output_hash": "5b90e289a34e7992b2e3009db69de3aa6c5bbb6b853adb1e76f5ab44dcc53a8b",
+        "log": "automations/skill-hive-p3/runs/r1/gates/n2_editors.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q '| npm test | 0 |' automations/skill-hive-p3/out/n2_editors.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-14T02:10:44+00:00",
+          "output_hash": "5b90e289a34e7992b2e3009db69de3aa6c5bbb6b853adb1e76f5ab44dcc53a8b",
+          "log": "automations/skill-hive-p3/runs/r1/gates/n2_editors.a1.md"
+        }
+      ]
+    },
+    "n3_result": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "bdfbf115c72c85c864ae96a7f13763297d12d6ebba6f3e18848d56e5b0a33d17",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/skill-hive-p3/code/check_result.py` → exit 0: result.md records five passing Phase 3 criteria and the graphify map"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-14T02:11:05+00:00",
+        "output_hash": "bdfbf115c72c85c864ae96a7f13763297d12d6ebba6f3e18848d56e5b0a33d17",
+        "log": "automations/skill-hive-p3/runs/r1/gates/n3_result.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/skill-hive-p3/code/check_result.py` → exit 0: result.md records five passing Phase 3 criteria and the graphify map"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-14T02:11:05+00:00",
+          "output_hash": "bdfbf115c72c85c864ae96a7f13763297d12d6ebba6f3e18848d56e5b0a33d17",
+          "log": "automations/skill-hive-p3/runs/r1/gates/n3_result.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_authoring",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T02:10:15+00:00",
+      "finished": "2026-10-14T02:10:16+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p3/out/n1_authoring.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n2_editors",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T02:10:24+00:00",
+      "finished": "2026-10-14T02:10:44+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p3/out/n2_editors.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n3_result",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T02:11:05+00:00",
+      "finished": "2026-10-14T02:11:05+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p3/out/result.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/skill-hive-p3/code/check_result.py` → exit 0: result.md records five passing Phase 3 criteria and the graphify map",
+      "at": "2026-10-14T02:11:06+00:00"
+    }
+  ],
   "events": [
     {
       "at": "2026-10-14T01:57:37+00:00",
       "type": "decision",
       "msg": "graphifyy 0.9.90 provides the graphify CLI. extract --code-only --force and cluster-only --no-viz --no-label wrote graphify-out/graph.json (172 communities). n1 owns communities 1, 7, 8, 9, 10, 63, and 76 because they share tests.rs. n2 owns communities 31, 46, 60, and 64 because they share App.tsx. Shadcn communities and the vendored reference skill_store were not given nodes."
+    },
+    {
+      "at": "2026-10-14T02:10:09+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-14T02:10:09+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash 52a0e66209d8ba22)"
+    },
+    {
+      "at": "2026-10-14T02:10:09+00:00",
+      "type": "baseline",
+      "msg": "0/3 pass before the run"
+    },
+    {
+      "at": "2026-10-14T02:10:16+00:00",
+      "type": "gate",
+      "msg": "n1_authoring attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T02:10:44+00:00",
+      "type": "gate",
+      "msg": "n2_editors attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T02:11:05+00:00",
+      "type": "gate",
+      "msg": "n3_result attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T02:11:06+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
     }
   ],
-  "completion": null
+  "completion": {
+    "at": "2026-10-14T02:11:06+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 52a0e66209d8ba22"
+      ],
+      [
+        "n1_authoring: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p3/out/n1_authoring.md (1680 bytes)"
+      ],
+      [
+        "n1_authoring: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T02:10:16+00:00"
+      ],
+      [
+        "n2_editors: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p3/out/n2_editors.md (110 bytes)"
+      ],
+      [
+        "n2_editors: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T02:10:44+00:00"
+      ],
+      [
+        "n3_result: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p3/out/result.md (1318 bytes)"
+      ],
+      [
+        "n3_result: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T02:11:05+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 3 of 3 declared nodes"
+      ],
+      [
+        "acceptance 0: Phase 3 result records five exit criteria",
+        "pass",
+        "`python3 automations/skill-hive-p3/code/check_result.py` → exit 0: result.md records five passing Phase 3 criteria and the graphify map"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/skill-hive-p3/out/result.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-14T02:10:09+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "automations/skill-hive-p3/out/result.md absent"
+      ],
+      [
+        "acceptance 0: Phase 3 result records five exit criteria",
+        "fail",
+        "`python3 automations/skill-hive-p3/code/check_result.py` → exit 1: missing automations/skill-hive-p3/out/result.md"
+      ],
+      [
+        "note",
+        "noted",
+        "authoring tests and phase 3 vitest and playwright passed locally before the nodes ran"
+      ]
+    ]
+  }
 }

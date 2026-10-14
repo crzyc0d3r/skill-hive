@@ -7,6 +7,7 @@ export interface AppRoute {
 export const APP_ROUTES: AppRoute[] = [
   { path: "/", title: "Dashboard", nav: "Dashboard" },
   { path: "/my-skills", title: "Library", nav: "Library" },
+  { path: "/agents", title: "Agents", nav: "Agents" },
   { path: "/global-workspace", title: "Global Workspace" },
   { path: "/global-workspace/:agentKey", title: "Agent workspace" },
   { path: "/lobster-workspace", title: "Lobster Workspace" },
@@ -16,7 +17,6 @@ export const APP_ROUTES: AppRoute[] = [
   { path: "/project/:id", title: "Project" },
   { path: "/settings", title: "Settings", nav: "Settings" },
   { path: "/settings/endpoints", title: "Endpoints" },
-  { path: "/agents", title: "Agents", nav: "Agents" },
   { path: "/agents/:id/edit", title: "Agent editor" },
   { path: "/agents/:id/tests", title: "Agent tests" },
   { path: "/agents/:id/history", title: "Agent history" },

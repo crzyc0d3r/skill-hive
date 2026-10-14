@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { SkillCard } from "@/lib/phase1/model";
 import { t } from "@/lib/i18n";
+import { openLater } from "@/lib/phase3/store";
 
 export function DashboardView({ skills }: { skills: SkillCard[] }) {
   const enabled = skills.filter((skill) => skill.enabled).length;
@@ -18,6 +19,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
         <Link to="/install?tab=scan" className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground">{t("dashboard.scan")}</Link>
         <Link to="/install?tab=local" className="rounded-md border border-border px-3 py-1 text-sm">{t("dashboard.quick.install")}</Link>
         <Link to="/my-skills" className="rounded-md border border-border px-3 py-1 text-sm">{t("dashboard.quick.library")}</Link>
+        <button type="button" className="rounded-md border border-border px-3 py-1 text-sm" onClick={() => openLater("skill")}>{t("dashboard.generate")}</button>
       </div>
       <h2 className="mt-6 text-sm font-medium">{t("dashboard.recent")}</h2>
       <ul data-testid="recent-activity">

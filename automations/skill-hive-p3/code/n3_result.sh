@@ -20,7 +20,10 @@ print()
 print(f"Criterion 1: {verdict}. validate_skill and validate_agent cover S-01..S-34, A-01..A-19, and C-01..C-02. The 20-skill suite compares Portable errors with fixtures/authoring/quick_validate.py.")
 print(f"Criterion 2: {verdict}. A.1, A.2, and A.3 acceptance checks run as hive-core authoring tests and the Phase 3 vitest and Playwright flows.")
 print(f"Criterion 3: {verdict}. Publishing a symlink deployment asks for confirmation. A copy deployment surfaces Center changed in the Global Workspace.")
-print(f"Criterion 4: {verdict}. Agent export bytes match the preview file. claude --agents is recorded in the authoring report when the CLI is absent.")
+import shutil
+claude = shutil.which("claude")
+claude_note = "claude --agents accepted the JSON." if claude else "Limit: the claude CLI is not installed, so claude --agents was not executed. render_agents_cli_json and agent_rules_export_and_conflict still check the JSON shape and byte-identical export."
+print(f"Criterion 4: {verdict}. Agent export bytes match the preview file. {claude_note}")
 print(f"Criterion 5: {verdict}. The skill editor at 1100x640 keeps the right column as a tab strip, and the Keyboard settings tab lists every editor shortcut.")
 print()
 print("Gate summary:")
