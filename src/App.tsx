@@ -19,6 +19,9 @@ import { BackupView, LobsterView, ProjectView } from "./views/phase2/screens";
 import { EndpointsView } from "./views/phase4/EndpointsView";
 import { ResultsView } from "./views/phase4/ResultsView";
 import { SuiteView } from "./views/phase4/SuiteView";
+import { CompareView } from "./views/phase5/CompareView";
+import { GenerateWizard } from "./views/phase5/GenerateWizard";
+import { HistoryView } from "./views/phase5/HistoryView";
 import { AgentEditor } from "./views/phase3/AgentEditor";
 import { AgentsView } from "./views/phase3/AgentsView";
 import { SkillEditor } from "./views/phase3/SkillEditor";
@@ -180,6 +183,9 @@ function screenFor(path: string) {
   if (path === "/settings/endpoints" || path === "/providers") return <EndpointsView />;
   if (path === "/skills/:id/tests" || path === "/testing" || path === "/testing/suites/:id") return <SuiteView />;
   if (path === "/runs/:runId" || path === "/testing/runs/:id") return <ResultsView />;
+  if (path === "/generate/:sessionId") return <GenerateWizard />;
+  if (path === "/compare/:comparisonId") return <CompareView />;
+  if (path === "/skills/:id/history" || path === "/agents/:id/history") return <HistoryView />;
   if (path === "/dev/tokens") return <TokensView />;
   return <PlaceholderView />;
 }

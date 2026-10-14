@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14T02:51:06.225446+00:00",
+  "generated_at": "2026-10-14T04:20:30.461787+00:00",
   "nodes": {
     "validate_skill": {
       "code_fingerprint": "",
@@ -12,7 +12,7 @@
           "q": "Which communities should Phase 3 authoring nodes read?"
         }
       ],
-      "score": 0.999358396,
+      "score": 0.997925852,
       "source_file": "",
       "status": "tentative",
       "uses": 1

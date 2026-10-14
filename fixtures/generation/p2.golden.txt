@@ -1,0 +1,27 @@
+You are writing a complete first draft of an agent skill.
+Goal: Extract line items from supplier invoices
+Interview answers:
+columns: vendor, date, total
+Skill name (fixed; it must equal the directory name): invoice-extractor
+Validation profile: portable
+Rules the app checks deterministically; a draft that breaks them is sent back to you:
+- The file starts with "---" on line 1. Frontmatter has name: invoice-extractor and a description of
+1 to 1024 characters containing no "<" or ">". Only name, description, license, compatibility, metadata and allowed-tools are allowed.
+- The SKILL.md body is under 500 lines.
+- Every relative path mentioned in SKILL.md is a file you include in this draft.
+- The skill must not surprise the user.
+Design guidance:
+1. Description. Say what the skill does AND when to use it. Be a little pushy.
+5. Evals alongside the skill. Write evals/evals.json with 2 or 3 prompts and evals/trigger.json
+with 8 to 10 should-trigger queries and 8 to 10 should-not-trigger near-misses.
+Output format. Emit the files in this envelope and nothing else.
+===== FILE: SKILL.md =====
+---
+name: invoice-extractor
+description: ...
+---
+===== FILE: evals/evals.json =====
+{"skill_name": "invoice-extractor", "evals": []}
+===== FILE: evals/trigger.json =====
+[{"query": "...", "should_trigger": true}]
+===== END =====

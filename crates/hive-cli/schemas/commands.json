@@ -58,5 +58,18 @@
   "providers.probe": {"type": "object", "required": ["command", "id", "ok", "stages"], "properties": {"command": {"type": "string"}, "id": {"type": "string"}, "ok": {"type": "boolean"}, "stages": {"type": "integer"}}},
   "test.save-suite": {"type": "object", "required": ["command", "skill"], "properties": {"command": {"type": "string"}, "skill": {"type": "string"}}},
   "test.run": {"type": "object", "required": ["command", "status", "run_id"], "properties": {"command": {"type": "string"}, "status": {"type": "string"}, "run_id": {"type": "string"}}},
-  "test.show": {"type": "object", "required": ["command", "status", "run_id"], "properties": {"command": {"type": "string"}, "status": {"type": "string"}, "run_id": {"type": "string"}}}
+  "test.show": {"type": "object", "required": ["command", "status", "run_id"], "properties": {"command": {"type": "string"}, "status": {"type": "string"}, "run_id": {"type": "string"}}},
+  "test.suites": {"type": "object", "required": ["command", "suites"], "properties": {"command": {"type": "string"}, "suites": {"type": "array"}}},
+  "test.status": {"type": "object", "required": ["command", "status", "run_id"], "properties": {"command": {"type": "string"}, "status": {"type": "string"}, "run_id": {"type": "string"}}},
+  "test.results": {"type": "object", "required": ["command", "run_id", "cells"], "properties": {"command": {"type": "string"}, "run_id": {"type": "string"}, "cells": {"type": "integer"}}},
+  "test.export": {"type": "object", "required": ["command", "path", "testcases", "rows"], "properties": {"command": {"type": "string"}, "path": {"type": "string"}, "testcases": {"type": "integer"}, "rows": {"type": "integer"}}},
+  "providers.test": {"type": "object", "required": ["command", "id", "ok"], "properties": {"command": {"type": "string"}, "id": {"type": "string"}, "ok": {"type": "boolean"}}},
+  "providers.models": {"type": "object", "required": ["command", "id", "models"], "properties": {"command": {"type": "string"}, "id": {"type": "string"}, "models": {"type": "array"}}},
+  "generate.skill": {"type": "object", "required": ["command", "name", "status", "errors"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}, "status": {"type": "string"}, "errors": {"type": "integer"}}},
+  "generate.agent": {"type": "object", "required": ["command", "name", "status", "errors"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}, "status": {"type": "string"}, "errors": {"type": "integer"}}},
+  "generate.evals": {"type": "object", "required": ["command", "name", "queries"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}, "queries": {"type": "integer"}}},
+  "agents.def.list": {"type": "object", "required": ["command", "agents"], "properties": {"command": {"type": "string"}, "agents": {"type": "array"}}},
+  "agents.def.show": {"type": "object", "required": ["command", "name"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}}},
+  "agents.def.deploy": {"type": "object", "required": ["command", "name"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}}},
+  "agents.def.undeploy": {"type": "object", "required": ["command", "name"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}}}
 }

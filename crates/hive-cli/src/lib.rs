@@ -3,6 +3,7 @@
 //! Exit codes: 0 success, 1 operational error, 2 usage error (`INVALID_ARGUMENT`).
 
 mod phase4;
+mod phase5;
 mod schema;
 
 use std::collections::BTreeMap;
@@ -78,6 +79,10 @@ enum Command {
         #[command(subcommand)]
         command: TestCmd,
     },
+    Generate {
+        #[command(subcommand)]
+        command: GenerateCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -107,6 +112,14 @@ enum ProvidersCmd {
         #[arg(long, default_value_t = true)]
         offline: bool,
     },
+    Test {
+        #[arg(long)]
+        id: String,
+    },
+    Models {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -122,6 +135,10 @@ enum TestCmd {
         mode: String,
     },
     Show,
+    Suites,
+    Status,
+    Results,
+    Export,
 }
 
 #[derive(Subcommand)]
@@ -166,6 +183,41 @@ enum AgentDefCmd {
         path: PathBuf,
         #[arg(long, default_value_t = false)]
         plugin: bool,
+    },
+    List,
+    Show {
+        #[arg(long)]
+        name: String,
+    },
+    Deploy {
+        #[arg(long)]
+        name: String,
+    },
+    Undeploy {
+        #[arg(long)]
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum GenerateCmd {
+    Skill {
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value_t = false)]
+        replay: bool,
+    },
+    Agent {
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value_t = false)]
+        replay: bool,
+    },
+    Evals {
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value_t = false)]
+        replay: bool,
     },
 }
 
@@ -526,6 +578,7 @@ fn dispatch(cli: &Cli) -> Result<Value, Fail> {
         Command::Git { command } => git(&ctx, command),
         Command::Providers { command } => providers_cmd(command),
         Command::Test { command } => test_cmd(command),
+        Command::Generate { command } => generate_cmd(command),
     }
 }
 
@@ -543,6 +596,8 @@ fn providers_cmd(command: &ProvidersCmd) -> Result<Value, Fail> {
             }
             phase4::providers_probe_offline(id)
         }
+        ProvidersCmd::Test { id } => phase5::providers_test(id),
+        ProvidersCmd::Models { id } => phase5::providers_models(id),
     }
 }
 
@@ -550,14 +605,22 @@ fn test_cmd(command: &TestCmd) -> Result<Value, Fail> {
     match command {
         TestCmd::SaveSuite { skill } => phase4::test_save_suite(skill),
         TestCmd::Run { skill, mode } => {
-            if mode != "offline" {
-                return Err(Fail::other(
-                    "only offline mode is available without an API key",
-                ));
-            }
+            phase5::replay_mode(mode)?;
             phase4::test_run(skill)
         }
         TestCmd::Show => phase4::test_show(),
+        TestCmd::Suites => phase5::test_suites(),
+        TestCmd::Status => phase5::test_status(),
+        TestCmd::Results => phase5::test_results(),
+        TestCmd::Export => phase5::test_export(),
+    }
+}
+
+fn generate_cmd(command: &GenerateCmd) -> Result<Value, Fail> {
+    match command {
+        GenerateCmd::Skill { name, replay } => phase5::generate_skill(name, *replay),
+        GenerateCmd::Agent { name, replay } => phase5::generate_agent(name, *replay),
+        GenerateCmd::Evals { name, replay } => phase5::generate_evals(name, *replay),
     }
 }
 
@@ -635,6 +698,10 @@ fn agents(ctx: &Ctx, command: &AgentsCmd) -> Result<Value, Fail> {
                     json!({"command": "agents.def.validate", "errors": errors, "findings": findings}),
                 )
             }
+            AgentDefCmd::List => phase5::agent_def_list(),
+            AgentDefCmd::Show { name } => phase5::agent_def_show(name),
+            AgentDefCmd::Deploy { name } => phase5::agent_def_deploy(name),
+            AgentDefCmd::Undeploy { name } => phase5::agent_def_undeploy(name),
         },
     }
 }
