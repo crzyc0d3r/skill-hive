@@ -119,7 +119,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           echo "tauri-driver 2.1.0 does not listen on macOS, so this job runs the hive-core effect test instead"
-          cargo test -p skill-hive --lib wiring_effects -- --test-threads=1
+          cargo test -p skill-hive --lib effects -- --test-threads=1
 
       - name: Show WebView2 driver traces
         if: always() && runner.os == 'Windows'

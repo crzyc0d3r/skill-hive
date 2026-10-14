@@ -1,5 +1,13 @@
 import { useSyncExternalStore } from "react";
-import { persistEffect } from "@/lib/ipc/persist";
+import {
+  exportAgentDraft,
+  fixSkillDraft,
+  publishSkillDraft,
+  restoreSkillDraft,
+  saveAgentDraft,
+  saveSkillDraft,
+  snapshotSkillDraft,
+} from "@/lib/ipc/actions";
 import type { SkillCard } from "@/features/library/model";
 import {
   applyAgentFix,
@@ -117,10 +125,40 @@ export function ensureSkill(id: string): SkillDraft | null {
   return drafted;
 }
 
+function adoptServerVersion(id: string, serverId: unknown, label?: string): void {
+  if (typeof serverId !== "string" || serverId.length === 0) return;
+  const versions = state.versions[id] ?? [];
+  const target = label
+    ? versions.find((version) => version.label === label && !version.hidden)
+    : versions.find((version) => !version.hidden);
+  if (!target || target.id === serverId) return;
+  update({
+    versions: {
+      ...state.versions,
+      [id]: versions.map((version) => (version.id === target.id ? { ...version, id: serverId } : version)),
+    },
+  });
+}
+
+function hiveFixArgs(draft: SkillDraft, fixId: string): { path: string; message: string } {
+  const finding = validateSkill(draft).find((item) => item.fixId === fixId);
+  if (fixId === "remove-unknown-key") {
+    const key = finding?.message.split(" ")[0] ?? "";
+    return { path: "SKILL.md", message: `key \`${key}\` is not allowed in the portable profile` };
+  }
+  if (fixId === "create-missing-file") {
+    const missing = finding?.message.split(" ")[0] ?? "";
+    return { path: "SKILL.md", message: `referenced path \`${missing}\` is missing or deeper than one directory` };
+  }
+  return { path: finding?.path ?? "SKILL.md", message: finding?.message ?? "" };
+}
+
 export function saveSkill(draft: SkillDraft): void {
   const versions = saveAutosave(state.versions[draft.id] ?? [], filesRecord(draft));
   update({ skills: { ...state.skills, [draft.id]: draft }, versions: { ...state.versions, [draft.id]: versions } });
-  persistEffect("skill", draft.id, draft.files.map((file) => file.content).join("\n"));
+  void saveSkillDraft(draft.id, draft.files.map((file) => ({ path: file.path, content: file.content }))).then((serverId) =>
+    adoptServerVersion(draft.id, serverId),
+  );
 }
 
 export function snapshotSkill(id: string, label: string): void {
@@ -128,6 +166,7 @@ export function snapshotSkill(id: string, label: string): void {
   if (!draft) return;
   const versions = snapshotVersion(state.versions[id] ?? [], filesRecord(draft), label);
   update({ versions: { ...state.versions, [id]: versions } });
+  void snapshotSkillDraft(id, label).then((serverId) => adoptServerVersion(id, serverId, label));
 }
 
 export function restoreSkill(id: string, versionId: string): void {
@@ -142,6 +181,7 @@ export function restoreSkill(id: string, versionId: string): void {
     skills: { ...state.skills, [id]: { ...draft, files } },
     versions: { ...state.versions, [id]: restored.versions },
   });
+  void restoreSkillDraft(id, versionId);
 }
 
 export function hideSkillVersion(id: string, versionId: string): string | null {
@@ -157,6 +197,11 @@ export function publishSkill(id: string, confirmed: boolean): { kind: "confirm";
   if (symlinks.length > 0 && !confirmed) return { kind: "confirm", agents: symlinks };
   const names = draft.deployments.filter((item) => item.mode === "copy").map(() => draft.name);
   update({ centerChanged: [...new Set([...state.centerChanged, ...names])] });
+  void publishSkillDraft(
+    id,
+    confirmed,
+    draft.deployments.map((item) => ({ agent: item.agent, mode: item.mode, target: draft.dir })),
+  );
   return { kind: "published" };
 }
 
@@ -180,8 +225,10 @@ export function fixSkill(id: string, fixId: string): void {
   const draft = state.skills[id];
   if (!draft) return;
   const next = applySkillFix(draft, fixId);
+  const fix = hiveFixArgs(draft, fixId);
   update({ skills: { ...state.skills, [id]: next } });
   setValidationCounts(validateSkill(next));
+  void fixSkillDraft(id, fixId, fix.path, fix.message);
 }
 
 export function ensureAgent(id: string): AgentDraft | null {
@@ -194,7 +241,7 @@ export function ensureAgent(id: string): AgentDraft | null {
 
 export function saveAgent(agent: AgentDraft): void {
   update({ agents: { ...state.agents, [agent.id]: agent } });
-  persistEffect("agent", agent.id, agent.text);
+  void saveAgentDraft(agent.id, agent.text);
 }
 
 export function fixAgent(id: string): void {
@@ -208,6 +255,7 @@ export function exportAgent(id: string): void {
   if (!agent) return;
   const rendered = renderAgentFile(agent.text);
   saveAgent({ ...agent, exported: rendered, disk: rendered });
+  void exportAgentDraft(id, rendered);
 }
 
 export function agentState(id: string): ReturnType<typeof exportStatus> {

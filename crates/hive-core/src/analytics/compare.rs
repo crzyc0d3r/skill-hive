@@ -64,6 +64,37 @@ pub fn record_verdict(comparison: &mut Comparison, verdict: &str) {
     comparison.unblinded = true;
 }
 
+/// Open a blind comparison, record the verdict, and keep the row in `hive.db`.
+/// The returned analysis names the stronger side only after the verdict is stored.
+pub fn store_verdict(db: &std::path::Path, id: &str, verdict: &str) -> Result<String, String> {
+    let conn = Connection::open(db).map_err(|err| err.to_string())?;
+    let _ = conn.execute("DELETE FROM comparisons WHERE id = ?1", params![id]);
+    let left = Side {
+        id: "output-a".into(),
+        label: "Output A".into(),
+        version: "v1".into(),
+        endpoint: "local".into(),
+        path: "SKILL.md".into(),
+        output: "left".into(),
+    };
+    let right = Side {
+        id: "output-b".into(),
+        label: "Output B".into(),
+        version: "v1".into(),
+        endpoint: "local".into(),
+        path: "SKILL.md".into(),
+        output: "right".into(),
+    };
+    let mut comparison = start_comparison(Some(&conn), id, &left, &right, 0)?;
+    record_verdict(&mut comparison, verdict);
+    conn.execute(
+        "UPDATE comparisons SET verdict = ?1 WHERE id = ?2",
+        params![verdict, id],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(start_analysis(&comparison))
+}
+
 pub fn start_analysis(comparison: &Comparison) -> String {
     if comparison.unblinded {
         format!(

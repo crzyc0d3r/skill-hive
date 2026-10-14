@@ -9,6 +9,8 @@ use anyhow::{anyhow, Context, Result};
 use crate::util::crypto;
 
 pub const SERVICE: &str = "skill-hive-provider";
+pub const GIT_SERVICE: &str = "skill-hive-git-backup";
+pub const GIT_ACCOUNT: &str = "github";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretBackend {
@@ -32,29 +34,11 @@ pub fn store_provider_secret(
     secret: &str,
     fallback_dir: &Path,
 ) -> Result<SecretBackend> {
-    match selected_backend() {
-        SecretBackend::Keyring => {
-            let entry = keyring::Entry::new(SERVICE, account).context("keyring entry")?;
-            entry.set_password(secret).context("keyring set")?;
-            Ok(SecretBackend::Keyring)
-        }
-        SecretBackend::LabelledFallback => {
-            write_fallback(account, secret, fallback_dir)?;
-            Ok(SecretBackend::LabelledFallback)
-        }
-        SecretBackend::Environment => Ok(SecretBackend::Environment),
-    }
+    store_secret(SERVICE, account, secret, fallback_dir)
 }
 
 pub fn load_provider_secret(account: &str, fallback_dir: &Path) -> Result<String> {
-    match selected_backend() {
-        SecretBackend::Keyring => {
-            let entry = keyring::Entry::new(SERVICE, account).context("keyring entry")?;
-            entry.get_password().context("keyring get")
-        }
-        SecretBackend::LabelledFallback => read_fallback(account, fallback_dir),
-        SecretBackend::Environment => Err(anyhow!("environment secrets are not stored")),
-    }
+    load_secret(SERVICE, account, fallback_dir)
 }
 
 pub fn has_provider_secret(account: &str, fallback_dir: &Path) -> bool {
@@ -62,14 +46,61 @@ pub fn has_provider_secret(account: &str, fallback_dir: &Path) -> bool {
 }
 
 pub fn clear_provider_secret(account: &str, fallback_dir: &Path) -> Result<()> {
+    clear_secret(SERVICE, account, fallback_dir)
+}
+
+pub fn store_git_token(secret: &str, fallback_dir: &Path) -> Result<SecretBackend> {
+    store_secret(GIT_SERVICE, GIT_ACCOUNT, secret, fallback_dir)
+}
+
+pub fn clear_git_token(fallback_dir: &Path) -> Result<()> {
+    clear_secret(GIT_SERVICE, GIT_ACCOUNT, fallback_dir)
+}
+
+pub fn has_git_token(fallback_dir: &Path) -> bool {
+    load_secret(GIT_SERVICE, GIT_ACCOUNT, fallback_dir).is_ok()
+}
+
+fn store_secret(
+    service: &str,
+    account: &str,
+    secret: &str,
+    fallback_dir: &Path,
+) -> Result<SecretBackend> {
     match selected_backend() {
         SecretBackend::Keyring => {
-            let entry = keyring::Entry::new(SERVICE, account)?;
+            let entry = keyring::Entry::new(service, account).context("keyring entry")?;
+            entry.set_password(secret).context("keyring set")?;
+            Ok(SecretBackend::Keyring)
+        }
+        SecretBackend::LabelledFallback => {
+            write_fallback(service, account, secret, fallback_dir)?;
+            Ok(SecretBackend::LabelledFallback)
+        }
+        SecretBackend::Environment => Ok(SecretBackend::Environment),
+    }
+}
+
+fn load_secret(service: &str, account: &str, fallback_dir: &Path) -> Result<String> {
+    match selected_backend() {
+        SecretBackend::Keyring => {
+            let entry = keyring::Entry::new(service, account).context("keyring entry")?;
+            entry.get_password().context("keyring get")
+        }
+        SecretBackend::LabelledFallback => read_fallback(service, account, fallback_dir),
+        SecretBackend::Environment => Err(anyhow!("environment secrets are not stored")),
+    }
+}
+
+fn clear_secret(service: &str, account: &str, fallback_dir: &Path) -> Result<()> {
+    match selected_backend() {
+        SecretBackend::Keyring => {
+            let entry = keyring::Entry::new(service, account)?;
             let _ = entry.delete_credential();
             Ok(())
         }
         SecretBackend::LabelledFallback => {
-            let path = fallback_path(fallback_dir, account);
+            let path = fallback_path(fallback_dir, service, account);
             if path.exists() {
                 fs::remove_file(path)?;
             }
@@ -83,30 +114,32 @@ pub fn load_env_secret(name: &str) -> Result<String> {
     std::env::var(name).with_context(|| format!("environment variable {name} is unset"))
 }
 
-fn fallback_path(dir: &Path, account: &str) -> std::path::PathBuf {
-    let safe: String = account
-        .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-        .collect();
-    dir.join(format!("{safe}.provider-secret"))
+fn fallback_path(dir: &Path, service: &str, account: &str) -> std::path::PathBuf {
+    let safe = |value: &str| {
+        value
+            .chars()
+            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+            .collect::<String>()
+    };
+    dir.join(format!("{}.{}.secret", safe(service), safe(account)))
 }
 
-fn write_fallback(account: &str, secret: &str, dir: &Path) -> Result<()> {
+fn write_fallback(service: &str, account: &str, secret: &str, dir: &Path) -> Result<()> {
     fs::create_dir_all(dir)?;
     let key = crypto::load_or_create_key(&dir.join(".secret.key"))?;
-    let payload = format!("{SERVICE}\n{account}\n{secret}");
+    let payload = format!("{service}\n{account}\n{secret}");
     let ciphertext = crypto::encrypt(&key, &payload)?;
-    let labelled = format!("label={SERVICE}\naccount={account}\n{ciphertext}\n");
-    fs::write(fallback_path(dir, account), labelled)?;
+    let labelled = format!("label={service}\naccount={account}\n{ciphertext}\n");
+    fs::write(fallback_path(dir, service, account), labelled)?;
     Ok(())
 }
 
-fn read_fallback(account: &str, dir: &Path) -> Result<String> {
-    let raw =
-        fs::read_to_string(fallback_path(dir, account)).context("read labelled provider secret")?;
-    if !raw.starts_with(&format!("label={SERVICE}\n")) {
+fn read_fallback(service: &str, account: &str, dir: &Path) -> Result<String> {
+    let raw = fs::read_to_string(fallback_path(dir, service, account))
+        .context("read labelled provider secret")?;
+    if !raw.starts_with(&format!("label={service}\n")) {
         return Err(anyhow!(
-            "provider secret file is missing the {SERVICE} label"
+            "provider secret file is missing the {service} label"
         ));
     }
     let ciphertext = raw
@@ -119,7 +152,7 @@ fn read_fallback(account: &str, dir: &Path) -> Result<String> {
     let label = lines.next().unwrap_or("");
     let stored_account = lines.next().unwrap_or("");
     let secret = lines.next().unwrap_or("");
-    if label != SERVICE || stored_account != account {
+    if label != service || stored_account != account {
         return Err(anyhow!("labelled provider secret does not match"));
     }
     Ok(secret.to_string())
@@ -139,7 +172,7 @@ mod tests {
             && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1")
         {
             assert_eq!(kind, SecretBackend::LabelledFallback);
-            let stored = fs::read_to_string(fallback_path(tmp.path(), &account)).unwrap();
+            let stored = fs::read_to_string(fallback_path(tmp.path(), SERVICE, &account)).unwrap();
             assert!(stored.contains("label=skill-hive-provider"));
             assert!(!stored.contains(secret));
         } else {

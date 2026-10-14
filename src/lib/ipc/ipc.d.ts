@@ -5,6 +5,8 @@ export interface IpcCommands {
   check_app_update: { args: Record<string, never>; result: string };
   update_install_blocker: { args: { activeRuns: number }; result: string | null };
   updater_proxy: { args: { url: string }; result: string | null };
+  download_and_install_update: { args: Record<string, never>; result: string };
+  rebuild_tray_menu: { args: Record<string, never>; result: string[] };
   list_base_entries: { args: Record<string, never>; result: string[] };
   get_managed_skills: { args: Record<string, never>; result: import('@/features/library/model').SkillCard[] };
   list_presets: { args: Record<string, never>; result: import('@/lib/ipc/catalog').PresetRow[] };
@@ -55,5 +57,27 @@ export interface IpcCommands {
   fetch_leaderboard: { args: { board: string | null }; result: { owner: string; name: string; installs: number; source: string }[] };
   search_skillssh: { args: { query: string; limit: number }; result: { owner: string; name: string; installs: number; source: string }[] };
   install_from_skillssh: { args: { source: string; name: string }; result: { id: string; name: string } };
-  record_effect: { args: { kind: string; id: string; body: string }; result: string };
+  begin_market_install: { args: { source: string; name: string }; result: boolean };
+  market_install_result: { args: Record<string, never>; result: string };
+  cancel_market_install: { args: Record<string, never>; result: boolean };
+  save_skill_draft: { args: { id: string; files: { path: string; content: string }[] }; result: string };
+  snapshot_skill_draft: { args: { id: string; label: string }; result: string };
+  restore_skill_draft: { args: { id: string; versionId: string }; result: string };
+  publish_skill_draft: { args: { id: string; confirmed: boolean; deployments: { agent: string; mode: string; target: string }[] }; result: string };
+  fix_skill_draft: { args: { id: string; fixId: string; path: string | null; message: string | null }; result: boolean };
+  save_agent_draft: { args: { id: string; text: string }; result: string };
+  export_agent_draft: { args: { id: string; text: string }; result: string };
+  save_generated_draft: { args: { goal: string }; result: string };
+  apply_optimized_description: { args: { description: string }; result: string };
+  record_compare_verdict: { args: { id: string; verdict: string }; result: string };
+  write_history_baseline: { args: { skillName: string }; result: string };
+  set_provider_secret: { args: { id: string; secret: string }; result: string };
+  clear_endpoint_secret: { args: { id: string }; result: boolean };
+  store_backup_pat: { args: { token: string }; result: string };
+  revoke_backup_token: { args: Record<string, never>; result: boolean };
+  set_aside_backup: { args: { note: string }; result: string };
+  pull_project_center: { args: { name: string; body: string }; result: string };
+  export_diagnostics: { args: { path: string }; result: string };
+  git_backup_restore_remote: { args: { url: string }; result: string };
+  skip_first_run_restore: { args: Record<string, never>; result: boolean };
 }

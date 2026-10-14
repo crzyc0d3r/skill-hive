@@ -10,7 +10,7 @@ import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, t } from "../../lib/i18n";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
-import { createPreset, deletePreset, reorderPresets, updatePreset } from "@/lib/ipc/actions";
+import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, updatePreset } from "@/lib/ipc/actions";
 import { moveById } from "@/features/library/model";
 import { lobsterAgents } from "@/features/lobster/model";
 import { useProjectDot } from "@/features/project/store";
@@ -304,6 +304,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 const name = presetName.trim() || "Preset";
                 void createPreset(name).then((id) => {
                   setPresetRows([...shownPresets, { id, name, skillIds: [], synced: 0 }]);
+                  void rebuildTrayMenu();
                 });
               }}
             >

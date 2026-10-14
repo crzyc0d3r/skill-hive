@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import type { AgentRow, PresetRow, ScanRow } from "@/lib/ipc/catalog";
 import type { SkillCard } from "@/features/library/model";
+import { demoEnabled } from "@/lib/demo";
 
 export interface InstalledSkill {
   id: string;
@@ -106,6 +107,44 @@ export const fetchLeaderboard = (board?: string) => command<MarketSkill[]>("fetc
 export const searchSkillsSh = (query: string) => command<MarketSkill[]>("search_skillssh", { query, limit: 24 });
 export const installFromSkillsSh = (source: string, name: string) =>
   command<InstalledSkill>("install_from_skillssh", { source, name });
+export const beginMarketInstall = (source: string, name: string) =>
+  command<boolean>("begin_market_install", { source, name });
+export const marketInstallResult = () => command<string>("market_install_result");
+export function dispatch<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T | undefined> {
+  if (demoEnabled()) return Promise.resolve(undefined);
+  return command<T>(name, args);
+}
+
+export const cancelMarketInstall = () => dispatch("cancel_market_install");
+export const saveSkillDraft = (id: string, files: { path: string; content: string }[]) =>
+  dispatch("save_skill_draft", { id, files });
+export const snapshotSkillDraft = (id: string, label: string) => dispatch("snapshot_skill_draft", { id, label });
+export const restoreSkillDraft = (id: string, versionId: string) => dispatch("restore_skill_draft", { id, versionId });
+export const publishSkillDraft = (
+  id: string,
+  confirmed: boolean,
+  deployments: { agent: string; mode: string; target: string }[],
+) => dispatch("publish_skill_draft", { id, confirmed, deployments });
+export const fixSkillDraft = (id: string, fixId: string, path: string, message: string) =>
+  dispatch("fix_skill_draft", { id, fixId, path, message });
+export const saveAgentDraft = (id: string, text: string) => dispatch("save_agent_draft", { id, text });
+export const exportAgentDraft = (id: string, text: string) => dispatch("export_agent_draft", { id, text });
+export const saveGeneratedDraft = (goal: string) => dispatch("save_generated_draft", { goal });
+export const applyOptimizedDescription = (description: string) =>
+  dispatch("apply_optimized_description", { description });
+export const recordCompareVerdict = (id: string, verdict: string) =>
+  dispatch("record_compare_verdict", { id, verdict });
+export const writeHistoryBaseline = (skillName: string) => dispatch("write_history_baseline", { skillName });
+export const setProviderSecret = (id: string, secret: string) => dispatch("set_provider_secret", { id, secret });
+export const storeBackupPat = (token: string) => dispatch("store_backup_pat", { token });
+export const revokeBackupToken = () => dispatch("revoke_backup_token");
+export const setAsideBackup = (note: string) => dispatch("set_aside_backup", { note });
+export const pullProjectCenter = (name: string, body: string) => dispatch("pull_project_center", { name, body });
+export const exportDiagnostics = (path: string) => dispatch("export_diagnostics", { path });
+export const restoreBackupRemote = (url: string) => dispatch("git_backup_restore_remote", { url });
+export const skipFirstRunRestore = () => dispatch("skip_first_run_restore");
+export const downloadAndInstallUpdate = () => dispatch("download_and_install_update");
+export const rebuildTrayMenu = () => dispatch("rebuild_tray_menu");
 export const listPresetRows = () => command<PresetRow[]>("list_presets");
 export const listAgentRows = () => command<AgentRow[]>("get_tool_status");
 export const listScanRows = () => command<ScanRow[]>("scan_local_skills");

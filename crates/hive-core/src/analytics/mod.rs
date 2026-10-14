@@ -8,7 +8,9 @@ mod optimize;
 mod regression;
 mod workflow;
 
-pub use compare::{record_verdict, start_analysis, start_comparison, Comparison, Side};
+pub use compare::{
+    record_verdict, start_analysis, start_comparison, store_verdict, Comparison, Side,
+};
 pub use export::{
     export_workspace, CheckExport, ExpectationExport, ExportCell, ExportCounts, ExportSlice,
 };

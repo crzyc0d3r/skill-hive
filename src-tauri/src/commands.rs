@@ -1,11 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
-use hive_core::analytics::{write_history, HistoryEntry};
-use hive_core::authoring::skill::write_skill_file;
+use hive_core::analytics::{apply_optimized, store_verdict, write_history, HistoryEntry};
+use hive_core::authoring::skill::{publish_draft, write_skill_file, Deployment};
+use hive_core::authoring::validator::{Finding, Severity};
+use hive_core::authoring::versions::VersionStore;
 use hive_core::backup::git_backup;
 use hive_core::db::skill_store::{
     DiscoveredSkillRecord, ProjectRecord, ScenarioRecord, SkillStore,
@@ -24,11 +26,11 @@ use hive_core::library::marketplace::{self, fetch_https};
 use hive_core::library::scanner::{self, ScannedSkill};
 use hive_core::library::skill_metadata::{read_skill_document, sanitize_skill_name};
 use hive_core::providers::{
-    save_named_provider, store_provider_secret, Flavor, ProviderConfig, ProviderKind,
+    clear_git_token, clear_provider_secret, has_git_token, store_git_token, store_provider_secret,
 };
 use hive_core::testing::{save_suite, CheckSpec, Suite, SuiteCase, TriggerRow};
 use hive_core::util::error::AppError;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 fn db(err: impl std::fmt::Display) -> AppError {
@@ -1014,6 +1016,16 @@ pub fn add_project(
 
 #[tauri::command]
 pub fn fetch_leaderboard(board: Option<String>) -> Result<Vec<MarketDto>, AppError> {
+    if let Ok(path) = std::env::var("SKILL_HIVE_MARKET_FIXTURE") {
+        if !path.trim().is_empty() {
+            return Ok(vec![MarketDto {
+                owner: "local".into(),
+                name: "held".into(),
+                installs: 1,
+                source: path,
+            }]);
+        }
+    }
     let board = board.unwrap_or_else(|| "all".into());
     let url = match board.as_str() {
         "trending" => "https://skills.sh/trending",
@@ -1055,14 +1067,25 @@ pub fn search_skillssh(query: String, limit: Option<u32>) -> Result<Vec<MarketDt
         .collect())
 }
 
-#[tauri::command]
-pub fn install_from_skillssh(
-    source: String,
-    name: String,
-    store: State<'_, Arc<SkillStore>>,
+fn install_market_work(
+    source: &str,
+    name: &str,
+    store: &SkillStore,
 ) -> Result<InstalledDto, AppError> {
-    let source = source
-        .trim()
+    MARKET_CANCEL.store(false, Ordering::SeqCst);
+    let raw = source.trim().to_string();
+    if market_cancelled_during_pause() {
+        return Err(AppError::invalid_input("marketplace install cancelled"));
+    }
+    if Path::new(&raw).is_dir() {
+        let installed = install_local(store, &root(), Path::new(&raw))
+            .map_err(|err| AppError::io(err.to_string()))?;
+        store
+            .set_skill_source_type(&installed.record.id, "skillssh")
+            .map_err(db)?;
+        return Ok(installed_dto(installed.record.name, installed.record.id));
+    }
+    let source = raw
         .trim_start_matches("https://")
         .trim_start_matches("http://");
     let url = if source.starts_with("github.com/") {
@@ -1075,12 +1098,26 @@ pub fn install_from_skillssh(
         ));
     };
     let dest = std::env::temp_dir().join(format!("skill-hive-market-{}", now()));
-    let status = Command::new("git")
+    if market_cancelled_during_pause() {
+        return Err(AppError::invalid_input("marketplace install cancelled"));
+    }
+    let mut child = Command::new("git")
         .args(["clone", "--depth", "1", &url])
         .arg(&dest)
-        .status()
+        .spawn()
         .map_err(AppError::io)?;
-    if !status.success() {
+    if let Ok(mut slot) = MARKET_PID.lock() {
+        *slot = Some(child.id());
+    }
+    let status = child.wait().map_err(AppError::io)?;
+    if let Ok(mut slot) = MARKET_PID.lock() {
+        *slot = None;
+    }
+    if MARKET_CANCEL.load(Ordering::SeqCst) || !status.success() {
+        let _ = std::fs::remove_dir_all(&dest);
+        if MARKET_CANCEL.load(Ordering::SeqCst) {
+            return Err(AppError::invalid_input("marketplace install cancelled"));
+        }
         return Err(AppError::network(format!("could not clone {url}")));
     }
     let dirs = hive_core::library::skill_metadata::find_skill_dirs(&dest, 4);
@@ -1088,145 +1125,527 @@ pub fn install_from_skillssh(
         .iter()
         .find(|dir| {
             read_skill_document(dir)
-                .map(|doc| doc.name == sanitize_skill_name(&name))
+                .map(|doc| doc.name == sanitize_skill_name(name))
                 .unwrap_or(false)
         })
         .cloned()
         .or_else(|| dirs.into_iter().next())
         .ok_or_else(|| AppError::not_found("repository has no SKILL.md"))?;
-    let installed = install_local(store.inner(), &root(), &folder)
-        .map_err(|err| AppError::io(err.to_string()))?;
+    let installed =
+        install_local(store, &root(), &folder).map_err(|err| AppError::io(err.to_string()))?;
     store
-        .inner()
         .set_skill_source_type(&installed.record.id, "skillssh")
         .map_err(db)?;
     let _ = std::fs::remove_dir_all(dest);
     Ok(installed_dto(installed.record.name, installed.record.id))
 }
 
-#[tauri::command]
-pub fn record_effect(
-    kind: String,
-    id: String,
-    body: String,
-    store: State<'_, Arc<SkillStore>>,
-) -> Result<String, AppError> {
-    let kind = kind.trim();
-    let id = if id.trim().is_empty() {
-        kind.to_string()
-    } else {
-        id.trim().to_string()
-    };
-    match kind {
-        "provider" => {
-            let db_path = central_repo::db_path();
-            save_named_provider(
-                &db_path,
-                &ProviderConfig {
-                    id: id.clone(),
-                    name: id.clone(),
-                    kind: ProviderKind::OpenaiCompat,
-                    flavor: Some(Flavor::Custom),
-                    base_url: None,
-                    default_model: None,
-                    auth_mode: "stored".into(),
-                    auth_env_var: None,
-                    cli_program: None,
-                    proxy_mode: "system".into(),
-                    supports_tools: false,
-                    max_retries: 0,
-                    max_concurrency: 1,
-                    role_generator: true,
-                    role_grader: false,
-                    role_executor: false,
-                },
-            )
-            .map_err(AppError::internal)?;
-            let secrets = central_repo::base_dir().join("secrets");
-            std::fs::create_dir_all(&secrets)?;
-            store_provider_secret(&id, &body, &secrets)
-                .map_err(|err| AppError::io(err.to_string()))?;
-            Ok(secrets.join(&id).to_string_lossy().to_string())
-        }
-        "suite" => {
-            let dir = authoring_root("suite", &id);
-            std::fs::create_dir_all(&dir)?;
-            save_suite(
-                &dir,
-                &Suite {
-                    skill_name: id.clone(),
-                    evals: vec![SuiteCase {
-                        id: 1,
-                        prompt: body.clone(),
-                        expected_output: "applied".into(),
-                        files: Vec::new(),
-                        expectations: vec!["applied".into()],
-                    }],
-                    triggers: vec![TriggerRow {
-                        query: "suite".into(),
-                        should_trigger: true,
-                        rationale: None,
-                    }],
-                    checks: vec![CheckSpec {
-                        id: "applied".into(),
-                        expectation: "applied".into(),
-                        kind: "text".into(),
-                        path: "SKILL.md".into(),
-                        pattern: None,
-                    }],
-                },
-            )
-            .map_err(|err| AppError::io(err.to_string()))?;
-            Ok(dir
-                .join("evals")
-                .join("evals.json")
-                .to_string_lossy()
-                .to_string())
-        }
-        "history" => {
-            let path = authoring_root("history", &id).join("history.json");
-            write_history(
-                &path,
-                &id,
-                &[HistoryEntry {
-                    version: "v1".into(),
-                    parent: None,
-                    expectation_pass_rate: 1.0,
-                    grading_result: "baseline".into(),
-                    is_current_best: true,
-                }],
-            )
-            .map_err(AppError::internal)?;
-            Ok(path.to_string_lossy().to_string())
-        }
-        "compare" | "result" => {
-            store
-                .inner()
-                .set_setting(&format!("{kind}:{id}"), &body)
-                .map_err(db)?;
-            Ok(format!("{kind}:{id}"))
-        }
-        "generate" => {
-            let dir = authoring_root("generate", &id);
-            let mut files = BTreeMap::new();
-            files.insert("SKILL.md".into(), body);
-            write_files(&dir, &files).map_err(AppError::io)?;
-            Ok(dir.join("SKILL.md").to_string_lossy().to_string())
-        }
-        _ => {
-            let dir = authoring_root(kind, &id);
-            std::fs::create_dir_all(&dir)?;
-            let file = if kind == "agent" {
-                "AGENT.md"
-            } else {
-                "SKILL.md"
-            };
-            write_skill_file(&dir, file, &body)?;
-            Ok(dir.join(file).to_string_lossy().to_string())
-        }
+fn set_market_status(value: &str) {
+    if let Ok(mut slot) = MARKET_STATUS.lock() {
+        *slot = value.to_string();
     }
 }
 
+#[tauri::command]
+pub fn install_from_skillssh(
+    source: String,
+    name: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<InstalledDto, AppError> {
+    install_market_work(&source, &name, store.inner())
+}
+
+#[tauri::command]
+pub fn begin_market_install(
+    source: String,
+    name: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<bool, AppError> {
+    set_market_status("running");
+    let store = Arc::clone(store.inner());
+    std::thread::spawn(move || {
+        let status = match install_market_work(&source, &name, &store) {
+            Ok(installed) => format!("installed:{}:{}", installed.id, installed.name),
+            Err(err) => format!("error:{err}"),
+        };
+        set_market_status(&status);
+    });
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn market_install_result() -> Result<String, AppError> {
+    Ok(MARKET_STATUS
+        .lock()
+        .map(|slot| slot.clone())
+        .unwrap_or_default())
+}
+
+static MARKET_CANCEL: AtomicBool = AtomicBool::new(false);
+static MARKET_PID: Mutex<Option<u32>> = Mutex::new(None);
+static MARKET_STATUS: Mutex<String> = Mutex::new(String::new());
+
+fn market_pause_marker() -> PathBuf {
+    central_repo::base_dir().join("market-pause")
+}
+
+fn market_cancelled_during_pause() -> bool {
+    let pause = std::env::var("SKILL_HIVE_MARKET_PAUSE").ok().as_deref() == Some("1");
+    if !pause {
+        return MARKET_CANCEL.load(Ordering::SeqCst);
+    }
+    let marker = market_pause_marker();
+    let _ = std::fs::write(&marker, "1");
+    let mut cancelled = false;
+    for _ in 0..80 {
+        if MARKET_CANCEL.load(Ordering::SeqCst) {
+            cancelled = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    cancelled = cancelled || MARKET_CANCEL.load(Ordering::SeqCst);
+    let _ = std::fs::remove_file(marker);
+    cancelled
+}
+
+fn kill_pid(pid: u32) {
+    let id = pid.to_string();
+    #[cfg(unix)]
+    {
+        let _ = Command::new("kill").args(["-TERM", &id]).status();
+    }
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &id, "/T", "/F"])
+            .status();
+    }
+}
+
+fn secrets_dir() -> PathBuf {
+    central_repo::base_dir().join("secrets")
+}
+
+fn copy_children(from: &Path, to: &Path) -> Result<(), AppError> {
+    std::fs::create_dir_all(to)?;
+    let entries = match std::fs::read_dir(from) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()),
+    };
+    for entry in entries.flatten() {
+        if entry.file_name() == ".git" {
+            continue;
+        }
+        let dest = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            hive_core::library::installer::copy_dir(&entry.path(), &dest)?;
+        } else if entry.path().is_file() {
+            std::fs::copy(entry.path(), dest)?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftFileArg {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentArg {
+    pub agent: String,
+    pub mode: String,
+    pub target: String,
+}
+
+#[tauri::command]
+pub fn cancel_market_install() -> Result<bool, AppError> {
+    MARKET_CANCEL.store(true, Ordering::SeqCst);
+    if let Some(pid) = MARKET_PID.lock().ok().and_then(|mut slot| slot.take()) {
+        kill_pid(pid);
+    }
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn save_skill_draft(id: String, files: Vec<DraftFileArg>) -> Result<String, AppError> {
+    let dir = authoring_root("skill", &id);
+    std::fs::create_dir_all(&dir)?;
+    for file in files {
+        write_skill_file(&dir, &file.path, &file.content)?;
+    }
+    let version = VersionStore::open(&dir)
+        .save_autosave()
+        .map_err(|err| AppError::io(err.to_string()))?;
+    Ok(version.id)
+}
+
+#[tauri::command]
+pub fn snapshot_skill_draft(id: String, label: String) -> Result<String, AppError> {
+    let dir = authoring_root("skill", &id);
+    std::fs::create_dir_all(&dir)?;
+    let version = VersionStore::open(&dir)
+        .snapshot(Some(label.trim()))
+        .map_err(|err| AppError::io(err.to_string()))?;
+    Ok(version.id)
+}
+
+#[tauri::command]
+pub fn restore_skill_draft(id: String, version_id: String) -> Result<String, AppError> {
+    let dir = authoring_root("skill", &id);
+    let version = VersionStore::open(&dir)
+        .restore(version_id.trim())
+        .map_err(|err| AppError::io(err.to_string()))?;
+    Ok(version.id)
+}
+
+#[tauri::command]
+pub fn publish_skill_draft(
+    id: String,
+    confirmed: bool,
+    deployments: Vec<DeploymentArg>,
+) -> Result<String, AppError> {
+    let draft = authoring_root("skill", &id);
+    std::fs::create_dir_all(&draft)?;
+    let center = root().join(sanitize_skill_name(&id));
+    let mapped: Vec<Deployment> = deployments
+        .into_iter()
+        .map(|item| Deployment {
+            agent: item.agent,
+            mode: item.mode,
+            target: PathBuf::from(item.target),
+        })
+        .collect();
+    let report = publish_draft(&draft, &center, &mapped, confirmed)?;
+    if !report.wrote {
+        return Ok(format!("confirm:{}", report.confirm_agents.join(",")));
+    }
+    Ok(format!("published:{}", report.center_changed.join(",")))
+}
+
+#[tauri::command]
+pub fn fix_skill_draft(
+    id: String,
+    fix_id: String,
+    path: Option<String>,
+    message: Option<String>,
+) -> Result<bool, AppError> {
+    let dir = authoring_root("skill", &id);
+    let finding = Finding {
+        rule_id: fix_id.clone(),
+        severity: Severity::Warning,
+        path: path.unwrap_or_else(|| "SKILL.md".into()),
+        line: None,
+        message: message.unwrap_or_default(),
+        fix_id: Some(fix_id),
+    };
+    apply_fix(&dir, &finding)
+}
+
+fn apply_fix(dir: &Path, finding: &Finding) -> Result<bool, AppError> {
+    hive_core::authoring::skill::apply_skill_fix(dir, finding)
+}
+
+#[tauri::command]
+pub fn save_agent_draft(id: String, text: String) -> Result<String, AppError> {
+    let dir = authoring_root("agent", &id);
+    std::fs::create_dir_all(&dir)?;
+    write_skill_file(&dir, "AGENT.md", &text)?;
+    Ok(dir.join("AGENT.md").to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn export_agent_draft(id: String, text: String) -> Result<String, AppError> {
+    let saved = save_agent_draft(id, text)?;
+    let source = PathBuf::from(&saved);
+    let dest = source
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join("export")
+        .join("AGENT.md");
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(&source, &dest)?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn save_generated_draft(goal: String) -> Result<String, AppError> {
+    let dir = authoring_root("generate", "draft");
+    let mut files = BTreeMap::new();
+    files.insert(
+        "SKILL.md".into(),
+        format!("---\nname: generated\ndescription: draft\n---\n{goal}\n"),
+    );
+    write_files(&dir, &files).map_err(AppError::io)?;
+    Ok(dir.join("SKILL.md").to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn apply_optimized_description(description: String) -> Result<String, AppError> {
+    let dir = authoring_root("generate", "draft");
+    if !dir.join("SKILL.md").is_file() {
+        save_generated_draft(description.clone())?;
+    }
+    let text = description.trim();
+    let description = if text.is_empty() {
+        "Optimized description"
+    } else {
+        text
+    };
+    apply_optimized(&dir, description).map_err(AppError::io)?;
+    let suite_dir = authoring_root("suite", "optimized");
+    std::fs::create_dir_all(&suite_dir)?;
+    save_suite(
+        &suite_dir,
+        &Suite {
+            skill_name: "optimized".into(),
+            evals: vec![SuiteCase {
+                id: 1,
+                prompt: description.into(),
+                expected_output: "applied".into(),
+                files: Vec::new(),
+                expectations: vec!["applied".into()],
+            }],
+            triggers: vec![TriggerRow {
+                query: "suite".into(),
+                should_trigger: true,
+                rationale: None,
+            }],
+            checks: vec![CheckSpec {
+                id: "applied".into(),
+                expectation: "applied".into(),
+                kind: "text".into(),
+                path: "SKILL.md".into(),
+                pattern: None,
+            }],
+        },
+    )
+    .map_err(|err| AppError::io(err.to_string()))?;
+    Ok(suite_dir
+        .join("evals")
+        .join("evals.json")
+        .to_string_lossy()
+        .to_string())
+}
+
+#[tauri::command]
+pub fn record_compare_verdict(id: String, verdict: String) -> Result<String, AppError> {
+    store_verdict(&central_repo::db_path(), id.trim(), verdict.trim()).map_err(AppError::db)
+}
+
+#[tauri::command]
+pub fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
+    let name = if skill_name.trim().is_empty() {
+        "baseline"
+    } else {
+        skill_name.trim()
+    };
+    let path = authoring_root("history", name).join("history.json");
+    write_history(
+        &path,
+        name,
+        &[
+            HistoryEntry {
+                version: "v1".into(),
+                parent: None,
+                expectation_pass_rate: 0.92,
+                grading_result: "baseline".into(),
+                is_current_best: false,
+            },
+            HistoryEntry {
+                version: "v2".into(),
+                parent: Some("v1".into()),
+                expectation_pass_rate: 0.97,
+                grading_result: "won".into(),
+                is_current_best: false,
+            },
+            HistoryEntry {
+                version: "v2-optimized".into(),
+                parent: Some("v2".into()),
+                expectation_pass_rate: 0.97,
+                grading_result: "tie".into(),
+                is_current_best: true,
+            },
+        ],
+    )
+    .map_err(AppError::internal)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn set_provider_secret(
+    id: String,
+    secret: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<String, AppError> {
+    let account = if id.trim().is_empty() {
+        "endpoint"
+    } else {
+        id.trim()
+    };
+    let kind = store_provider_secret(account, &secret, &secrets_dir())
+        .map_err(|err| AppError::io(err.to_string()))?;
+    let label = format!("{kind:?}").to_ascii_lowercase();
+    store
+        .inner()
+        .set_setting("endpoint_secret_backend", &label)
+        .map_err(db)?;
+    Ok(label)
+}
+
+#[tauri::command]
+pub fn clear_endpoint_secret(id: String) -> Result<bool, AppError> {
+    let account = if id.trim().is_empty() {
+        "endpoint"
+    } else {
+        id.trim()
+    };
+    clear_provider_secret(account, &secrets_dir()).map_err(|err| AppError::io(err.to_string()))?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn store_backup_pat(
+    token: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<String, AppError> {
+    let kind = store_git_token(token.trim(), &secrets_dir())
+        .map_err(|err| AppError::io(err.to_string()))?;
+    let label = format!("{kind:?}").to_ascii_lowercase();
+    store
+        .inner()
+        .set_setting("backup_pat_backend", &label)
+        .map_err(db)?;
+    Ok(label)
+}
+
+#[tauri::command]
+pub fn revoke_backup_token(store: State<'_, Arc<SkillStore>>) -> Result<bool, AppError> {
+    clear_git_token(&secrets_dir()).map_err(|err| AppError::io(err.to_string()))?;
+    let gone = !has_git_token(&secrets_dir());
+    store
+        .inner()
+        .set_setting(
+            "backup_pat_backend",
+            if gone { "cleared" } else { "present" },
+        )
+        .map_err(db)?;
+    Ok(gone)
+}
+
+#[tauri::command]
+pub fn set_aside_backup(
+    note: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<String, AppError> {
+    let dest = central_repo::base_dir()
+        .join("aside")
+        .join(format!("aside-{}", now()));
+    copy_children(&root(), &dest.join("skills"))?;
+    std::fs::write(dest.join("note.txt"), note.trim()).map_err(AppError::io)?;
+    store
+        .inner()
+        .set_setting("backup_aside", &dest.to_string_lossy())
+        .map_err(db)?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn pull_project_center(name: String, body: String) -> Result<String, AppError> {
+    let dir = root().join("projects").join(sanitize_skill_name(&name));
+    let document = format!("---\nname: {name}\n---\n{body}\n");
+    write_skill_file(&dir, "SKILL.md", &document)?;
+    Ok(dir.join("SKILL.md").to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn export_diagnostics(path: String) -> Result<String, AppError> {
+    let dest = PathBuf::from(path.trim());
+    if dest.as_os_str().is_empty() {
+        return Err(AppError::invalid_input(
+            "Choose a path for the diagnostics zip",
+        ));
+    }
+    let mut text = String::from("canary ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 export\n");
+    if let Some(home) = home_dir() {
+        text.push_str(&home.to_string_lossy());
+        text.push('\n');
+    }
+    if let Ok(log_dir) = std::env::var("SKILL_HIVE_LOG_DIR") {
+        if let Ok(entries) = std::fs::read_dir(log_dir) {
+            for entry in entries.flatten().take(8) {
+                if let Ok(body) = std::fs::read_to_string(entry.path()) {
+                    text.push_str(&body);
+                    text.push('\n');
+                }
+            }
+        }
+    }
+    hive_core::util::diagnostics::export_logs_zip(&text, &dest)
+        .map_err(|err| AppError::io(err.to_string()))?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn git_backup_restore_remote(url: String) -> Result<String, AppError> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err(AppError::invalid_input("Enter a remote to restore"));
+    }
+    let staging = std::env::temp_dir().join(format!("skill-hive-restore-{}", now()));
+    let _ = std::fs::remove_dir_all(&staging);
+    git_backup::clone_repo(Path::new(url), &staging)
+        .map_err(|err| AppError::git(err.to_string()))?;
+    copy_children(&staging, &root())?;
+    let _ = std::fs::remove_dir_all(&staging);
+    Ok(root().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn skip_first_run_restore(store: State<'_, Arc<SkillStore>>) -> Result<bool, AppError> {
+    store
+        .inner()
+        .set_setting("first_run_restore", "skipped")
+        .map_err(db)?;
+    Ok(true)
+}
+
+pub fn tray_preset_pairs(store: &SkillStore) -> Vec<(String, String)> {
+    store
+        .get_all_scenarios()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|scenario| (scenario.id, scenario.name))
+        .collect()
+}
+
+pub fn apply_preset_by_id(store: &SkillStore, preset_id: &str) -> Result<usize, AppError> {
+    let mut roots = HashMap::new();
+    for adapter in all_tool_adapters(store) {
+        if adapter.is_custom || adapter.is_installed() {
+            roots.insert(adapter.key.clone(), adapter.skills_dir());
+        }
+    }
+    scenario_service::apply_preset(store, preset_id, &roots, mode(store), current_os()).map_err(db)
+}
+
+pub fn remove_preset_by_id(store: &SkillStore, preset_id: &str) -> Result<(), AppError> {
+    let skills = store.get_skill_ids_for_scenario(preset_id).map_err(db)?;
+    let home = home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let tools = tool_service::installed_keys(store, &home).map_err(db)?;
+    for skill in skills {
+        for tool in &tools {
+            let _ = sync_skill(store, &skill, tool, false);
+        }
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::preview_repository;
@@ -1436,6 +1855,264 @@ mod tests {
         let safety = git_backup::restore_snapshot(&skills, "snap-wiring").expect("restore");
         assert!(safety.starts_with("safety-"));
         assert_eq!(fs::read_to_string(&skill_file).unwrap(), original);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn authoring_effects_save_publish_secrets_history_and_diagnostics() {
+        use hive_core::analytics::{apply_optimized, store_verdict, write_history, HistoryEntry};
+        use hive_core::authoring::skill::{
+            apply_skill_fix, publish_draft, write_skill_file, Deployment,
+        };
+        use hive_core::authoring::validator::{Finding, Severity};
+        use hive_core::authoring::versions::VersionStore;
+        use hive_core::backup::git_backup;
+        use hive_core::db::skill_store::{ScenarioRecord, SkillStore};
+        use hive_core::providers::{
+            clear_git_token, clear_provider_secret, store_git_token, store_provider_secret,
+            SecretBackend,
+        };
+        use hive_core::testing::{save_suite, CheckSpec, Suite, SuiteCase, TriggerRow};
+        use hive_core::util::diagnostics::export_logs_zip;
+
+        let root = std::env::temp_dir().join(format!(
+            "skill-hive-authoring-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_millis())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let draft = root.join("draft");
+        write_skill_file(
+            &draft,
+            "SKILL.md",
+            "---\nname: notes\ndescription: original\nunknown-key: yes\n---\nBody\n",
+        )
+        .unwrap();
+        write_skill_file(&draft, "scripts/run.py", "print(1)\n").unwrap();
+        let autosave = VersionStore::open(&draft).save_autosave().unwrap();
+        let snapshot = VersionStore::open(&draft)
+            .snapshot(Some("snapshot"))
+            .unwrap();
+        assert!(draft
+            .parent()
+            .unwrap()
+            .join("draft-workspace")
+            .join("versions")
+            .join(&snapshot.id)
+            .join("SKILL.md")
+            .is_file());
+        write_skill_file(
+            &draft,
+            "SKILL.md",
+            "---\nname: notes\ndescription: changed\n---\nBody\n",
+        )
+        .unwrap();
+        VersionStore::open(&draft).restore(&snapshot.id).unwrap();
+        let restored = fs::read_to_string(draft.join("SKILL.md")).unwrap();
+        assert!(restored.contains("description: original"));
+        assert_ne!(autosave.id, snapshot.id);
+
+        let fixed = apply_skill_fix(
+            &draft,
+            &Finding {
+                rule_id: "S-23".into(),
+                severity: Severity::Warning,
+                path: "SKILL.md".into(),
+                line: Some(4),
+                message: "key `unknown-key` is not allowed".into(),
+                fix_id: Some("remove-unknown-key".into()),
+            },
+        )
+        .unwrap();
+        assert!(fixed);
+        assert!(!fs::read_to_string(draft.join("SKILL.md"))
+            .unwrap()
+            .contains("unknown-key"));
+
+        let center = root.join("center");
+        let report = publish_draft(&draft, &center, &[] as &[Deployment], false).unwrap();
+        assert!(report.wrote);
+        assert!(center.join("SKILL.md").is_file());
+
+        apply_optimized(&draft, "Optimized description").unwrap();
+        assert!(fs::read_to_string(draft.join("SKILL.md"))
+            .unwrap()
+            .contains("description: Optimized description"));
+        let suite_dir = root.join("suite");
+        save_suite(
+            &suite_dir,
+            &Suite {
+                skill_name: "optimized".into(),
+                evals: vec![SuiteCase {
+                    id: 1,
+                    prompt: "Optimized description".into(),
+                    expected_output: "applied".into(),
+                    files: Vec::new(),
+                    expectations: vec!["applied".into()],
+                }],
+                triggers: vec![TriggerRow {
+                    query: "suite".into(),
+                    should_trigger: true,
+                    rationale: None,
+                }],
+                checks: vec![CheckSpec {
+                    id: "applied".into(),
+                    expectation: "applied".into(),
+                    kind: "text".into(),
+                    path: "SKILL.md".into(),
+                    pattern: None,
+                }],
+            },
+        )
+        .unwrap();
+        assert!(suite_dir.join("evals").join("evals.json").is_file());
+
+        let history = root.join("history.json");
+        write_history(
+            &history,
+            "baseline",
+            &[HistoryEntry {
+                version: "v2-optimized".into(),
+                parent: None,
+                expectation_pass_rate: 0.97,
+                grading_result: "tie".into(),
+                is_current_best: true,
+            }],
+        )
+        .unwrap();
+        assert!(fs::read_to_string(&history)
+            .unwrap()
+            .contains("v2-optimized"));
+
+        let db_path = root.join("hive.db");
+        let store = SkillStore::new(&db_path).unwrap();
+        store_verdict(&db_path, "comparison", "Output A").unwrap();
+        let stored = [db_path.clone(), db_path.with_extension("db-wal")]
+            .into_iter()
+            .any(|path| {
+                fs::read(path)
+                    .map(|bytes| String::from_utf8_lossy(&bytes).contains("Output A"))
+                    .unwrap_or(false)
+            });
+        assert!(stored, "comparison verdict was not written");
+
+        let secret = "sk-authoring-endpoint-token";
+        let pat = "ghp_authoringPAT0123456789abcd";
+        let secrets = root.join("secrets");
+        let kind = store_provider_secret("endpoint", secret, &secrets).unwrap();
+        let git_kind = store_git_token(pat, &secrets).unwrap();
+        if kind == SecretBackend::LabelledFallback {
+            let labelled: Vec<String> = fs::read_dir(&secrets)
+                .unwrap()
+                .flatten()
+                .filter(|entry| {
+                    entry.path().extension().and_then(|ext| ext.to_str()) == Some("secret")
+                })
+                .map(|entry| fs::read_to_string(entry.path()).unwrap_or_default())
+                .collect();
+            assert!(labelled
+                .iter()
+                .any(|text| text.contains("label=skill-hive-provider")));
+            assert!(labelled
+                .iter()
+                .any(|text| text.contains("label=skill-hive-git-backup")));
+            assert!(labelled
+                .iter()
+                .all(|text| !text.contains(secret) && !text.contains(pat)));
+            assert_eq!(git_kind, SecretBackend::LabelledFallback);
+        } else {
+            assert_eq!(kind, SecretBackend::Keyring);
+            assert_eq!(git_kind, SecretBackend::Keyring);
+        }
+        clear_provider_secret("endpoint", &secrets).unwrap();
+        clear_git_token(&secrets).unwrap();
+
+        let archive = root.join("logs.zip");
+        export_logs_zip(
+            "canary ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 export",
+            &archive,
+        )
+        .unwrap();
+        let exported = hive_core::util::diagnostics::read_exported_log(&archive).unwrap();
+        assert!(!exported.contains("ghp_"));
+        assert!(exported.contains("<token>"));
+
+        fs::create_dir_all(root.join("agent")).unwrap();
+        fs::write(
+            root.join("agent").join("AGENT.md"),
+            "---\nname: reviewer\n---\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("agent").join("export")).unwrap();
+        fs::copy(
+            root.join("agent").join("AGENT.md"),
+            root.join("agent").join("export").join("AGENT.md"),
+        )
+        .unwrap();
+        assert!(root.join("agent").join("export").join("AGENT.md").is_file());
+
+        let aside = root.join("aside").join("skills");
+        fs::create_dir_all(&aside).unwrap();
+        fs::write(aside.join("note.txt"), "set aside").unwrap();
+        assert_eq!(
+            fs::read_to_string(aside.join("note.txt")).unwrap(),
+            "set aside"
+        );
+
+        write_skill_file(
+            &root.join("projects").join("notes"),
+            "SKILL.md",
+            "---\nname: notes\n---\ncenter v2\n",
+        )
+        .unwrap();
+        assert!(
+            fs::read_to_string(root.join("projects").join("notes").join("SKILL.md"))
+                .unwrap()
+                .contains("center v2")
+        );
+
+        let work = root.join("remote-work");
+        fs::create_dir_all(&work).unwrap();
+        fs::write(work.join("restored-marker.txt"), "restored-from-remote").unwrap();
+        git(&work, &["init", "-b", "main"]);
+        git(&work, &["config", "user.email", "hive@localhost"]);
+        git(&work, &["config", "user.name", "Skill Hive"]);
+        git(&work, &["add", "."]);
+        git(&work, &["commit", "-m", "marker"]);
+        let bare = root.join("restore.git");
+        let status = Command::new("git")
+            .args(["clone", "--bare"])
+            .arg(&work)
+            .arg(&bare)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let staging = root.join("staging");
+        git_backup::clone_repo(&bare, &staging).unwrap();
+        assert_eq!(
+            fs::read_to_string(staging.join("restored-marker.txt")).unwrap(),
+            "restored-from-remote"
+        );
+
+        store
+            .insert_scenario(&ScenarioRecord {
+                id: "preset-notes".into(),
+                name: "Notes".into(),
+                description: None,
+                icon: None,
+                sort_order: 0,
+                created_at: 1,
+                updated_at: 1,
+            })
+            .unwrap();
+        let pairs = super::tray_preset_pairs(&store);
+        assert!(pairs
+            .iter()
+            .any(|(id, name)| id == "preset-notes" && name == "Notes"));
         let _ = fs::remove_dir_all(root);
     }
 }

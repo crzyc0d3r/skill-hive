@@ -86,11 +86,11 @@ pub fn sanitize_name(input: &str) -> String {
 /// Returns `false` when the relationship cannot be established safely —
 /// callers should treat that as a refusal.
 pub fn is_path_safe(base: &Path, target: &Path) -> bool {
-    let base_resolved = base.canonicalize().unwrap_or_else(|_| normalize(base));
-    let target_resolved = target
-        .canonicalize()
-        .unwrap_or_else(|_| resolve_non_existing(target));
-
+    // Resolve both sides from the nearest existing ancestor. A missing base
+    // must not stay lexical while the target is canonical: macOS `/var` and
+    // Windows short names would then disagree and refuse a path that is inside.
+    let base_resolved = resolve_non_existing(base);
+    let target_resolved = resolve_non_existing(target);
     target_resolved.starts_with(&base_resolved)
 }
 
@@ -220,6 +220,14 @@ mod tests {
         let base = tmp.path();
         let future = base.join("not_yet_created").join("skill");
         assert!(is_path_safe(base, &future));
+    }
+
+    #[test]
+    fn path_safe_allows_a_missing_base() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join("draft");
+        let target = base.join("SKILL.md");
+        assert!(is_path_safe(&base, &target));
     }
 
     #[test]

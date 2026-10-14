@@ -11,6 +11,7 @@ interface IpcState {
   skills: SkillCard[];
   presets: PresetRow[];
   agents: AgentRow[];
+  marketStatus: string;
 }
 
 function installState(skills: SkillCard[], agents: AgentRow[]): IpcState {
@@ -21,6 +22,7 @@ function installState(skills: SkillCard[], agents: AgentRow[]): IpcState {
       { id: "tools", name: "Tools", skillIds: ["skill-plain"], synced: 0 },
     ],
     agents: agents.map((agent) => ({ ...agent })),
+    marketStatus: "",
   };
 }
 
@@ -30,7 +32,7 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
     if (failSettings) throw new Error("database unreadable");
     return text("key") === "theme" ? "light" : null;
   }
-  if (cmd === "set_settings" || cmd === "log_startup_event" || cmd === "record_effect") return null;
+  if (cmd === "set_settings" || cmd === "log_startup_event") return null;
   if (cmd === "list_base_entries") return [];
   if (cmd === "check_app_update") return "current";
   if (cmd === "get_managed_skills") return state.skills;
@@ -142,6 +144,15 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
   if (cmd === "preview_git_install") return { id: "preview-1", skills: [{ relative: "seeded-git", name: "seeded-git" }] };
   if (cmd === "confirm_git_install_skill" || cmd === "install_local_skill" || cmd === "install_archive_skill" || cmd === "import_existing_skill" || cmd === "install_from_skillssh") {
     return { id: "installed", name: text("name") || text("path") || "skill" };
+  }
+  if (cmd === "begin_market_install") {
+    state.marketStatus = `installed:installed:${text("name") || "skill"}`;
+    return true;
+  }
+  if (cmd === "market_install_result") return state.marketStatus || "running";
+  if (cmd === "cancel_market_install") {
+    state.marketStatus = "error:cancelled";
+    return true;
   }
   if (cmd === "import_all_discovered") return ["cursor-skill"];
   if (cmd === "cancel_install") return true;

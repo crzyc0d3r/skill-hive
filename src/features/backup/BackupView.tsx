@@ -8,7 +8,7 @@ import {
   gitBackupSync,
   type SnapshotRow,
 } from "@/lib/ipc/actions";
-import { persistEffect } from "@/lib/ipc/persist";
+import { restoreBackupRemote, revokeBackupToken, setAsideBackup, storeBackupPat } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
 import { backupNow, restoreSnapshot } from "@/features/backup/model";
 import { t } from "@/lib/i18n";
@@ -76,17 +76,26 @@ export function BackupView() {
           {t("backup.github")}
         </button>
         <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void run(async () => { await gitBackupRemoveRemote(); setNote("Remote removed"); })}>{t("backup.disconnect")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { persistEffect("backup", "revoke", pat); setPat(""); setNote("Token cleared"); }}>{t("backup.revoke")}</button>
+        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { void revokeBackupToken(); setPat(""); setNote("Token cleared"); }}>{t("backup.revoke")}</button>
         <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void run(async () => { const snap = await gitBackupSync("retry"); setHistory((current) => [snap, ...current]); })}>{t("backup.retry")}</button>
         <a className="rounded-md border border-border px-2 py-1" href="https://github.com/settings/applications" target="_blank" rel="noreferrer">{t("backup.deletion")}</a>
         <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void run(async () => { const status = await gitBackupStatus(); setNote(status.branch || "repository ready"); })}>{t("backup.setup")}</button>
         <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void gitBackupStatus().then((status) => setNote(status.head || "no commits yet")).catch((err: Error) => setError(err.message))}>{t("backup.recovery")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { persistEffect("backup", "aside", body); setNote("Set aside"); }}>{t("backup.setAside")}</button>
+        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { void setAsideBackup(body); setNote("Set aside"); }}>{t("backup.setAside")}</button>
       </div>
       <p className="mt-2 text-sm">{t("backup.public")}</p>
       <label className="mt-2 block text-sm">
         {t("backup.pat")}
-        <input aria-label={t("backup.pat")} value={pat} onChange={(event) => setPat(event.target.value)} onBlur={() => { if (pat.trim()) persistEffect("provider", "github", pat); }} className="ml-2 rounded-md border border-input px-2 py-1" />
+        <input
+          aria-label={t("backup.pat")}
+          value={pat}
+          onChange={(event) => {
+            const next = event.target.value;
+            setPat(next);
+            if (next.trim()) void storeBackupPat(next.trim());
+          }}
+          className="ml-2 rounded-md border border-input px-2 py-1"
+        />
       </label>
       <label className="mt-2 block text-sm">
         {t("backup.advanced")}
@@ -136,7 +145,23 @@ export function BackupView() {
         ))}
       </ul>
       {safety ? <p role="status">{t("backup.history")} {safety}</p> : null}
-      <p className="mt-2 text-sm">{t("backup.firstRun")}</p>
+      <form
+        className="mt-3 space-y-2 text-sm"
+        data-testid="first-run-restore"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          const remote = String(data.get("remote") ?? "");
+          void restoreBackupRemote(remote);
+        }}
+      >
+        <p>{t("backup.firstRun")}</p>
+        <label>
+          Remote
+          <input name="remote" aria-label="Restore remote" className="ml-2 rounded-md border border-input px-2 py-1" />
+        </label>
+        <button type="submit" className="ml-2 rounded-md border border-border px-2 py-1">Use remote library</button>
+      </form>
     </section>
   );
 }
