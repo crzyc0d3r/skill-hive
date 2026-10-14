@@ -107,6 +107,9 @@ export const fetchLeaderboard = (board?: string) => command<MarketSkill[]>("fetc
 export const searchSkillsSh = (query: string) => command<MarketSkill[]>("search_skillssh", { query, limit: 24 });
 export const installFromSkillsSh = (source: string, name: string) =>
   command<InstalledSkill>("install_from_skillssh", { source, name });
+export const beginMarketInstall = (source: string, name: string) =>
+  command<boolean>("begin_market_install", { source, name });
+export const marketInstallResult = () => command<string>("market_install_result");
 export function dispatch<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T | undefined> {
   if (demoEnabled()) return Promise.resolve(undefined);
   return command<T>(name, args);

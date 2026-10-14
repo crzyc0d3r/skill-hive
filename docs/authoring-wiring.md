@@ -24,7 +24,7 @@ Secrets go through the `keyring` crate (`skill-hive-provider` for endpoint keys,
 | Project Pull center | `record_effect` | `pull_project_center` writes `skills/projects/{name}/SKILL.md` |
 | Settings Export Logs | `record_effect` | `export_diagnostics` calls `export_logs_zip` at the chosen path |
 | Settings Check for Updates | `decideUpdate` plus notify-only `check_app_update` | `download_and_install_update` uses `tauri-plugin-updater` |
-| Leaderboard Cancel | local button only | `cancel_market_install` sets a flag and kills the spawned clone |
+| Leaderboard Cancel | local button only | `begin_market_install` runs the clone on a background thread and returns immediately; `cancel_market_install` sets a flag and kills that process |
 | First-run restore | not rendered | form submits `git_backup_restore_remote`, which clones into the skills directory |
 | Tray Presets | not rendered | submenu from scenarios; Apply and Remove call hive-core; New Preset calls `rebuild_tray_menu` |
 
@@ -32,7 +32,7 @@ Secrets go through the `keyring` crate (`skill-hive-provider` for endpoint keys,
 
 - GitHub device login still cannot finish. This build has no OAuth client id. Connect stores the remote URL.
 - The libgit2 backup engine stays disabled. Backup uses system git, which is the engine PLAN ships.
-- A live skills.sh leaderboard still needs the network. The click suite points `SKILL_HIVE_MARKET_FIXTURE` at a local skill and pauses the install so Cancel can be asserted without GitHub. A non-directory source still spawns `git clone`, and Cancel kills that process.
+- A live skills.sh leaderboard still needs the network. The click suite points `SKILL_HIVE_MARKET_FIXTURE` at a local skill and pauses the install so Cancel can be asserted without GitHub. The Install click returns as soon as the background thread starts, then Cancel lands during that pause. A non-directory source still spawns `git clone`, and Cancel kills that process.
 - `check_app_update` still returns `notify-only`. Check for Updates also runs `download_and_install_update`. The install completes only when the signed endpoint has a release. The command records `installed:`, `current`, `unavailable:`, or `download-failed:` in `updater_last_result`.
 - The OS tray icon is not clicked from the webview. The suite asserts `tray-menu.json` after New Preset. The menu items call `apply_preset_by_id` and `remove_preset_by_id`.
 - `clear_endpoint_secret` and `skip_first_run_restore` are registered. The wizard submits a remote; it does not show a separate skip button.

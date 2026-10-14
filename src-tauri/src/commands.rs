@@ -1067,11 +1067,10 @@ pub fn search_skillssh(query: String, limit: Option<u32>) -> Result<Vec<MarketDt
         .collect())
 }
 
-#[tauri::command]
-pub fn install_from_skillssh(
-    source: String,
-    name: String,
-    store: State<'_, Arc<SkillStore>>,
+fn install_market_work(
+    source: &str,
+    name: &str,
+    store: &SkillStore,
 ) -> Result<InstalledDto, AppError> {
     MARKET_CANCEL.store(false, Ordering::SeqCst);
     let raw = source.trim().to_string();
@@ -1079,10 +1078,9 @@ pub fn install_from_skillssh(
         return Err(AppError::invalid_input("marketplace install cancelled"));
     }
     if Path::new(&raw).is_dir() {
-        let installed = install_local(store.inner(), &root(), Path::new(&raw))
+        let installed = install_local(store, &root(), Path::new(&raw))
             .map_err(|err| AppError::io(err.to_string()))?;
         store
-            .inner()
             .set_skill_source_type(&installed.record.id, "skillssh")
             .map_err(db)?;
         return Ok(installed_dto(installed.record.name, installed.record.id));
@@ -1127,37 +1125,88 @@ pub fn install_from_skillssh(
         .iter()
         .find(|dir| {
             read_skill_document(dir)
-                .map(|doc| doc.name == sanitize_skill_name(&name))
+                .map(|doc| doc.name == sanitize_skill_name(name))
                 .unwrap_or(false)
         })
         .cloned()
         .or_else(|| dirs.into_iter().next())
         .ok_or_else(|| AppError::not_found("repository has no SKILL.md"))?;
-    let installed = install_local(store.inner(), &root(), &folder)
-        .map_err(|err| AppError::io(err.to_string()))?;
+    let installed =
+        install_local(store, &root(), &folder).map_err(|err| AppError::io(err.to_string()))?;
     store
-        .inner()
         .set_skill_source_type(&installed.record.id, "skillssh")
         .map_err(db)?;
     let _ = std::fs::remove_dir_all(dest);
     Ok(installed_dto(installed.record.name, installed.record.id))
 }
 
+fn set_market_status(value: &str) {
+    if let Ok(mut slot) = MARKET_STATUS.lock() {
+        *slot = value.to_string();
+    }
+}
+
+#[tauri::command]
+pub fn install_from_skillssh(
+    source: String,
+    name: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<InstalledDto, AppError> {
+    install_market_work(&source, &name, store.inner())
+}
+
+#[tauri::command]
+pub fn begin_market_install(
+    source: String,
+    name: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<bool, AppError> {
+    set_market_status("running");
+    let store = Arc::clone(store.inner());
+    std::thread::spawn(move || {
+        let status = match install_market_work(&source, &name, &store) {
+            Ok(installed) => format!("installed:{}:{}", installed.id, installed.name),
+            Err(err) => format!("error:{err}"),
+        };
+        set_market_status(&status);
+    });
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn market_install_result() -> Result<String, AppError> {
+    Ok(MARKET_STATUS
+        .lock()
+        .map(|slot| slot.clone())
+        .unwrap_or_default())
+}
+
 static MARKET_CANCEL: AtomicBool = AtomicBool::new(false);
 static MARKET_PID: Mutex<Option<u32>> = Mutex::new(None);
+static MARKET_STATUS: Mutex<String> = Mutex::new(String::new());
+
+fn market_pause_marker() -> PathBuf {
+    central_repo::base_dir().join("market-pause")
+}
 
 fn market_cancelled_during_pause() -> bool {
     let pause = std::env::var("SKILL_HIVE_MARKET_PAUSE").ok().as_deref() == Some("1");
     if !pause {
         return MARKET_CANCEL.load(Ordering::SeqCst);
     }
+    let marker = market_pause_marker();
+    let _ = std::fs::write(&marker, "1");
+    let mut cancelled = false;
     for _ in 0..80 {
         if MARKET_CANCEL.load(Ordering::SeqCst) {
-            return true;
+            cancelled = true;
+            break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    MARKET_CANCEL.load(Ordering::SeqCst)
+    cancelled = cancelled || MARKET_CANCEL.load(Ordering::SeqCst);
+    let _ = std::fs::remove_file(marker);
+    cancelled
 }
 
 fn kill_pid(pid: u32) {

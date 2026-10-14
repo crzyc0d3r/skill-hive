@@ -277,9 +277,17 @@ try {
     await call("POST", `${prefix}/element/${id}/value`, { text: value, value: [...value] });
   }
   async function openPath(pathname) {
-    const current = await call("GET", `${prefix}/url`);
-    const origin = new URL(String(current.value)).origin;
-    await call("POST", `${prefix}/url`, { url: `${origin}${pathname}` });
+    // tauri:// is not a special URL scheme, so URL.origin is the string "null"
+    // and a webdriver navigation to that address never reaches the router.
+    await call("POST", `${prefix}/execute/sync`, {
+      script: `const path = arguments[0];
+        const state = window.history.state || {};
+        const idx = (typeof state.idx === "number" ? state.idx : 0) + 1;
+        window.history.pushState(Object.assign({}, state, { idx }), "", path);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        return location.pathname + location.search;`,
+      args: [pathname],
+    });
   }
   async function waitUntil(label, predicate, timeout = 15000) {
     const deadline = Date.now() + timeout;
@@ -341,8 +349,7 @@ try {
   await click("[data-testid=tab-leaderboard]");
   await find("[data-testid=marketplace]");
   await clickText("Install");
-  await find("//button[normalize-space()=\"Cancel install\"]", "xpath");
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  await waitUntil("marketplace pause", () => existsSync(path.join(base, "market-pause")));
   await clickText("Cancel install");
   const cancelDeadline = Date.now() + 12000;
   while (Date.now() < cancelDeadline) {
@@ -462,7 +469,7 @@ try {
   await clickText("Save");
   await waitUntil("changed draft", () => readFileSync(path.join(authoring, "skill", "warnings", "SKILL.md"), "utf8").includes("authoring-restore-marker"));
   await clickText("Versions");
-  await clickText("Restore into draft");
+  await clickText("Restore into draft", true);
   await waitUntil(
     "restored draft",
     () => {
@@ -472,6 +479,7 @@ try {
   );
   const warningSkill = path.join(authoring, "skill", "warnings", "SKILL.md");
   const warningEvals = path.join(authoring, "skill", "warnings", "evals", "evals.json");
+  await clickText("Problems");
   await clickText("Fix");
   await waitUntil("unknown key removed", () => !readFileSync(warningSkill, "utf8").includes("unknown-key:"));
   await clickText("Fix");

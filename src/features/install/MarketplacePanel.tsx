@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { filterMarket, MARKET_FIXTURE, type MarketSkill } from "@/features/install/market";
-import { cancelMarketInstall, fetchLeaderboard, installFromSkillsSh } from "@/lib/ipc/actions";
+import { beginMarketInstall, cancelMarketInstall, fetchLeaderboard, marketInstallResult } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
 import { t } from "@/lib/i18n";
 
@@ -56,12 +56,31 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
                   return;
                 }
                 const sourceUrl = "source" in skill && typeof skill.source === "string" ? skill.source : `${skill.owner}/${skill.name}`;
-                return installFromSkillsSh(sourceUrl, skill.name)
-                  .then(() => setInstalled(skill.name))
-                  .catch((err: Error) => {
-                    setError(err.message);
+                void (async () => {
+                  try {
+                    await beginMarketInstall(sourceUrl, skill.name);
+                    const deadline = Date.now() + 120000;
+                    while (Date.now() < deadline) {
+                      const status = (await marketInstallResult()) ?? "";
+                      if (status === "running" || status === "") {
+                        await new Promise((resolve) => setTimeout(resolve, 200));
+                        continue;
+                      }
+                      if (status.startsWith("installed:")) {
+                        setInstalled(skill.name);
+                        return;
+                      }
+                      setError(status.replace(/^error:/, ""));
+                      setPending(null);
+                      return;
+                    }
+                    setError("marketplace install timed out");
                     setPending(null);
-                  });
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "marketplace install failed");
+                    setPending(null);
+                  }
+                })();
               }}
             >
               {t("install.install")}

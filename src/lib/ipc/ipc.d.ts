@@ -57,6 +57,8 @@ export interface IpcCommands {
   fetch_leaderboard: { args: { board: string | null }; result: { owner: string; name: string; installs: number; source: string }[] };
   search_skillssh: { args: { query: string; limit: number }; result: { owner: string; name: string; installs: number; source: string }[] };
   install_from_skillssh: { args: { source: string; name: string }; result: { id: string; name: string } };
+  begin_market_install: { args: { source: string; name: string }; result: boolean };
+  market_install_result: { args: Record<string, never>; result: string };
   cancel_market_install: { args: Record<string, never>; result: boolean };
   save_skill_draft: { args: { id: string; files: { path: string; content: string }[] }; result: string };
   snapshot_skill_draft: { args: { id: string; label: string }; result: string };

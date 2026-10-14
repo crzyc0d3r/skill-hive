@@ -341,6 +341,8 @@ pub fn run() {
             commands::fetch_leaderboard,
             commands::search_skillssh,
             commands::install_from_skillssh,
+            commands::begin_market_install,
+            commands::market_install_result,
             commands::cancel_market_install,
             commands::save_skill_draft,
             commands::snapshot_skill_draft,

@@ -21,7 +21,7 @@ Demo mode still short-circuits catalog reads when that key is set. A normal `tau
 | Install | Import one scanned skill | Import a skill found in a known agent directory | unwired | real IPC `import_existing_skill` |
 | Install | Import All | Import every discovered skill | unwired | real IPC `import_all_discovered` |
 | Install | Scan list | Find `SKILL.md` files under known agent directories | demo-only fallback | real IPC `scan_local_skills` |
-| Install | Leaderboard search, owner filter, Install, Cancel, Load more | Search and install from skills.sh | local-state-only fixture | real IPC `fetch_leaderboard`, `install_from_skillssh`, and `cancel_market_install`; cancel sets a flag and kills the spawned git process |
+| Install | Leaderboard search, owner filter, Install, Cancel, Load more | Search and install from skills.sh | local-state-only fixture | real IPC `fetch_leaderboard`, `begin_market_install`, and `cancel_market_install`; the install runs on a background thread so cancel can set a flag and kill the spawned git process |
 | Library | Add, remove, rename, and delete tags | Persist tags in `hive.db` | local-state-only | real IPC `set_skill_tags`, `rename_tag`, `delete_tag` |
 | Library | Enable and disable | Persist `skills.enabled` | local-state-only | real IPC `set_skills_enabled` |
 | Library | Delete and Delete selected | Remove the skill directory, sidecars, and the database row | local-state-only | real IPC `delete_managed_skills` |
