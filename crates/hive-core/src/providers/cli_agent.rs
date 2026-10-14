@@ -112,7 +112,7 @@ pub fn run_claude(
     cancel: &CancellationToken,
     stream: bool,
 ) -> Result<CliOutput, ProviderError> {
-    let mut command = Command::new(program);
+    let mut command = command_for(program);
     command.arg("-p").arg(prompt);
     if stream {
         command.args([
@@ -331,8 +331,24 @@ fn cli_events(value: &Value) -> Vec<CliEvent> {
     out
 }
 
+fn command_for(program: &str) -> Command {
+    #[cfg(windows)]
+    {
+        let extension = Path::new(program)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("");
+        if extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat") {
+            let mut command = Command::new("cmd");
+            command.arg("/c").arg(program);
+            return command;
+        }
+    }
+    Command::new(program)
+}
+
 pub fn command_output(program: &str, args: &[&str]) -> Result<String, ProviderError> {
-    let output = Command::new(program)
+    let output = command_for(program)
         .args(args)
         .output()
         .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?;

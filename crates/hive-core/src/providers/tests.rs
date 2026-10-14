@@ -709,19 +709,30 @@ fn seven_stage_probe_covers_anthropic_ollama_and_claude_cli() {
         ollama_report.stages
     );
     let dir = tempfile::tempdir().unwrap();
-    let program = dir.path().join("claude");
-    std::fs::write(
-        &program,
-        "#!/bin/sh\ncase \"$1\" in\n  --version) echo fixture-cli;;\n  --help) echo '--agents --agent --model --max-turns --output-format';;\n  *) printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"OK\"}]}}' '{\"type\":\"result\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1},\"duration_ms\":5}';;\nesac\n",
-    )
-    .unwrap();
     #[cfg(unix)]
-    {
+    let program = {
+        let program = dir.path().join("claude");
+        std::fs::write(
+            &program,
+            "#!/bin/sh\ncase \"$1\" in\n  --version) echo fixture-cli;;\n  --help) echo '--agents --agent --model --max-turns --output-format';;\n  *) printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"OK\"}]}}' '{\"type\":\"result\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1},\"duration_ms\":5}';;\nesac\n",
+        )
+        .unwrap();
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = std::fs::metadata(&program).unwrap().permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&program, permissions).unwrap();
-    }
+        program
+    };
+    #[cfg(windows)]
+    let program = {
+        let program = dir.path().join("claude.cmd");
+        std::fs::write(
+            &program,
+            "@echo off\r\nif \"%~1\"==\"--version\" goto version\r\nif \"%~1\"==\"--help\" goto help\r\necho {\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"OK\"}]}}\r\necho {\"type\":\"result\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1},\"duration_ms\":5}\r\ngoto end\r\n:version\r\necho fixture-cli\r\ngoto end\r\n:help\r\necho --agents --agent --model --max-turns --output-format\r\n:end\r\n",
+        )
+        .unwrap();
+        program
+    };
     let mut cli = sample_config(
         ProviderKind::LocalCli,
         Some(Flavor::ClaudeCli),
