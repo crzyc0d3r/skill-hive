@@ -32,6 +32,7 @@ keyring = { version = "3", features = ["apple-native", "windows-native"] }
 ureq = { version = "2.12.1", default-features = false, features = ["tls", "json"] }
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
 libc = "0.2"
+minisign-verify = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
@@ -43,3 +44,4 @@ windows-sys = { version = "0.59", features = [
 
 [dev-dependencies]
 tempfile = "3"
+minisign = "0.7"

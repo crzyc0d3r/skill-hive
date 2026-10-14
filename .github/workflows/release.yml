@@ -4,13 +4,57 @@ on:
   push:
     tags:
       - "v*"
+  schedule:
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  signing-plan:
+    runs-on: ubuntu-22.04
+    outputs:
+      apple: ${{ steps.plan.outputs.apple }}
+      apple_path: ${{ steps.plan.outputs.apple_path }}
+      windows: ${{ steps.plan.outputs.windows }}
+      windows_path: ${{ steps.plan.outputs.windows_path }}
+      updater: ${{ steps.plan.outputs.updater }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Fail loudly when signing secrets are partial
+        id: plan
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT_NAME }}
+          AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/configure-release.mjs --plan-only
+
   build:
+    needs: signing-plan
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +80,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -51,7 +97,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          save-if: false
+          save-if: ${{ runner.os != 'Windows' }}
 
       - name: Install Linux system dependencies
         if: startsWith(matrix.platform, 'ubuntu-')
@@ -63,20 +109,79 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Apply signing configuration
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT_NAME }}
+          AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/configure-release.mjs
+
       - name: Build CLI binary
         run: cargo build --release -p hive-cli --target ${{ matrix.target }}
 
-      - name: Build unsigned bundles
-        uses: tauri-apps/tauri-action@1ddc7b49b13c3038297360482fcb3e058764d7c9 # v0.6.2
+      - name: Build bundles
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
-          releaseName: Skill Hive ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
-          releaseBody: Unsigned Phase 0 bundles. Signing and notarization are intentionally absent.
+          tagName: ${{ github.event_name == 'schedule' && 'nightly' || github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
+          releaseName: Skill Hive ${{ github.event_name == 'schedule' && 'nightly' || github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
+          releaseBody: ${{ needs.signing-plan.outputs.updater == 'sign' && 'Signed Skill Hive release. See docs/release/secrets.md.' || 'Unsigned Skill Hive build. Signing and notarization run when the secrets in docs/release/secrets.md are present.' }}
           releaseDraft: true
-          prerelease: true
+          prerelease: ${{ github.event_name == 'schedule' || contains(github.ref_name, '-') }}
           args: --target ${{ matrix.target }}
+
+      - name: Verify macOS signature and notarization
+        if: runner.os == 'macOS'
+        env:
+          SIGNING_APPLE: ${{ needs.signing-plan.outputs.apple }}
+        run: bash scripts/verify-macos-signature.sh
+
+      - name: Sign and notarize macOS CLI binary
+        if: runner.os == 'macOS'
+        env:
+          SIGNING_APPLE: ${{ needs.signing-plan.outputs.apple }}
+          APPLE_PATH: ${{ needs.signing-plan.outputs.apple_path }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+          CLI_TARGET: ${{ matrix.target }}
+        run: bash scripts/sign-macos-cli.sh
 
       - name: Attach CLI binary
         env:
@@ -84,9 +189,78 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            tag="nightly"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            tag="${{ github.ref_name }}"
+          else
+            tag="v0.0.1-dev"
+          fi
           bin="target/${{ matrix.target }}/release/skill-hive-cli"
+          asset="skill-hive-cli-${{ matrix.target }}"
           if [ "${{ runner.os }}" = "Windows" ]; then
             bin="${bin}.exe"
+            asset="${asset}.exe"
           fi
-          gh release upload "$tag" "$bin" --clobber
+          cp "$bin" "$asset"
+          gh release upload "$tag" "$asset" --clobber
+
+  verify-updater-assets:
+    needs: [signing-plan, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Verify updater assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATER: ${{ needs.signing-plan.outputs.updater }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            tag="nightly"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            tag="${{ github.ref_name }}"
+          else
+            tag="v0.0.1-dev"
+          fi
+          gh release view "$tag" --json assets --jq '.assets[].name' > asset-names.txt
+          args=(scripts/verify-updater-assets.mjs --names asset-names.txt)
+          if [ "$UPDATER" = "sign" ]; then
+            args+=(--signed)
+          fi
+          node "${args[@]}"
+
+  publish-release:
+    needs: [signing-plan, verify-updater-assets]
+    if: needs.signing-plan.outputs.updater == 'sign' && needs.signing-plan.outputs.apple == 'sign' && needs.signing-plan.outputs.windows == 'sign' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Publish the verified draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release edit "${{ github.ref_name }}" --draft=false --latest
+          gh release download "${{ github.ref_name }}" --pattern "*.dmg" --pattern "skill-hive-cli-*" --pattern "*.msi" --dir dist-assets
+          node scripts/bump-distribution.mjs dist-assets
+          gh release upload "${{ github.ref_name }}" packaging/homebrew/Casks/skill-hive.rb packaging/homebrew/Formula/skill-hive-cli.rb packaging/winget/manifests/s/SkillHive/SkillHive/SkillHive.SkillHive.installer.yaml --clobber
+
+  publish-nightly:
+    needs: verify-updater-assets
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Publish the unsigned nightly
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit nightly --draft=false --prerelease --latest=false

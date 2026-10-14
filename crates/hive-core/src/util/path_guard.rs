@@ -243,4 +243,26 @@ mod tests {
         let tmp = tempdir().unwrap();
         assert!(is_path_safe(tmp.path(), tmp.path()));
     }
+
+    #[test]
+    fn sanitize_rejects_traversal_payloads() {
+        let payloads = [
+            "..",
+            "../etc/passwd",
+            "..\\..\\windows",
+            "skill/../../x",
+            "a\0b",
+            "con:aux",
+            "....",
+            "/absolute",
+            "name\nwith\rcontrols",
+        ];
+        for payload in payloads {
+            let name = sanitize_name(payload);
+            assert!(!name.contains('/'), "{payload}");
+            assert!(!name.contains('\\'), "{payload}");
+            assert!(!name.contains(".."), "{payload}");
+            assert!(!name.chars().any(|ch| ch.is_control()), "{payload}");
+        }
+    }
 }

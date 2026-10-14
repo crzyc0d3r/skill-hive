@@ -21,7 +21,7 @@ describe("application shell", () => {
     renderApp();
     expect(screen.getByTestId("sidebar")).toBeInTheDocument();
     expect(screen.getByTestId("header")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Skill Hive 0.0.1");
+    expect(screen.getByRole("status")).toHaveTextContent("Skill Hive 1.0.0");
     expect(screen.getByTestId("status-banner")).toBeInTheDocument();
 
     await user.keyboard("{Control>}k{/Control}");

@@ -49,6 +49,21 @@ fn log_startup_event(label: String, elapsed_ms: u64) {
 }
 
 #[tauri::command]
+fn check_app_update() -> &'static str {
+    "notify-only"
+}
+
+#[tauri::command]
+fn update_install_blocker(active_runs: u32) -> Option<String> {
+    hive_core::updater::update_install_blocker(active_runs).map(str::to_string)
+}
+
+#[tauri::command]
+fn updater_proxy(url: String) -> Option<String> {
+    hive_core::updater::updater_proxy(&url)
+}
+
+#[tauri::command]
 fn list_base_entries() -> Result<Vec<String>, AppError> {
     let dir = central_repo::skills_dir();
     let mut names = Vec::new();
@@ -244,7 +259,10 @@ pub fn run() {
             get_settings,
             set_settings,
             log_startup_event,
-            list_base_entries
+            list_base_entries,
+            check_app_update,
+            update_install_blocker,
+            updater_proxy
         ])
         .run(tauri::generate_context!())
         .expect("error while running Skill Hive");

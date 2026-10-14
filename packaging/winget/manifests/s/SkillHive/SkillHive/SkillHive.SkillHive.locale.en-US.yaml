@@ -1,0 +1,12 @@
+PackageIdentifier: SkillHive.SkillHive
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: Skill Hive
+PublisherUrl: https://github.com/crzyc0d3r/skill-hive
+PackageName: Skill Hive
+PackageUrl: https://github.com/crzyc0d3r/skill-hive
+License: MIT
+ShortDescription: Create, generate, and test agent skills
+Moniker: SkillHive
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

@@ -48,6 +48,13 @@ jobs:
       - name: English i18n
         run: npm run check:i18n
 
+      - name: Release tooling
+        run: |
+          node --test scripts/release.test.mjs
+          node scripts/check-hardening.mjs
+          node scripts/check-distribution.mjs
+          node scripts/check-docs.mjs
+
       - name: Test
         run: npm test
 

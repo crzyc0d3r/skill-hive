@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Skill Hive",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "identifier": "com.skillhive.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -46,12 +46,15 @@
     "linux": {
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"]
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "libayatana-appindicator-gtk3"]
       }
     }
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM4NkFGRkVEQ0JCOTk1OEYKUldTUGxibkw3ZjlxT0paRWY3U1VoM2dnNW5XSWNoZjlwVCsvd3RLMkZoVVpka1FhOCtsNGkxalQK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgOEZDNkU1QzMwQzM2Q0E2OQpSV1JweWpZTXcrWEdqNVY5NkJUY1Q3K3ZDZEZlMThRRnFRclM2cHBsVloxYitoWlhUNEhEWmd5Vgo=",
       "endpoints": [
         "https://github.com/crzyc0d3r/skill-hive/releases/latest/download/latest.json"
       ]
