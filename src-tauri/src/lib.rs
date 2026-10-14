@@ -78,7 +78,11 @@ struct WebviewDriverOverrides {
 /// directory, then waits for `DevToolsActivePort` in that directory. WebView2
 /// only honors those switches when they are applied before the webview exists.
 #[cfg(any(windows, test))]
-fn webview_driver_overrides<I, S>(args: I) -> Option<WebviewDriverOverrides>
+fn webview_driver_overrides<I, S>(
+    args: I,
+    extra_arguments: Option<&str>,
+    configured_directory: Option<&str>,
+) -> Option<WebviewDriverOverrides>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -100,6 +104,20 @@ where
         }
         if arg.starts_with("--remote-debugging-port") || arg.starts_with("--remote-allow-origins") {
             forwarded.push(arg.to_string());
+        }
+    }
+    if let Some(extra) = extra_arguments
+        .map(str::trim)
+        .filter(|extra| !extra.is_empty())
+    {
+        forwarded.push(extra.to_string());
+    }
+    if data_directory.is_none() {
+        if let Some(dir) = configured_directory
+            .map(str::trim)
+            .filter(|dir| !dir.is_empty())
+        {
+            data_directory = Some(PathBuf::from(dir));
         }
     }
     if forwarded.is_empty() && data_directory.is_none() {
@@ -166,8 +184,17 @@ pub fn run() {
                 .ok_or_else(|| box_err("missing the main window config"))?;
             let window = WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
             #[cfg(windows)]
-            let window = if let Some(overrides) = webview_driver_overrides(std::env::args().skip(1))
-            {
+            let window = if let Some(overrides) = webview_driver_overrides(
+                std::env::args().skip(1),
+                std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS")
+                    .ok()
+                    .as_deref(),
+                std::env::var("SKILL_HIVE_WEBVIEW_DATA_DIR").ok().as_deref(),
+            ) {
+                driver_log(&format!(
+                    "webview overrides {} {:?}",
+                    overrides.browser_args, overrides.data_directory
+                ));
                 let window = window.additional_browser_args(&overrides.browser_args);
                 if let Some(dir) = overrides.data_directory {
                     window.data_directory(dir)
@@ -225,11 +252,15 @@ mod tests {
 
     #[test]
     fn driver_switches_become_webview_arguments() {
-        let overrides = webview_driver_overrides([
-            "--remote-debugging-port=9222",
-            "--user-data-dir=C:\\temp\\edge-profile",
-            "--unrelated",
-        ])
+        let overrides = webview_driver_overrides(
+            [
+                "--remote-debugging-port=9222",
+                "--user-data-dir=C:\\temp\\edge-profile",
+                "--unrelated",
+            ],
+            None,
+            None,
+        )
         .expect("driver switches");
         assert!(overrides
             .browser_args
@@ -244,6 +275,23 @@ mod tests {
 
     #[test]
     fn a_normal_launch_does_not_override_the_webview() {
-        assert!(webview_driver_overrides(["--help"]).is_none());
+        assert!(webview_driver_overrides(["--help"], None, None).is_none());
+    }
+
+    #[test]
+    fn an_environment_port_is_forwarded_without_driver_arguments() {
+        let overrides = webview_driver_overrides(
+            std::iter::empty::<&str>(),
+            Some("--remote-debugging-port=9222"),
+            Some("C:\\temp\\webview"),
+        )
+        .expect("environment overrides");
+        assert!(overrides
+            .browser_args
+            .contains("--remote-debugging-port=9222"));
+        assert_eq!(
+            overrides.data_directory.unwrap(),
+            std::path::PathBuf::from("C:\\temp\\webview")
+        );
     }
 }

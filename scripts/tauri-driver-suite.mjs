@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,6 +12,11 @@ if (!application) {
 const base = mkdtempSync(path.join(tmpdir(), "skill-hive-driver-"));
 process.env.SKILL_HIVE_BASE = base;
 process.env.SKILL_HIVE_CONFIG_DIR = path.join(base, "config");
+const webviewProfile = path.join(base, "webview-profile");
+mkdirSync(webviewProfile, { recursive: true });
+process.env.SKILL_HIVE_WEBVIEW_DATA_DIR = webviewProfile;
+process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS =
+  "--remote-debugging-port=9222 --remote-allow-origins=*";
 
 const driverArgs = process.env.TAURI_NATIVE_DRIVER
   ? ["--native-driver", process.env.TAURI_NATIVE_DRIVER]
@@ -33,6 +38,19 @@ async function call(method, urlPath, body) {
 function promoteDevToolsPort() {
   promoteDevToolsPort.scans += 1;
   const roots = [process.env.TEMP, process.env.TMP, process.env.LOCALAPPDATA && path.win32.join(process.env.LOCALAPPDATA, "Temp"), tmpdir()].filter(Boolean);
+  const profile = process.env.SKILL_HIVE_WEBVIEW_DATA_DIR;
+  if (profile) {
+    const nested = path.join(profile, "EBWebView", "DevToolsActivePort");
+    const dest = path.join(profile, "DevToolsActivePort");
+    if (existsSync(nested) && !existsSync(dest)) {
+      try {
+        copyFileSync(nested, dest);
+        console.log(`promoted DevToolsActivePort from ${nested}`);
+      } catch (err) {
+        console.log(`could not promote DevToolsActivePort: ${err}`);
+      }
+    }
+  }
   const seen = new Set();
   const scoped = [];
   for (const root of roots) {
@@ -71,7 +89,13 @@ try {
     capabilities: {
       alwaysMatch: {
         browserName: "wry",
-        "tauri:options": { application: path.resolve(application) },
+        "tauri:options": {
+          application: path.resolve(application),
+          webviewOptions: {
+            userDataFolder: webviewProfile,
+            additionalBrowserArguments: "--remote-debugging-port=9222 --remote-allow-origins=*",
+          },
+        },
       },
     },
   });

@@ -114,6 +114,7 @@ jobs:
         run: |
           Write-Host "TEMP=$env:TEMP"
           Get-ChildItem $env:TEMP -Directory -Filter 'scoped_dir*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
-          Get-ChildItem $env:TEMP -Recurse -Filter DevToolsActivePort -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          Get-ChildItem $env:TEMP -Recurse -Filter DevToolsActivePort -Depth 6 -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          Get-ChildItem $env:LOCALAPPDATA -Recurse -Filter DevToolsActivePort -Depth 5 -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
           $log = Join-Path $env:TEMP 'skill-hive-driver.log'
           if (Test-Path $log) { Get-Content $log }
