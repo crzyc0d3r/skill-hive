@@ -1,0 +1,184 @@
+{
+  "queries": [
+    {
+      "query": "query 1",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 2",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 3",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 4",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 5",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 6",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 7",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 8",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 9",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 10",
+      "should_trigger": true,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Skill\", \"id\": \"t1\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_delta\", \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"fixture-skill\"}}}\n{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_stop\"}}"
+      ]
+    },
+    {
+      "query": "query 11",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 12",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 13",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 14",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 15",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 16",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 17",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 18",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 19",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    },
+    {
+      "query": "query 20",
+      "should_trigger": false,
+      "streams": [
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}",
+        "{\"type\": \"stream_event\", \"event\": {\"type\": \"content_block_start\", \"content_block\": {\"type\": \"tool_use\", \"name\": \"Bash\", \"id\": \"t1\"}}}"
+      ]
+    }
+  ]
+}

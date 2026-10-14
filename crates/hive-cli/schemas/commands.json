@@ -50,5 +50,13 @@
   "git.commit": {"type": "object", "required": ["command", "head"], "properties": {"command": {"type": "string"}, "head": {"type": "string"}}},
   "git.versions": {"type": "object", "required": ["command", "tags"], "properties": {"command": {"type": "string"}, "tags": {"type": "array"}}},
   "git.restore": {"type": "object", "required": ["command", "safety"], "properties": {"command": {"type": "string"}, "safety": {"type": "string"}}},
-  "git.prune-sync-refs": {"type": "object", "required": ["command", "removed"], "properties": {"command": {"type": "string"}, "removed": {"type": "array"}}}
+  "git.prune-sync-refs": {"type": "object", "required": ["command", "removed"], "properties": {"command": {"type": "string"}, "removed": {"type": "array"}}},
+  "providers.list": {"type": "object", "required": ["command", "providers"], "properties": {"command": {"type": "string"}, "providers": {"type": "array"}}},
+  "providers.add": {"type": "object", "required": ["command", "id", "kind"], "properties": {"command": {"type": "string"}, "id": {"type": "string"}, "kind": {"type": "string"}}},
+  "providers.set-secret": {"type": "object", "required": ["command", "id", "stored"], "properties": {"command": {"type": "string"}, "id": {"type": "string"}, "stored": {"type": "boolean"}}},
+  "providers.has-secret": {"type": "object", "required": ["command", "id", "has_secret"], "properties": {"command": {"type": "string"}, "id": {"type": "string"}, "has_secret": {"type": "boolean"}}},
+  "providers.probe": {"type": "object", "required": ["command", "id", "ok", "stages"], "properties": {"command": {"type": "string"}, "id": {"type": "string"}, "ok": {"type": "boolean"}, "stages": {"type": "integer"}}},
+  "test.save-suite": {"type": "object", "required": ["command", "skill"], "properties": {"command": {"type": "string"}, "skill": {"type": "string"}}},
+  "test.run": {"type": "object", "required": ["command", "status", "run_id"], "properties": {"command": {"type": "string"}, "status": {"type": "string"}, "run_id": {"type": "string"}}},
+  "test.show": {"type": "object", "required": ["command", "status", "run_id"], "properties": {"command": {"type": "string"}, "status": {"type": "string"}, "run_id": {"type": "string"}}}
 }

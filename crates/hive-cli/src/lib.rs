@@ -2,6 +2,7 @@
 //!
 //! Exit codes: 0 success, 1 operational error, 2 usage error (`INVALID_ARGUMENT`).
 
+mod phase4;
 mod schema;
 
 use std::collections::BTreeMap;
@@ -69,6 +70,58 @@ enum Command {
         #[command(subcommand)]
         command: GitCmd,
     },
+    Providers {
+        #[command(subcommand)]
+        command: ProvidersCmd,
+    },
+    Test {
+        #[command(subcommand)]
+        command: TestCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProvidersCmd {
+    List,
+    Add {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        kind: String,
+    },
+    SetSecret {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        secret: String,
+    },
+    HasSecret {
+        #[arg(long)]
+        id: String,
+    },
+    Probe {
+        #[arg(long)]
+        id: String,
+        #[arg(long, default_value_t = true)]
+        offline: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum TestCmd {
+    SaveSuite {
+        #[arg(long)]
+        skill: PathBuf,
+    },
+    Run {
+        #[arg(long)]
+        skill: PathBuf,
+        #[arg(long, default_value = "offline")]
+        mode: String,
+    },
+    Show,
 }
 
 #[derive(Subcommand)]
@@ -471,6 +524,40 @@ fn dispatch(cli: &Cli) -> Result<Value, Fail> {
         Command::Skills { command } => skills(&ctx, command),
         Command::Presets { command } => presets(&ctx, command),
         Command::Git { command } => git(&ctx, command),
+        Command::Providers { command } => providers_cmd(command),
+        Command::Test { command } => test_cmd(command),
+    }
+}
+
+fn providers_cmd(command: &ProvidersCmd) -> Result<Value, Fail> {
+    match command {
+        ProvidersCmd::List => phase4::providers_list(),
+        ProvidersCmd::Add { id, name, kind } => phase4::providers_add(id, name, kind),
+        ProvidersCmd::SetSecret { id, secret } => phase4::providers_set_secret(id, secret),
+        ProvidersCmd::HasSecret { id } => phase4::providers_has_secret(id),
+        ProvidersCmd::Probe { id, offline } => {
+            if !offline {
+                return Err(Fail::other(
+                    "live vendor probes are unavailable without an API key",
+                ));
+            }
+            phase4::providers_probe_offline(id)
+        }
+    }
+}
+
+fn test_cmd(command: &TestCmd) -> Result<Value, Fail> {
+    match command {
+        TestCmd::SaveSuite { skill } => phase4::test_save_suite(skill),
+        TestCmd::Run { skill, mode } => {
+            if mode != "offline" {
+                return Err(Fail::other(
+                    "only offline mode is available without an API key",
+                ));
+            }
+            phase4::test_run(skill)
+        }
+        TestCmd::Show => phase4::test_show(),
     }
 }
 

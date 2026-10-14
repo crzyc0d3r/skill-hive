@@ -254,7 +254,7 @@ export function LibraryView({
             {menuId === skill.id ? (
               <div className="mt-1 flex gap-2">
                 <Link to={`/skills/${skill.id}/edit`} className="text-xs">{t("library.menu.edit")}</Link>
-                <button type="button" className="text-xs" disabled title={t("editor.runTests.later")}>{t("library.menu.tests")}</button>
+                <Link to={`/skills/${skill.id}/tests`} className="text-xs" aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
                 <button type="button" className="text-xs" onClick={() => setChecked(skill.name)}>{t("library.menu.check")}</button>
                 <button type="button" className="text-xs" onClick={() => onDeleteSkills?.([skill.id])}>{t("library.menu.delete")}</button>
               </div>

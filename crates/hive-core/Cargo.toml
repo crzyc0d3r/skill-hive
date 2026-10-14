@@ -29,6 +29,17 @@ sha2 = "0.10"
 walkdir = "2.5"
 zip = { version = "2.3", default-features = false, features = ["deflate"] }
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
+ureq = { version = "2.12.1", default-features = false, features = ["tls", "json"] }
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 tempfile = "3"

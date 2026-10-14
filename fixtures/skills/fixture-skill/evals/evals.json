@@ -1,0 +1,15 @@
+{
+  "skill_name": "fixture-skill",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write the fixture answer.",
+      "expected_output": "PINECONE",
+      "files": [],
+      "expectations": [
+        "answer file exists",
+        "The answer file contains PINECONE"
+      ]
+    }
+  ]
+}

@@ -16,6 +16,9 @@ import { SettingsView } from "./views/phase1/SettingsView";
 import { WorkspaceView } from "./views/phase1/WorkspaceView";
 import { centerChangedNames, draftSkillCards, useAuthoring } from "./lib/phase3/store";
 import { BackupView, LobsterView, ProjectView } from "./views/phase2/screens";
+import { EndpointsView } from "./views/phase4/EndpointsView";
+import { ResultsView } from "./views/phase4/ResultsView";
+import { SuiteView } from "./views/phase4/SuiteView";
 import { AgentEditor } from "./views/phase3/AgentEditor";
 import { AgentsView } from "./views/phase3/AgentsView";
 import { SkillEditor } from "./views/phase3/SkillEditor";
@@ -174,6 +177,9 @@ function screenFor(path: string) {
   if (path === "/agents") return <AgentsView />;
   if (path === "/agents/:id/edit") return <AgentEditor />;
   if (path === "/skills/:id/edit") return <SkillEditor />;
+  if (path === "/settings/endpoints" || path === "/providers") return <EndpointsView />;
+  if (path === "/skills/:id/tests" || path === "/testing" || path === "/testing/suites/:id") return <SuiteView />;
+  if (path === "/runs/:runId" || path === "/testing/runs/:id") return <ResultsView />;
   if (path === "/dev/tokens") return <TokensView />;
   return <PlaceholderView />;
 }

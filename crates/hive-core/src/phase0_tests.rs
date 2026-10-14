@@ -9,7 +9,7 @@ use crate::util::notifier::RecordingNotifier;
 use std::sync::Arc;
 
 #[test]
-fn hive_db_migrates_to_v8_and_layout_is_created() {
+fn hive_db_migrates_to_v11_and_layout_is_created() {
     let _guard = central_repo::test_base_dir_lock();
     let tmp = tempfile::tempdir().unwrap();
     let base = tmp.path().join("base");
@@ -32,12 +32,12 @@ fn hive_db_migrates_to_v8_and_layout_is_created() {
     let version: u32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 9, "hive.db must migrate to schema v9");
+    assert_eq!(version, 11, "hive.db must migrate to schema v11");
     run_migrations(&conn).unwrap();
     let again: u32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(again, 9);
+    assert_eq!(again, 11);
 
     let store = SkillStore::new(&db_path).unwrap();
     assert_eq!(

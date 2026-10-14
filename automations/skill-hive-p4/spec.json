@@ -1,0 +1,58 @@
+{
+  "nodes": [
+    {
+      "id": "n1_core",
+      "kind": "code",
+      "scope": "Verify the Skill Hive provider layer and test engine. graphify communities 73 (credentials.rs), 21 (crypto.rs), and 62 (log_sanitize.rs) are the secret and scrub inputs, community 42 is migrations.rs where v10 and v11 land, and community 7 is path_guard.rs which the sandbox calls. Those communities compile into one hive-core test binary, the same way Phase 3 merged communities that share tests.rs, so they are one node. Community 29 (hive-cli execute_isolated and contract.rs) is the CLI god node that calls the new commands; this node owns that read and runs it after hive-core so the two cargo invocations do not race. Run the provider, testing, and CLI contract tests and record the exit code.",
+      "reads": [
+        "crates/hive-core/src/backup/credentials.rs",
+        "crates/hive-core/src/util/crypto.rs",
+        "crates/hive-core/src/util/log_sanitize.rs",
+        "crates/hive-core/src/db/migrations.rs",
+        "crates/hive-core/src/util/path_guard.rs",
+        "crates/hive-cli/src/lib.rs",
+        "crates/hive-cli/tests/contract.rs"
+      ],
+      "writes": "automations/skill-hive-p4/out/n1_core.md",
+      "run": "bash automations/skill-hive-p4/code/n1_core.sh",
+      "check": {
+        "cmd": "grep -q 'exit 0' automations/skill-hive-p4/out/n1_core.md"
+      },
+      "deps": []
+    },
+    {
+      "id": "n2_screens",
+      "kind": "code",
+      "scope": "Verify the Phase 4 endpoint, suite, and results screens. graphify communities 23 and 54 both contain App.tsx, community 35 is AppShell.tsx, and community 43 is SettingsView plus i18n. Those communities share App.tsx, the shell, and the locale catalog, so they are one node and this node owns App.tsx and AppShell.tsx. Shadcn component communities are not part of the task. Run the frontend lint, types, i18n, unit tests, and Playwright phase 4 flow.",
+      "reads": [
+        "src/App.tsx",
+        "src/app/routes.ts",
+        "src/components/shell/AppShell.tsx",
+        "src/views/phase1/SettingsView.tsx",
+        "src/lib/i18n.ts",
+        "src/locales/catalog.ts"
+      ],
+      "writes": "automations/skill-hive-p4/out/n2_screens.md",
+      "run": "bash automations/skill-hive-p4/code/n2_screens.sh",
+      "check": {
+        "cmd": "grep -q '| npm test | 0 |' automations/skill-hive-p4/out/n2_screens.md"
+      },
+      "deps": []
+    },
+    {
+      "id": "n3_result",
+      "kind": "code",
+      "scope": "Write the Phase 4 result from the core and screen reports. Record the five exit criteria and that the split followed the graphify map in graphify-out/graph.json.",
+      "reads": [
+        "automations/skill-hive-p4/out/n1_core.md",
+        "automations/skill-hive-p4/out/n2_screens.md"
+      ],
+      "writes": "automations/skill-hive-p4/out/result.md",
+      "run": "bash automations/skill-hive-p4/code/n3_result.sh",
+      "check": {
+        "cmd": "python3 automations/skill-hive-p4/code/check_result.py"
+      },
+      "deps": ["n1_core", "n2_screens"]
+    }
+  ]
+}

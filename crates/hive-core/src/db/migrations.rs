@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use rusqlite::Connection;
 
 /// Current schema version. Bump this when adding a new migration.
-const LATEST_VERSION: u32 = 9;
+const LATEST_VERSION: u32 = 11;
 
 /// Run all pending migrations on the database.
 ///
@@ -60,6 +60,8 @@ fn migrate_step(conn: &Connection, from_version: u32) -> Result<()> {
         6 => migrate_v6_to_v7(conn),
         7 => migrate_v7_to_v8(conn),
         8 => migrate_v8_to_v9(conn),
+        9 => migrate_v9_to_v10(conn),
+        10 => migrate_v10_to_v11(conn),
         _ => bail!("unknown migration version: {from_version}"),
     }
 }
@@ -353,6 +355,259 @@ fn migrate_v8_to_v9(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// v9 → v10: provider configs, pricing, and the usage ledger.
+fn migrate_v9_to_v10(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS provider_configs (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            kind TEXT NOT NULL,
+            flavor TEXT,
+            base_url TEXT,
+            default_model TEXT,
+            api_version TEXT,
+            auth_mode TEXT NOT NULL DEFAULT 'keyring',
+            auth_env_var TEXT,
+            keyring_account TEXT,
+            extra_headers_json TEXT NOT NULL DEFAULT '{}',
+            cli_program TEXT,
+            cli_args_json TEXT NOT NULL DEFAULT '[]',
+            timeout_ms INTEGER NOT NULL DEFAULT 600000,
+            max_retries INTEGER NOT NULL DEFAULT 3,
+            max_concurrency INTEGER NOT NULL DEFAULT 4,
+            rpm_limit INTEGER,
+            tpm_limit INTEGER,
+            default_effort TEXT,
+            default_max_tokens INTEGER NOT NULL DEFAULT 16000,
+            supports_tools INTEGER NOT NULL DEFAULT 1,
+            supports_streaming INTEGER NOT NULL DEFAULT 1,
+            proxy_mode TEXT NOT NULL DEFAULT 'inherit',
+            role_executor INTEGER NOT NULL DEFAULT 0,
+            role_grader INTEGER NOT NULL DEFAULT 0,
+            role_generator INTEGER NOT NULL DEFAULT 0,
+            last_test_at INTEGER,
+            last_test_ok INTEGER,
+            last_test_latency_ms INTEGER,
+            last_test_error TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS model_pricing (
+            id TEXT PRIMARY KEY,
+            provider_config_id TEXT NOT NULL DEFAULT '*',
+            model TEXT NOT NULL,
+            input_per_mtok REAL NOT NULL,
+            output_per_mtok REAL NOT NULL,
+            cache_read_per_mtok REAL,
+            cache_write_per_mtok REAL,
+            source TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE (provider_config_id, model)
+        );
+        CREATE TABLE IF NOT EXISTS usage_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts INTEGER NOT NULL,
+            provider_config_id TEXT REFERENCES provider_configs(id) ON DELETE SET NULL,
+            model TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            ref_kind TEXT,
+            ref_id TEXT,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+            cost_usd REAL,
+            latency_ms INTEGER,
+            status TEXT NOT NULL,
+            request_id TEXT,
+            error_kind TEXT
+        );
+        ",
+    )?;
+    let settings: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'settings'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if settings > 0 {
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('pricing_as_of', '2026-10-06')",
+            [],
+        )?;
+    }
+    for (model, input, output, cache_read, cache_write) in [
+        ("claude-opus-5-5", 4.0, 20.0, 0.40, 5.0),
+        ("claude-sonnet-5-5", 2.0, 10.0, 0.20, 2.5),
+        ("claude-haiku-5-5", 0.10, 0.50, 0.01, 0.125),
+        ("claude-fable-5-1", 10.0, 50.0, 1.0, 12.5),
+    ] {
+        conn.execute(
+            "INSERT OR IGNORE INTO model_pricing
+             (id, provider_config_id, model, input_per_mtok, output_per_mtok, cache_read_per_mtok, cache_write_per_mtok, source, updated_at)
+             VALUES (?1, '*', ?2, ?3, ?4, ?5, ?6, 'builtin', 0)",
+            params_pricing(model, input, output, cache_read, cache_write),
+        )?;
+    }
+    Ok(())
+}
+
+fn params_pricing(
+    model: &str,
+    input: f64,
+    output: f64,
+    cache_read: f64,
+    cache_write: f64,
+) -> (&str, &str, f64, f64, f64, f64) {
+    (model, model, input, output, cache_read, cache_write)
+}
+
+/// v10 → v11: test suites, runs, steps, and grades.
+fn migrate_v10_to_v11(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS test_suites (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            skill_id TEXT REFERENCES skills(id) ON DELETE CASCADE,
+            agent_id TEXT REFERENCES agents(id) ON DELETE CASCADE,
+            source TEXT NOT NULL DEFAULT 'db',
+            baseline TEXT NOT NULL DEFAULT 'without_skill',
+            workspace_dir TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            CHECK (skill_id IS NOT NULL OR agent_id IS NOT NULL)
+        );
+        CREATE TABLE IF NOT EXISTS test_cases (
+            id TEXT PRIMARY KEY,
+            suite_id TEXT NOT NULL REFERENCES test_suites(id) ON DELETE CASCADE,
+            eval_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            prompt TEXT NOT NULL,
+            expected_output TEXT,
+            files_json TEXT NOT NULL DEFAULT '[]',
+            expectations_json TEXT NOT NULL DEFAULT '[]',
+            should_trigger INTEGER,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE (suite_id, eval_id)
+        );
+        CREATE TABLE IF NOT EXISTS runs (
+            id TEXT PRIMARY KEY,
+            suite_id TEXT NOT NULL REFERENCES test_suites(id) ON DELETE CASCADE,
+            iteration INTEGER NOT NULL,
+            version_label TEXT,
+            parent_run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+            skill_content_hash TEXT,
+            executor_provider_id TEXT REFERENCES provider_configs(id) ON DELETE SET NULL,
+            executor_model TEXT,
+            grader_provider_id TEXT REFERENCES provider_configs(id) ON DELETE SET NULL,
+            grader_model TEXT,
+            configurations_json TEXT NOT NULL,
+            runs_per_case INTEGER NOT NULL DEFAULT 1,
+            concurrency INTEGER NOT NULL DEFAULT 2,
+            mode TEXT NOT NULL DEFAULT 'live',
+            seed INTEGER,
+            budget_usd REAL,
+            status TEXT NOT NULL,
+            workspace_dir TEXT NOT NULL,
+            benchmark_path TEXT,
+            grading_result TEXT,
+            is_current_best INTEGER NOT NULL DEFAULT 0,
+            pass_rate_mean REAL,
+            total_tokens INTEGER,
+            total_cost_usd REAL,
+            error TEXT,
+            queued_at INTEGER NOT NULL,
+            started_at INTEGER,
+            finished_at INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS run_cases (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+            test_case_id TEXT NOT NULL REFERENCES test_cases(id) ON DELETE CASCADE,
+            configuration TEXT NOT NULL,
+            run_number INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            sandbox_dir TEXT,
+            outputs_dir TEXT,
+            transcript_path TEXT,
+            command_line TEXT,
+            exit_code INTEGER,
+            started_at INTEGER,
+            finished_at INTEGER,
+            duration_ms INTEGER,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            cache_read_tokens INTEGER,
+            cache_write_tokens INTEGER,
+            cost_usd REAL,
+            total_tool_calls INTEGER,
+            total_steps INTEGER,
+            errors_encountered INTEGER,
+            output_chars INTEGER,
+            transcript_chars INTEGER,
+            tool_calls_json TEXT,
+            files_created_json TEXT,
+            triggered INTEGER,
+            pass_count INTEGER,
+            fail_count INTEGER,
+            pass_rate REAL,
+            recording_key TEXT,
+            error TEXT,
+            UNIQUE (run_id, test_case_id, configuration, run_number)
+        );
+        CREATE TABLE IF NOT EXISTS run_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_case_id TEXT NOT NULL REFERENCES run_cases(id) ON DELETE CASCADE,
+            seq INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            tool_name TEXT,
+            tool_use_id TEXT,
+            is_error INTEGER NOT NULL DEFAULT 0,
+            ts INTEGER NOT NULL,
+            duration_ms INTEGER,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            preview TEXT,
+            payload_offset INTEGER NOT NULL,
+            payload_len INTEGER NOT NULL,
+            UNIQUE (run_case_id, seq)
+        );
+        CREATE INDEX IF NOT EXISTS run_steps_tool ON run_steps(run_case_id, tool_name);
+        CREATE TABLE IF NOT EXISTS grades (
+            id TEXT PRIMARY KEY,
+            run_case_id TEXT NOT NULL REFERENCES run_cases(id) ON DELETE CASCADE,
+            expectation_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            passed INTEGER NOT NULL,
+            evidence TEXT NOT NULL,
+            method TEXT NOT NULL DEFAULT 'llm',
+            grader_provider_id TEXT REFERENCES provider_configs(id) ON DELETE SET NULL,
+            grader_model TEXT,
+            grader_duration_ms INTEGER,
+            grader_cost_usd REAL,
+            graded_at INTEGER NOT NULL,
+            UNIQUE (run_case_id, expectation_index, method)
+        );
+        CREATE TABLE IF NOT EXISTS claims (
+            id TEXT PRIMARY KEY,
+            run_case_id TEXT NOT NULL REFERENCES run_cases(id) ON DELETE CASCADE,
+            claim TEXT NOT NULL,
+            type TEXT NOT NULL,
+            verified INTEGER NOT NULL,
+            evidence TEXT NOT NULL
+        );
+        ",
+    )?;
+    Ok(())
+}
+
 // ── Helpers ──
 
 fn add_column_if_missing(
@@ -423,6 +678,12 @@ mod tests {
         assert!(tables.contains(&"audit_log".to_string()));
         assert!(tables.contains(&"agents".to_string()));
         assert!(tables.contains(&"agent_targets".to_string()));
+        assert!(tables.contains(&"provider_configs".to_string()));
+        assert!(tables.contains(&"model_pricing".to_string()));
+        assert!(tables.contains(&"usage_ledger".to_string()));
+        assert!(tables.contains(&"test_suites".to_string()));
+        assert!(tables.contains(&"runs".to_string()));
+        assert!(tables.contains(&"grades".to_string()));
     }
 
     #[test]

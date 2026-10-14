@@ -1,0 +1,10 @@
+{
+  "checks": [
+    {
+      "id": "file",
+      "expectation": "answer file exists",
+      "kind": "file_exists",
+      "path": "outputs/answer.txt"
+    }
+  ]
+}
