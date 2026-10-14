@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard } from "@/lib/phase1/model";
+import { badgeFor } from "@/lib/phase5/model";
+import { usePhase5 } from "@/lib/phase5/store";
 import { t } from "@/lib/i18n";
 import { GitStatusButton, UpdateFlow } from "@/views/phase2/screens";
 
@@ -57,6 +59,7 @@ export function LibraryView({
   const [dragId, setDragId] = useState<string | null>(null);
   const [batchTag, setBatchTag] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
+  const { seed } = usePhase5();
 
   const sources = useMemo(() => [...new Set(skills.map((skill) => skill.source))], [skills]);
   const tags = useMemo(() => [...new Set(skills.flatMap((skill) => skill.tags))], [skills]);
@@ -224,6 +227,8 @@ export function LibraryView({
               <button type="button" className="text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                 <span className="block font-medium whitespace-normal">{skill.name}</span>
                 {skill.draft ? <span data-testid="draft-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.draft")}</span> : null}
+                {badgeFor(seed, skill.id) === "tested" ? <span data-testid="tested-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.tested")}</span> : null}
+                {badgeFor(seed, skill.id) === "regressed" ? <span data-testid="regressed-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.regressed")}</span> : null}
                 <span className="block text-sm text-muted-foreground">{skill.description}</span>
               </button>
             </label>

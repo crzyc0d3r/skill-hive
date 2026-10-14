@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use rusqlite::Connection;
 
 /// Current schema version. Bump this when adding a new migration.
-const LATEST_VERSION: u32 = 11;
+const LATEST_VERSION: u32 = 12;
 
 /// Run all pending migrations on the database.
 ///
@@ -62,6 +62,7 @@ fn migrate_step(conn: &Connection, from_version: u32) -> Result<()> {
         8 => migrate_v8_to_v9(conn),
         9 => migrate_v9_to_v10(conn),
         10 => migrate_v10_to_v11(conn),
+        11 => migrate_v11_to_v12(conn),
         _ => bail!("unknown migration version: {from_version}"),
     }
 }
@@ -602,6 +603,35 @@ fn migrate_v10_to_v11(conn: &Connection) -> Result<()> {
             type TEXT NOT NULL,
             verified INTEGER NOT NULL,
             evidence TEXT NOT NULL
+        );
+        ",
+    )?;
+    Ok(())
+}
+
+/// v11 → v12: generation sessions and blind comparisons.
+fn migrate_v11_to_v12(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS generation_sessions (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            goal TEXT NOT NULL,
+            status TEXT NOT NULL,
+            endpoint_id TEXT,
+            model TEXT,
+            profile TEXT NOT NULL,
+            base_subject_id TEXT,
+            cost_usd REAL NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS comparisons (
+            id TEXT PRIMARY KEY,
+            side_a TEXT NOT NULL,
+            side_b TEXT NOT NULL,
+            assignment TEXT NOT NULL,
+            verdict TEXT,
+            created_at INTEGER NOT NULL
         );
         ",
     )?;

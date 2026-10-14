@@ -34,9 +34,21 @@ Deploying into a directory that already has foreign files returns `TARGET_CONFLI
 
 - `repo status|set-path|reset-path`
 - `agents list|enable|disable|add-custom`
+- `agents def list|show|deploy|undeploy|validate`
 - `skills list|show|export|install|update|check|remove|enable|disable|deploy|undeploy|status|sync|search|set-source|adopt`
 - `skills tag add|remove|list`
 - `presets list|current|show|create|update|delete|preview|apply|deactivate|deploy|undeploy|status|add-skill|remove-skill`
 - `git status|init|clone|set-remote|pull|push|commit|versions|restore|prune-sync-refs`
+- `providers list|add|set-secret|has-secret|probe|test|models`
+- `test suites|save-suite|run|status|results|show|export`
+- `generate skill|agent|evals`
+
+## Testing loop
+
+`test save-suite` writes `evals/evals.json` for a skill directory. `test run --mode replay` (or `--mode offline`) runs that suite through the shared engine with the scripted fixture provider. It does not call a vendor API. `test status`, `test results`, and `test show` read the last run. `test export` writes a skill-creator workspace plus JUnit and CSV, with endpoint ids replaced by display names.
+
+`generate skill`, `generate agent`, and `generate evals` require `--replay`. Without it the command refuses, because this build has no vendor API key. Replay answers come from the frozen generation fixtures.
+
+`providers test` and `providers models` answer from the local catalog. A live probe still requires `--offline` on `providers probe`.
 
 `crates/hive-cli/tests/contract.rs` runs every subcommand with `--json` against a temporary library and checks the payload against `crates/hive-cli/schemas/commands.json`.

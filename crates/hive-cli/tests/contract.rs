@@ -427,6 +427,64 @@ fn contract_suite_exercises_every_subcommand() {
     let (code, parsed) = run(state, &config, &["test", "show"]);
     assert_eq!(code, 0, "{parsed}");
     seen.push(record(state, &parsed));
+    let (code, parsed) = run(
+        state,
+        &config,
+        &[
+            "test",
+            "run",
+            "--skill",
+            skill.to_str().unwrap(),
+            "--mode",
+            "replay",
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+    for args in [
+        vec!["test", "suites"],
+        vec!["test", "status"],
+        vec!["test", "results"],
+        vec!["test", "export"],
+        vec!["providers", "test", "--id", "local"],
+        vec!["providers", "models", "--id", "local"],
+        vec![
+            "generate",
+            "skill",
+            "--name",
+            "invoice-extractor",
+            "--replay",
+        ],
+        vec![
+            "generate",
+            "agent",
+            "--name",
+            "security-reviewer",
+            "--replay",
+        ],
+        vec![
+            "generate",
+            "evals",
+            "--name",
+            "invoice-extractor",
+            "--replay",
+        ],
+        vec!["agents", "def", "list"],
+        vec!["agents", "def", "show", "--name", "security-reviewer"],
+        vec!["agents", "def", "deploy", "--name", "security-reviewer"],
+        vec!["agents", "def", "undeploy", "--name", "security-reviewer"],
+    ] {
+        let (code, parsed) = run(state, &config, &args);
+        assert_eq!(code, 0, "{args:?} {parsed}");
+        seen.push(record(state, &parsed));
+    }
+    let (code, parsed) = run(
+        state,
+        &config,
+        &["generate", "skill", "--name", "invoice-extractor"],
+    );
+    assert_ne!(code, 0, "{parsed}");
+    assert!(parsed.to_string().contains("API key"));
 
     seen.sort();
     seen.dedup();

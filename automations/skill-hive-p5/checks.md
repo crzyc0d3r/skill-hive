@@ -1,0 +1,47 @@
+# checks: skill-hive-p5
+
+Run `r1` · updated 2026-10-14T04:46:51+00:00 · verdicts: pass, fail, unresolved
+
+## Node gates
+
+| node | requirement | verdict | evidence |
+|---|---|---|---|
+| n1_core | a1 check.cmd | pass | `grep -q 'exit 0' automations/skill-hive-p5/out/n1_core.md` → exit 0: (no output) · log `automations/skill-hive-p5/runs/r1/gates/n1_core.a1.md` |
+| n1_core | a1 node.report | pass | exit 0: · log `automations/skill-hive-p5/runs/r1/gates/n1_core.a1.md` |
+| n2_screens | a1 check.cmd | pass | `grep -q '\| npm test \| 0 \|' automations/skill-hive-p5/out/n2_screens.md` → exit 0: (no output) · log `automations/skill-hive-p5/runs/r1/gates/n2_screens.a1.md` |
+| n2_screens | a1 node.report | pass | exit 0: · log `automations/skill-hive-p5/runs/r1/gates/n2_screens.a1.md` |
+| n3_result | a1 check.cmd | pass | `python3 automations/skill-hive-p5/code/check_result.py` → exit 0: result.md records four passing Phase 5 criteria and the graphify map · log `automations/skill-hive-p5/runs/r1/gates/n3_result.a1.md` |
+| n3_result | a1 node.report | pass | exit 0: · log `automations/skill-hive-p5/runs/r1/gates/n3_result.a1.md` |
+
+## Acceptance checks (the deliverable)
+
+| check | verdict | evidence |
+|---|---|---|
+| 0. Phase 5 result records four exit criteria | pass | `python3 automations/skill-hive-p5/code/check_result.py` → exit 0: result.md records four passing Phase 5 criteria and the graphify map |
+
+## Baseline before the run (2026-10-14T04:25:41+00:00)
+
+| item | verdict | evidence |
+|---|---|---|
+| deliverable exists before the run | fail | automations/skill-hive-p5/out/result.md absent |
+| acceptance 0: Phase 5 result records four exit criteria | fail | `python3 automations/skill-hive-p5/code/check_result.py` → exit 1: missing automations/skill-hive-p5/out/result.md |
+
+Observed before the run:
+- Phase 5 checks fail before the generation and analytics code lands.
+
+## Completion (2026-10-14T04:46:51+00:00) — COMPLETE
+
+| item | verdict | evidence |
+|---|---|---|
+| graph.md is a valid spec | pass | validate ok |
+| spec approved before execution | pass | hash 1f52671b9f5624d9 |
+| n1_core: output exists and can be opened | pass | automations/skill-hive-p5/out/n1_core.md (2555 bytes) |
+| n1_core: gate ran against the saved version | pass | gate pass at 2026-10-14T04:46:07+00:00 |
+| n2_screens: output exists and can be opened | pass | automations/skill-hive-p5/out/n2_screens.md (110 bytes) |
+| n2_screens: gate ran against the saved version | pass | gate pass at 2026-10-14T04:46:38+00:00 |
+| n3_result: output exists and can be opened | pass | automations/skill-hive-p5/out/result.md (1750 bytes) |
+| n3_result: gate ran against the saved version | pass | gate pass at 2026-10-14T04:46:51+00:00 |
+| graph.md matches the nodes that actually ran | pass | ran 3 of 3 declared nodes |
+| acceptance 0: Phase 5 result records four exit criteria | pass | `python3 automations/skill-hive-p5/code/check_result.py` → exit 0: result.md records four passing Phase 5 criteria and the graphify map |
+| deliverable exists | pass | automations/skill-hive-p5/out/result.md |
+| run limit respected | pass | 0/3 model dispatches |

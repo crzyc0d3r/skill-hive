@@ -14,7 +14,7 @@ import { moveById } from "../../lib/phase1/model";
 import { lobsterAgents } from "../../lib/phase2/model";
 import { useProjectDot } from "../../lib/phase2/store";
 import { SKILL_TEMPLATES } from "../../lib/phase3/model";
-import { closeLater, closePicker, createSkill, openLater, openPicker, useAuthoring } from "../../lib/phase3/store";
+import { closePicker, createSkill, openPicker, useAuthoring } from "../../lib/phase3/store";
 import { CloseGuardDialog, HelpDialog } from "../../views/phase2/screens";
 import { Kbd } from "../Kbd";
 import { StatusBanner } from "../StatusBanner";
@@ -155,10 +155,10 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         openPicker("skill");
       } else if (key === "g" && event.shiftKey) {
         event.preventDefault();
-        openLater("agent");
+        navigate("/generate/agent");
       } else if (key === "g") {
         event.preventDefault();
-        openLater("skill");
+        navigate("/generate/skill");
       } else {
         const shortcut = shortcutRows.find((item) => item.id === key);
         if (shortcut) {
@@ -467,14 +467,6 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           </form>
         </div>
       ) : null}
-      {authoring.later ? (
-        <div role="dialog" aria-label={t("editor.generate.later")} className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
-          <div className="rounded-lg border border-border bg-popover p-4">
-            <p>{t("editor.generate.later")}</p>
-            <button type="button" className="mt-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => closeLater()}>{t("agents.cancel")}</button>
-          </div>
-        </div>
-      ) : null}
       {showUpdate ? <div role="alert" data-testid="update-toast" className="fixed bottom-8 right-3 rounded-md border border-border bg-popover px-3 py-2 text-sm">{t("startup.toast")}</div> : null}
       {helpOpen ? <HelpDialog onClose={() => setHelpOpen(false)} /> : null}
       {closeOpen ? (
@@ -494,8 +486,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
 function runAction(href: string, navigate: (path: string) => void): void {
   if (href === "action:skill") openPicker("skill");
   else if (href === "action:agent") openPicker("agent");
-  else if (href === "action:generate-skill") openLater("skill");
-  else if (href === "action:generate-agent") openLater("agent");
+  else if (href === "action:generate-skill") navigate("/generate/skill");
+  else if (href === "action:generate-agent") navigate("/generate/agent");
   else navigate(href);
 }
 

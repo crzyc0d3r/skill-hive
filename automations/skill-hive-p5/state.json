@@ -1,0 +1,333 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-14T04:25:19+00:00",
+  "finished": "2026-10-14T04:46:51+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n1_core": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "6b9a8012634d386998072914999b62a150d26a3a468742cb3bd338ae0f9d026b",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'exit 0' automations/skill-hive-p5/out/n1_core.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-14T04:46:07+00:00",
+        "output_hash": "6b9a8012634d386998072914999b62a150d26a3a468742cb3bd338ae0f9d026b",
+        "log": "automations/skill-hive-p5/runs/r1/gates/n1_core.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'exit 0' automations/skill-hive-p5/out/n1_core.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-14T04:46:07+00:00",
+          "output_hash": "6b9a8012634d386998072914999b62a150d26a3a468742cb3bd338ae0f9d026b",
+          "log": "automations/skill-hive-p5/runs/r1/gates/n1_core.a1.md"
+        }
+      ]
+    },
+    "n2_screens": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "db04ddcadb06ffa4751b1c3efed549b3f8debdd9cd0b9afdfe04163c24412d46",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q '| npm test | 0 |' automations/skill-hive-p5/out/n2_screens.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-14T04:46:38+00:00",
+        "output_hash": "db04ddcadb06ffa4751b1c3efed549b3f8debdd9cd0b9afdfe04163c24412d46",
+        "log": "automations/skill-hive-p5/runs/r1/gates/n2_screens.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q '| npm test | 0 |' automations/skill-hive-p5/out/n2_screens.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-14T04:46:38+00:00",
+          "output_hash": "db04ddcadb06ffa4751b1c3efed549b3f8debdd9cd0b9afdfe04163c24412d46",
+          "log": "automations/skill-hive-p5/runs/r1/gates/n2_screens.a1.md"
+        }
+      ]
+    },
+    "n3_result": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "a1d511841615fa621482616bed76eb77129b1785ec247505bdaa0d47ae1b712d",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/skill-hive-p5/code/check_result.py` → exit 0: result.md records four passing Phase 5 criteria and the graphify map"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-14T04:46:51+00:00",
+        "output_hash": "a1d511841615fa621482616bed76eb77129b1785ec247505bdaa0d47ae1b712d",
+        "log": "automations/skill-hive-p5/runs/r1/gates/n3_result.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/skill-hive-p5/code/check_result.py` → exit 0: result.md records four passing Phase 5 criteria and the graphify map"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-14T04:46:51+00:00",
+          "output_hash": "a1d511841615fa621482616bed76eb77129b1785ec247505bdaa0d47ae1b712d",
+          "log": "automations/skill-hive-p5/runs/r1/gates/n3_result.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_core",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T04:46:00+00:00",
+      "finished": "2026-10-14T04:46:07+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p5/out/n1_core.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n2_screens",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T04:46:13+00:00",
+      "finished": "2026-10-14T04:46:38+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p5/out/n2_screens.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n3_result",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T04:46:51+00:00",
+      "finished": "2026-10-14T04:46:51+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-p5/out/result.md",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/skill-hive-p5/code/check_result.py` → exit 0: result.md records four passing Phase 5 criteria and the graphify map",
+      "at": "2026-10-14T04:46:51+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-14T04:25:40+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash 1f52671b9f5624d9)"
+    },
+    {
+      "at": "2026-10-14T04:25:40+00:00",
+      "type": "decision",
+      "msg": "graphifyy 0.9.90 provides the graphify CLI. extract --code-only --force and cluster-only --no-viz --no-label wrote graphify-out/graph.json (203 communities). n1_core owns communities 4, 12, 5, 7, 14, 42, 16, and 73 because they compile into one hive-core test binary, and communities 105, 87, and 131 because the CLI contract calls the new groups. n2_screens owns communities 17, 6, 3, and 38 because 6 and 17 share App.tsx. Shadcn communities were not given nodes."
+    },
+    {
+      "at": "2026-10-14T04:25:41+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-14T04:25:41+00:00",
+      "type": "baseline",
+      "msg": "0/3 pass before the run"
+    },
+    {
+      "at": "2026-10-14T04:46:07+00:00",
+      "type": "gate",
+      "msg": "n1_core attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T04:46:38+00:00",
+      "type": "gate",
+      "msg": "n2_screens attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T04:46:51+00:00",
+      "type": "gate",
+      "msg": "n3_result attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T04:46:51+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    },
+    {
+      "at": "2026-10-14T04:46:52+00:00",
+      "type": "learn",
+      "msg": "Stage generated skills in a directory whose leaf name matches the skill name; a leading-dot staging directory fails S-14."
+    }
+  ],
+  "completion": {
+    "at": "2026-10-14T04:46:51+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 1f52671b9f5624d9"
+      ],
+      [
+        "n1_core: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p5/out/n1_core.md (2555 bytes)"
+      ],
+      [
+        "n1_core: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T04:46:07+00:00"
+      ],
+      [
+        "n2_screens: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p5/out/n2_screens.md (110 bytes)"
+      ],
+      [
+        "n2_screens: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T04:46:38+00:00"
+      ],
+      [
+        "n3_result: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-p5/out/result.md (1750 bytes)"
+      ],
+      [
+        "n3_result: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T04:46:51+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 3 of 3 declared nodes"
+      ],
+      [
+        "acceptance 0: Phase 5 result records four exit criteria",
+        "pass",
+        "`python3 automations/skill-hive-p5/code/check_result.py` → exit 0: result.md records four passing Phase 5 criteria and the graphify map"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/skill-hive-p5/out/result.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-14T04:25:41+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "automations/skill-hive-p5/out/result.md absent"
+      ],
+      [
+        "acceptance 0: Phase 5 result records four exit criteria",
+        "fail",
+        "`python3 automations/skill-hive-p5/code/check_result.py` → exit 1: missing automations/skill-hive-p5/out/result.md"
+      ],
+      [
+        "note",
+        "noted",
+        "Phase 5 checks fail before the generation and analytics code lands."
+      ]
+    ]
+  }
+}

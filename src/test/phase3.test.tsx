@@ -100,8 +100,8 @@ describe("phase 3 editors", () => {
     expect(screen.getByText("New agent")).toBeInTheDocument();
     expect(screen.getByText("Generate skill…")).toBeInTheDocument();
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "Generate…" }));
-    expect(screen.getByText("The generate wizard arrives in a later phase.")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Generate…" }));
+    expect(await screen.findByTestId("generate-wizard")).toBeInTheDocument();
   });
 
   it("fixes an agent near-miss, exports bytes that match the preview, then goes stale", async () => {
