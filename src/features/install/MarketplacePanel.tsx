@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { filterMarket, type MarketSkill } from "@/features/install/market";
+import { filterMarket, MARKET_FIXTURE, type MarketSkill } from "@/features/install/market";
 import { fetchLeaderboard, installFromSkillsSh } from "@/lib/ipc/actions";
+import { demoEnabled } from "@/lib/demo";
 import { t } from "@/lib/i18n";
 
 export function MarketplacePanel({ reachable = true, skills }: { reachable?: boolean; skills?: MarketSkill[] }) {
@@ -11,8 +12,18 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const leaderboard = useQuery({
-    queryKey: ["leaderboard"],
-    queryFn: () => fetchLeaderboard(),
+    queryKey: ["leaderboard", demoEnabled()],
+    queryFn: () =>
+      demoEnabled()
+        ? Promise.resolve(
+            MARKET_FIXTURE.map((skill) => ({
+              owner: skill.owner,
+              name: skill.name,
+              installs: skill.installs,
+              source: `${skill.owner}/${skill.name}`,
+            })),
+          )
+        : fetchLeaderboard(),
     enabled: reachable && !skills,
   });
   const source = skills ?? leaderboard.data ?? [];
@@ -41,6 +52,7 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
               onClick={() => {
                 setPending(skill.name);
                 setInstalled(skill.name);
+                if (demoEnabled()) return;
                 const sourceUrl = "source" in skill && typeof skill.source === "string" ? skill.source : `${skill.owner}/${skill.name}`;
                 void installFromSkillsSh(sourceUrl, skill.name).catch((err: Error) => setError(err.message));
               }}

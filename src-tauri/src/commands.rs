@@ -1274,4 +1274,168 @@ mod tests {
             .any(|skill| skill.name == "seeded-git"));
         let _ = fs::remove_dir_all(root);
     }
+
+    #[test]
+    fn wiring_effects_install_scan_delete_sync_agent_backup_and_git() {
+        use hive_core::backup::git_backup;
+        use hive_core::db::skill_store::SkillStore;
+        use hive_core::deploy::scenario_service::{self, DeployIntent, SyncOne};
+        use hive_core::deploy::sync_engine::{current_os, NativeBackend, SyncMode};
+        use hive_core::deploy::tool_adapters::{CustomToolDef, ToolCategory};
+        use hive_core::deploy::tool_service::{self, CustomAdd};
+        use hive_core::library::git_fetcher::confirm_git_install;
+        use hive_core::library::installer::install_local;
+        use hive_core::library::scanner;
+        use std::path::PathBuf;
+
+        let root = std::env::temp_dir().join(format!(
+            "skill-hive-wiring-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_millis())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let skills = root.join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        let store = SkillStore::new(&root.join("hive.db")).expect("store");
+
+        let local = root.join("local-skill");
+        fs::create_dir_all(&local).unwrap();
+        fs::write(
+            local.join("SKILL.md"),
+            "---\nname: local-skill\ndescription: local\n---\nLocal body\n",
+        )
+        .unwrap();
+        let installed = install_local(&store, &skills, &local).expect("install");
+        assert!(PathBuf::from(&installed.record.central_path)
+            .join("SKILL.md")
+            .is_file());
+        assert!(store
+            .get_all_skills()
+            .unwrap()
+            .iter()
+            .any(|skill| skill.name == "local-skill"));
+
+        let scanned_dir = root
+            .join("home")
+            .join(".claude")
+            .join("skills")
+            .join("seeded-claude");
+        fs::create_dir_all(&scanned_dir).unwrap();
+        fs::write(
+            scanned_dir.join("SKILL.md"),
+            "---\nname: seeded-claude\ndescription: seeded\n---\nSeeded body\n",
+        )
+        .unwrap();
+        let found = scanner::scan_roots(&store, &[("claude_code", scanned_dir.parent().unwrap())])
+            .expect("scan");
+        let scanned = found
+            .iter()
+            .find(|row| row.name == "seeded-claude")
+            .cloned()
+            .expect("seeded-claude");
+        let imported = scanner::import_scanned(&store, &skills, &scanned, None).expect("import");
+        assert_eq!(imported, "seeded-claude");
+
+        store.delete_skill(&installed.record.id).expect("delete");
+        let _ = fs::remove_dir_all(&installed.record.central_path);
+        assert!(!store
+            .get_all_skills()
+            .unwrap()
+            .iter()
+            .any(|skill| skill.name == "local-skill"));
+
+        let synced_id = store
+            .get_all_skills()
+            .unwrap()
+            .into_iter()
+            .find(|skill| skill.name == "seeded-claude")
+            .expect("imported row")
+            .id;
+        let codex = root.join("codex-skills");
+        scenario_service::sync_one(
+            &store,
+            &SyncOne {
+                skill_id: synced_id,
+                tool: "codex".into(),
+                root: codex.clone(),
+                intent: DeployIntent::Add,
+                mode: SyncMode::Copy,
+                os: current_os(),
+            },
+            &NativeBackend,
+        )
+        .expect("sync");
+        assert!(codex.join("seeded-claude").join("SKILL.md").is_file());
+
+        let added = tool_service::add_custom_tool(
+            &store,
+            CustomToolDef {
+                key: "field_notes".into(),
+                display_name: "Field Notes".into(),
+                skills_dir: root
+                    .join(".field-notes")
+                    .join("skills")
+                    .display()
+                    .to_string(),
+                project_relative_skills_dir: None,
+                category: ToolCategory::Coding,
+            },
+        )
+        .expect("agent");
+        assert_eq!(added, CustomAdd::Added);
+        let tools = store
+            .get_setting("custom_tools")
+            .unwrap()
+            .unwrap_or_default();
+        assert!(tools.contains("Field Notes"));
+
+        let work = root.join("git-work");
+        let skill = work.join("seeded-git");
+        fs::create_dir_all(&skill).unwrap();
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: seeded-git\ndescription: from git\n---\nGit body\n",
+        )
+        .unwrap();
+        git(&work, &["init", "-b", "main"]);
+        git(&work, &["config", "user.email", "hive@localhost"]);
+        git(&work, &["config", "user.name", "Skill Hive"]);
+        git(&work, &["add", "."]);
+        git(&work, &["commit", "-m", "seed"]);
+        let bare = root.join("seeded.git");
+        let status = Command::new("git")
+            .args(["clone", "--bare"])
+            .arg(&work)
+            .arg(&bare)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let preview = preview_repository(&bare.to_string_lossy()).expect("preview");
+        let relative = preview
+            .skills
+            .iter()
+            .find(|skill| skill.name == "seeded-git")
+            .expect("preview skill")
+            .relative
+            .clone();
+        let names = confirm_git_install(&store, &skills, &preview.id, &[(relative, None)])
+            .expect("confirm");
+        assert!(names.iter().any(|name| name == "seeded-git"));
+
+        let skill_file = skills.join("seeded-git").join("SKILL.md");
+        let original = fs::read_to_string(&skill_file).expect("skill file");
+        git_backup::init_repo(&skills).expect("backup init");
+        git_backup::commit_all(&skills, "backup").expect("backup commit");
+        git_backup::snapshot(&skills, "snap-wiring").expect("snapshot");
+        fs::write(&skill_file, format!("{original}\nchanged\n")).unwrap();
+        git_backup::commit_all(&skills, "changed").expect("changed commit");
+        let safety = git_backup::restore_snapshot(&skills, "snap-wiring").expect("restore");
+        assert!(safety.starts_with("safety-"));
+        assert_eq!(fs::read_to_string(&skill_file).unwrap(), original);
+        let _ = fs::remove_dir_all(root);
+    }
 }

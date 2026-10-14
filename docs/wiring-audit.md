@@ -75,5 +75,6 @@ Demo mode still short-circuits catalog reads when that key is set. A normal `tau
 ## Verification
 
 - `npm test` covers the screens with a stateful IPC mock.
-- `scripts/tauri-driver-suite.mjs` installs a local folder, restarts, imports a seeded `~/.claude/skills` skill, deletes, syncs to Codex, adds an agent, imports a local bare repo, and restores a backup. It asserts `hive.db` and the skills directory under `SKILL_HIVE_BASE`.
-- `.github/workflows/tauri-driver.yml` runs that suite on Ubuntu, macOS, and Windows.
+- `scripts/tauri-driver-suite.mjs` installs a local folder, restarts, imports a seeded `~/.claude/skills` skill, deletes, syncs to Codex, adds an agent, imports a local bare repo, and restores a backup. It asserts `hive.db` and the skills directory under `SKILL_HIVE_BASE`. Linux isolates `HOME`. Windows keeps the real user profile so the log plugin can resolve its directory, and seeds the agent folders there.
+- `.github/workflows/tauri-driver.yml` runs that click suite on Ubuntu and Windows. tauri-driver 2.1.0 prints "tauri-driver is not supported on this platform" and never listens on macOS, so the macOS job runs `cargo test -p skill-hive --lib wiring_effects` instead. That test installs, scans, deletes, syncs, adds an agent, imports a local bare repo, and restores a backup under a temp directory.
+- Demo mode (`localStorage` `skill-hive-demo` = `1`) keeps the marketplace fixture and in-memory backup snapshots for the browser visual suite. A normal `tauri dev` run does not set that flag, so those controls call hive-core.

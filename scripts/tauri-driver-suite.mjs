@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnCommand } from "./spawn-tool.mjs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 const application = process.argv[2];
@@ -11,15 +11,21 @@ if (!application) {
 }
 
 const base = mkdtempSync(path.join(tmpdir(), "skill-hive-driver-"));
-const home = path.join(base, "home");
+// The Windows log plugin resolves its directory from USERPROFILE and rejects a
+// fresh temp profile ("unknown path"). Isolate HOME only on Linux, where the
+// scan directories follow HOME. Windows and macOS seed the real user home.
+const isolateHome = process.platform === "linux";
+const home = isolateHome ? path.join(base, "home") : homedir();
 process.env.SKILL_HIVE_BASE = base;
-process.env.HOME = home;
-process.env.USERPROFILE = home;
-process.env.XDG_CONFIG_HOME = path.join(base, "xdg-config");
-process.env.XDG_DATA_HOME = path.join(base, "xdg-data");
-process.env.XDG_CACHE_HOME = path.join(base, "xdg-cache");
-for (const dir of [process.env.XDG_CONFIG_HOME, process.env.XDG_DATA_HOME, process.env.XDG_CACHE_HOME]) {
-  mkdirSync(dir, { recursive: true });
+if (isolateHome) {
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  process.env.XDG_CONFIG_HOME = path.join(base, "xdg-config");
+  process.env.XDG_DATA_HOME = path.join(base, "xdg-data");
+  process.env.XDG_CACHE_HOME = path.join(base, "xdg-cache");
+  for (const dir of [process.env.XDG_CONFIG_HOME, process.env.XDG_DATA_HOME, process.env.XDG_CACHE_HOME]) {
+    mkdirSync(dir, { recursive: true });
+  }
 }
 const seededClaude = path.join(home, ".claude", "skills", "seeded-claude");
 mkdirSync(seededClaude, { recursive: true });
@@ -218,15 +224,28 @@ try {
   await click("[data-testid=backup-restore]");
   await find("[data-testid=backup]");
 
+  function pythonBin() {
+    if (pythonBin.cached) return pythonBin.cached;
+    for (const bin of ["python3", "python"]) {
+      try {
+        execFileSync(bin, ["--version"], { stdio: "ignore" });
+        pythonBin.cached = bin;
+        return bin;
+      } catch {
+        /* try the next name */
+      }
+    }
+    throw new Error("python is required to read hive.db");
+  }
   function skillNames() {
     const db = path.join(base, "hive.db");
     const script = `import sqlite3; c=sqlite3.connect(${JSON.stringify(db)}); print("\\n".join(row[0] for row in c.execute("select name from skills")))`;
-    return execFileSync("python3", ["-c", script], { encoding: "utf8" });
+    return execFileSync(pythonBin(), ["-c", script], { encoding: "utf8" });
   }
   function setting(key) {
     const db = path.join(base, "hive.db");
     const script = `import sqlite3; c=sqlite3.connect(${JSON.stringify(db)}); row=c.execute("select value from settings where key=?", (${JSON.stringify(key)},)).fetchone(); print(row[0] if row else "")`;
-    return execFileSync("python3", ["-c", script], { encoding: "utf8" }).trim();
+    return execFileSync(pythonBin(), ["-c", script], { encoding: "utf8" }).trim();
   }
   async function clickText(text, last = false) {
     const quoted = JSON.stringify(text);

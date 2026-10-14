@@ -9,6 +9,8 @@ import {
   type SnapshotRow,
 } from "@/lib/ipc/actions";
 import { persistEffect } from "@/lib/ipc/persist";
+import { demoEnabled } from "@/lib/demo";
+import { backupNow, restoreSnapshot } from "@/features/backup/model";
 import { t } from "@/lib/i18n";
 
 export function BackupView() {
@@ -46,6 +48,12 @@ export function BackupView() {
           className="rounded-md bg-primary px-2 py-1 text-primary-foreground"
           onClick={() =>
             void run(async () => {
+              if (demoEnabled()) {
+                const snap = backupNow(body, [])[0];
+                setHistory((current) => [{ id: snap.id, label: snap.label }, ...current]);
+                setBody(snap.label);
+                return;
+              }
               const snap = await gitBackupSync(body);
               setHistory((current) => [snap, ...current]);
               setBody(snap.label);
@@ -110,6 +118,12 @@ export function BackupView() {
               className="ml-2 rounded-md border border-border px-2 py-1"
               onClick={() =>
                 void run(async () => {
+                  if (demoEnabled()) {
+                    const restored = restoreSnapshot([{ id: snap.id, label: snap.label, body }], snap.id);
+                    setBody(restored?.body ?? snap.label);
+                    setSafety(restored?.safety ?? null);
+                    return;
+                  }
                   const restored = await gitBackupRestore(snap.id);
                   setBody(snap.label);
                   setSafety(restored);
