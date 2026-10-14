@@ -116,24 +116,29 @@ try {
   if (!session) throw new Error(`no session id in ${JSON.stringify(created)}`);
   const prefix = `/session/${session}`;
 
-  const handles = await call("GET", `${prefix}/window/handles`);
-  const windows = handles.value ?? [];
-  console.log(`windows ${JSON.stringify(windows)}`);
-  let chosen = null;
-  for (const handle of windows) {
-    await call("POST", `${prefix}/window`, { handle });
-    const url = await call("GET", `${prefix}/url`);
-    const source = await call("GET", `${prefix}/source`);
-    const html = String(source.value ?? "");
-    console.log(`url ${url.value} source ${html.slice(0, 400).replace(/\s+/g, " ")}`);
-    if (html.includes("data-testid=\"sidebar\"") || html.includes("data-testid='sidebar'")) {
-      chosen = handle;
-      break;
+  const deadline = Date.now() + 30000;
+  let last = "no window";
+  let attached = false;
+  while (Date.now() < deadline) {
+    const handles = await call("GET", `${prefix}/window/handles`);
+    const windows = handles.value ?? [];
+    for (const handle of windows) {
+      await call("POST", `${prefix}/window`, { handle });
+      const url = await call("GET", `${prefix}/url`);
+      const source = await call("GET", `${prefix}/source`);
+      const html = String(source.value ?? "");
+      last = `windows ${JSON.stringify(windows)} url ${url.value} source ${html.slice(0, 240).replace(/\s+/g, " ")}`;
+      if (html.includes('data-testid="sidebar"') || html.includes("data-testid='sidebar'")) {
+        attached = true;
+        break;
+      }
     }
+    if (attached) break;
+    console.log(last);
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  if (!chosen && windows[0]) {
-    await call("POST", `${prefix}/window`, { handle: windows[0] });
-  }
+  if (!attached) throw new Error(`sidebar did not appear\n${last}`);
+  console.log(`attached ${last}`);
 
   async function find(selector) {
     try {
