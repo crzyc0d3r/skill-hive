@@ -41,7 +41,10 @@ fn rendered_p2_matches_the_golden_file() {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, &rendered).unwrap();
     }
-    let golden = fs::read_to_string(&path).unwrap_or_else(|err| panic!("golden missing ({err})"));
+    // Windows checkouts rewrite the fixture to CRLF; the prompt itself is LF.
+    let golden = fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("golden missing ({err})"))
+        .replace("\r\n", "\n");
     assert_eq!(rendered, golden);
     assert!(rendered.contains("Extract line items from supplier invoices"));
     assert!(rendered.contains("invoice-extractor"));
