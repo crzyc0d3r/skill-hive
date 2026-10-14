@@ -10,6 +10,7 @@ import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, t } from "../../lib/i18n";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
+import { createPreset, deletePreset, reorderPresets, updatePreset } from "@/lib/ipc/actions";
 import { moveById } from "@/features/library/model";
 import { lobsterAgents } from "@/features/lobster/model";
 import { useProjectDot } from "@/features/project/store";
@@ -249,7 +250,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             <NavLink to="/global-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
               {collapsed ? "G" : t("workspace.allAgents")}
             </NavLink>
-            {(agents.data ?? []).map((agent) => (
+            {(agents.data ?? []).filter((agent) => agent.installed && agent.enabled).map((agent) => (
               <NavLink key={agent.key} to={`/global-workspace/${agent.key}`} className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
                 {collapsed ? agent.name.slice(0, 1) : agent.name}
               </NavLink>
@@ -264,7 +265,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
                   if (!dragPreset) return;
-                  setPresetRows(moveById(shownPresets, dragPreset, preset.id, (item) => item.id));
+                  const next = moveById(shownPresets, dragPreset, preset.id, (item) => item.id);
+                  setPresetRows(next);
+                  void reorderPresets(next.map((item) => item.id));
                   setDragPreset(null);
                 }}
                 className="flex items-center gap-1"
@@ -275,7 +278,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 {collapsed ? null : (
                   <>
                     <button type="button" className="text-xs" aria-label={`${t("preset.edit")} ${preset.name}`} onClick={() => { setEditingPreset(preset.id); setPresetName(preset.name); }}>{t("preset.edit")}</button>
-                    <button type="button" className="text-xs" aria-label={`${t("preset.delete")} ${preset.name}`} onClick={() => setPresetRows(shownPresets.filter((item) => item.id !== preset.id))}>{t("preset.delete")}</button>
+                    <button type="button" className="text-xs" aria-label={`${t("preset.delete")} ${preset.name}`} onClick={() => { setPresetRows(shownPresets.filter((item) => item.id !== preset.id)); void deletePreset(preset.id); }}>{t("preset.delete")}</button>
                   </>
                 )}
               </div>
@@ -286,6 +289,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 onSubmit={(event) => {
                   event.preventDefault();
                   setPresetRows(shownPresets.map((preset) => preset.id === editingPreset ? { ...preset, name: presetName } : preset));
+                  void updatePreset(editingPreset, presetName);
                   setEditingPreset(null);
                 }}
               >
@@ -293,9 +297,18 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 <button type="submit" className="text-xs">{t("preset.save")}</button>
               </form>
             ) : null}
-            <NavLink to="/global-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
+            <button
+              type="button"
+              className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent"
+              onClick={() => {
+                const name = presetName.trim() || "Preset";
+                void createPreset(name).then((id) => {
+                  setPresetRows([...shownPresets, { id, name, skillIds: [], synced: 0 }]);
+                });
+              }}
+            >
               {collapsed ? "+" : t("preset.new")}
-            </NavLink>
+            </button>
             <div className="mt-3 px-2 text-xs text-muted-foreground">{t("sidebar.projects")}</div>
             <NavLink to="/project/fixture" className="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-accent">
               <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block h-2 w-2 rounded-full bg-current" />
@@ -341,7 +354,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 skills: skills.data ?? [],
                 presets: shownPresets,
                 setPresets: (next: PresetRow[]) => setPresetRows(next),
-                agents: (agents.data ?? []) as AgentRow[],
+                agents: ((agents.data ?? []) as AgentRow[]).filter((agent) => agent.installed && agent.enabled),
                 theme,
                 setTheme: (choice: ThemeChoice) => {
                   setTheme(choice);

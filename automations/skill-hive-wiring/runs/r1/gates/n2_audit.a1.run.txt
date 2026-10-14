@@ -1,0 +1,3 @@
+$ bash automations/skill-hive-wiring/code/n2_audit.sh
+(exit 0)
+

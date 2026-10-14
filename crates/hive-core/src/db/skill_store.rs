@@ -381,6 +381,15 @@ impl SkillStore {
         Ok(())
     }
 
+    pub fn set_skill_source_type(&self, id: &str, source_type: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE skills SET source_type = ?1, updated_at = ?2 WHERE id = ?3",
+            params![source_type, chrono::Utc::now().timestamp_millis(), id],
+        )?;
+        Ok(())
+    }
+
     pub fn update_skill_source_ref(&self, id: &str, source_ref: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(

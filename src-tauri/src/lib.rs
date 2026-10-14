@@ -8,6 +8,7 @@ use hive_core::util::file_watcher::start_file_watcher;
 use hive_core::util::notifier::Notifier;
 use tauri::{Emitter, Manager, WebviewWindowBuilder};
 
+mod commands;
 mod tray;
 
 struct TauriNotifier(tauri::AppHandle);
@@ -262,7 +263,57 @@ pub fn run() {
             list_base_entries,
             check_app_update,
             update_install_blocker,
-            updater_proxy
+            updater_proxy,
+            commands::get_managed_skills,
+            commands::list_presets,
+            commands::get_tool_status,
+            commands::scan_local_skills,
+            commands::install_local_skill,
+            commands::install_archive_skill,
+            commands::import_existing_skill,
+            commands::import_all_discovered,
+            commands::preview_git_install,
+            commands::confirm_git_install_skill,
+            commands::cancel_install,
+            commands::delete_managed_skills,
+            commands::set_skills_enabled,
+            commands::set_skill_tags,
+            commands::rename_tag,
+            commands::delete_tag,
+            commands::sync_skill_to_tool,
+            commands::unsync_skill_from_tool,
+            commands::add_skill_to_preset,
+            commands::remove_skill_from_preset,
+            commands::reorder_preset_skills,
+            commands::create_preset,
+            commands::update_preset,
+            commands::delete_preset,
+            commands::reorder_presets,
+            commands::apply_preset,
+            commands::add_custom_tool,
+            commands::remove_custom_tool,
+            commands::set_tool_enabled,
+            commands::set_all_tools_enabled,
+            commands::set_tool_order_cmd,
+            commands::set_custom_tool_path,
+            commands::reset_custom_tool_path,
+            commands::set_custom_tool_project_path,
+            commands::get_central_repo_path,
+            commands::set_central_repo_path,
+            commands::check_all_skill_updates,
+            commands::check_skill_update,
+            commands::git_backup_status,
+            commands::git_backup_list_versions,
+            commands::git_backup_sync,
+            commands::git_backup_restore_version,
+            commands::git_backup_set_remote,
+            commands::git_backup_remove_remote,
+            commands::backup_set_device_name,
+            commands::add_project,
+            commands::fetch_leaderboard,
+            commands::search_skillssh,
+            commands::install_from_skillssh,
+            commands::record_effect
         ])
         .run(tauri::generate_context!())
         .expect("error while running Skill Hive");

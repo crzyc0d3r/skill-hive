@@ -29,17 +29,17 @@ export function LibraryView({
   initialId?: string | null;
   memberIds?: string[];
   presetName?: string;
-  onRenameTag?: (from: string, to: string) => void;
-  onAddTag?: (skillId: string, tag: string) => void;
-  onSync?: (ids: string[], agents: string[]) => void;
-  onToggleMember?: (skillId: string) => void;
-  onReorderMembers?: (ids: string[]) => void;
-  onDeleteSkills?: (ids: string[]) => void;
-  onDeleteTag?: (tag: string) => void;
-  onRemoveTag?: (skillId: string, tag: string) => void;
-  onSetEnabled?: (ids: string[], enabled: boolean) => void;
-  onBatchTag?: (ids: string[], tag: string) => void;
-  onToggleAgent?: (skillId: string, agent: string) => void;
+  onRenameTag: (from: string, to: string) => void | Promise<void>;
+  onAddTag: (skillId: string, tag: string) => void | Promise<void>;
+  onSync: (ids: string[], agents: string[]) => void | Promise<void>;
+  onToggleMember: (skillId: string) => void | Promise<void>;
+  onReorderMembers: (ids: string[]) => void | Promise<void>;
+  onDeleteSkills: (ids: string[]) => void | Promise<void>;
+  onDeleteTag: (tag: string) => void | Promise<void>;
+  onRemoveTag: (skillId: string, tag: string) => void | Promise<void>;
+  onSetEnabled: (ids: string[], enabled: boolean) => void | Promise<void>;
+  onBatchTag: (ids: string[], tag: string) => void | Promise<void>;
+  onToggleAgent: (skillId: string, agent: string) => void | Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<LibraryFilter>("all");
@@ -131,7 +131,7 @@ export function LibraryView({
           className="mt-2 flex flex-wrap gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            onRenameTag?.(rename, renameValue);
+            onRenameTag(rename, renameValue);
             setRename(null);
           }}
         >
@@ -141,7 +141,7 @@ export function LibraryView({
             type="button"
             className="rounded-md border border-border px-2 py-1 text-sm"
             onClick={() => {
-              onDeleteTag?.(rename);
+              onDeleteTag(rename);
               setRename(null);
             }}
           >
@@ -159,7 +159,7 @@ export function LibraryView({
             onDragOver={(event) => event.preventDefault()}
             onDrop={() => {
               if (!dragId) return;
-              onReorderMembers?.(moveById(memberIds, dragId, id, (item) => item));
+              onReorderMembers(moveById(memberIds, dragId, id, (item) => item));
               setDragId(null);
             }}
             className="rounded-md border border-border px-2 py-1 text-xs"
@@ -172,10 +172,10 @@ export function LibraryView({
       {checked ? <p role="status">{t("library.checked")} {checked}</p> : null}
       {selected.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled?.(selected, true)}>{t("library.batch.enable")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled?.(selected, false)}>{t("library.batch.disable")}</button>
+          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled(selected, true)}>{t("library.batch.enable")}</button>
+          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</button>
           <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { onDeleteSkills?.(selected); setSelected([]); }}>{t("library.batch.delete")}</button>
+          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</button>
           <button type="button" className="rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground" onClick={() => setSyncOpen(true)}>
             {t("library.sync")}
           </button>
@@ -186,7 +186,7 @@ export function LibraryView({
           className="mt-2 flex gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            if (batchTag.trim()) onBatchTag?.(selected, batchTag.trim());
+            if (batchTag.trim()) onBatchTag(selected, batchTag.trim());
             setBatchOpen(false);
             setBatchTag("");
           }}
@@ -202,7 +202,7 @@ export function LibraryView({
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             const agents = ["claude_code", "codex"].filter((agent) => data.get(agent) === "on");
-            onSync?.(selected, agents);
+            onSync(selected, agents);
             setSyncOpen(false);
           }}
         >
@@ -239,13 +239,13 @@ export function LibraryView({
                 type="checkbox"
                 aria-label={`${t("library.membership")} ${skill.name}`}
                 checked={memberIds.includes(skill.id)}
-                onChange={() => onToggleMember?.(skill.id)}
+                onChange={() => onToggleMember(skill.id)}
               />
               {t("library.membership")}
             </label>
             <div className="mt-2 flex flex-wrap gap-1">
               {skill.tags.map((item) => (
-                <button key={item} type="button" className="text-xs" onClick={() => onRemoveTag?.(skill.id, item)}>
+                <button key={item} type="button" className="text-xs" onClick={() => onRemoveTag(skill.id, item)}>
                   {t("library.tag.remove")} {item}
                 </button>
               ))}
@@ -263,7 +263,7 @@ export function LibraryView({
                 <Link to={`/skills/${skill.id}/edit`} className="text-xs">{t("library.menu.edit")}</Link>
                 <Link to={`/skills/${skill.id}/tests`} className="text-xs" aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
                 <button type="button" className="text-xs" onClick={() => setChecked(skill.name)}>{t("library.menu.check")}</button>
-                <button type="button" className="text-xs" onClick={() => onDeleteSkills?.([skill.id])}>{t("library.menu.delete")}</button>
+                <button type="button" className="text-xs" onClick={() => onDeleteSkills([skill.id])}>{t("library.menu.delete")}</button>
               </div>
             ) : null}
             <form
@@ -271,7 +271,7 @@ export function LibraryView({
               onSubmit={(event) => {
                 event.preventDefault();
                 const value = tagDraft[skill.id]?.trim();
-                if (value) onAddTag?.(skill.id, value);
+                if (value) onAddTag(skill.id, value);
                 setTagDraft((current) => ({ ...current, [skill.id]: "" }));
               }}
             >
@@ -302,7 +302,7 @@ export function LibraryView({
                 type="button"
                 aria-pressed={open.agents.includes(agent)}
                 className="rounded-md border border-border px-2 py-1 text-xs"
-                onClick={() => onToggleAgent?.(open.id, agent)}
+                onClick={() => onToggleAgent(open.id, agent)}
               >
                 {agent}
               </button>

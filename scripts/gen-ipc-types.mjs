@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-const rustPath = "src-tauri/src/lib.rs";
+const rustPaths = ["src-tauri/src/lib.rs", "src-tauri/src/commands.rs"];
 const dtsPath = "src/lib/ipc/ipc.d.ts";
 
 const known = {
@@ -11,6 +11,56 @@ const known = {
   check_app_update: { args: "Record<string, never>", result: "string" },
   update_install_blocker: { args: "{ activeRuns: number }", result: "string | null" },
   updater_proxy: { args: "{ url: string }", result: "string | null" },
+  get_managed_skills: { args: "Record<string, never>", result: "import('@/features/library/model').SkillCard[]" },
+  list_presets: { args: "Record<string, never>", result: "import('@/lib/ipc/catalog').PresetRow[]" },
+  get_tool_status: { args: "Record<string, never>", result: "import('@/lib/ipc/catalog').AgentRow[]" },
+  scan_local_skills: { args: "Record<string, never>", result: "import('@/lib/ipc/catalog').ScanRow[]" },
+  install_local_skill: { args: "{ path: string }", result: "{ id: string; name: string }" },
+  install_archive_skill: { args: "{ path: string }", result: "{ id: string; name: string }" },
+  import_existing_skill: { args: "{ path: string; rename: string | null }", result: "{ id: string; name: string }" },
+  import_all_discovered: { args: "Record<string, never>", result: "string[]" },
+  preview_git_install: { args: "{ url: string }", result: "{ id: string; skills: { relative: string; name: string }[] }" },
+  confirm_git_install_skill: { args: "{ previewId: string; relative: string; rename: string | null }", result: "string[]" },
+  cancel_install: { args: "{ previewId: string | null }", result: "boolean" },
+  delete_managed_skills: { args: "{ ids: string[] }", result: "null" },
+  set_skills_enabled: { args: "{ ids: string[]; enabled: boolean }", result: "null" },
+  set_skill_tags: { args: "{ skillId: string; tags: string[] }", result: "null" },
+  rename_tag: { args: "{ from: string; to: string }", result: "string[]" },
+  delete_tag: { args: "{ tag: string }", result: "string[]" },
+  sync_skill_to_tool: { args: "{ skillId: string; tool: string }", result: "null" },
+  unsync_skill_from_tool: { args: "{ skillId: string; tool: string }", result: "null" },
+  add_skill_to_preset: { args: "{ presetId: string; skillId: string }", result: "null" },
+  remove_skill_from_preset: { args: "{ presetId: string; skillId: string }", result: "null" },
+  reorder_preset_skills: { args: "{ presetId: string; skillIds: string[] }", result: "null" },
+  create_preset: { args: "{ name: string }", result: "string" },
+  update_preset: { args: "{ id: string; name: string }", result: "null" },
+  delete_preset: { args: "{ id: string }", result: "null" },
+  reorder_presets: { args: "{ ids: string[] }", result: "null" },
+  apply_preset: { args: "{ presetId: string; tool: string | null }", result: "number" },
+  add_custom_tool: { args: "{ name: string; path: string; projectPath: string | null }", result: "import('@/lib/ipc/catalog').AgentRow" },
+  remove_custom_tool: { args: "{ key: string }", result: "null" },
+  set_tool_enabled: { args: "{ key: string; enabled: boolean }", result: "null" },
+  set_all_tools_enabled: { args: "{ enabled: boolean }", result: "null" },
+  set_tool_order_cmd: { args: "{ keys: string[] }", result: "null" },
+  set_custom_tool_path: { args: "{ key: string; path: string }", result: "null" },
+  reset_custom_tool_path: { args: "{ key: string }", result: "string" },
+  set_custom_tool_project_path: { args: "{ key: string; path: string }", result: "null" },
+  get_central_repo_path: { args: "Record<string, never>", result: "string" },
+  set_central_repo_path: { args: "{ path: string }", result: "string" },
+  check_all_skill_updates: { args: "Record<string, never>", result: "number" },
+  check_skill_update: { args: "{ skillId: string }", result: "string" },
+  git_backup_status: { args: "Record<string, never>", result: "{ branch: string; clean: boolean; remote: string | null; head: string }" },
+  git_backup_list_versions: { args: "Record<string, never>", result: "{ id: string; label: string }[]" },
+  git_backup_sync: { args: "{ message: string | null }", result: "{ id: string; label: string }" },
+  git_backup_restore_version: { args: "{ tag: string }", result: "string" },
+  git_backup_set_remote: { args: "{ url: string }", result: "null" },
+  git_backup_remove_remote: { args: "Record<string, never>", result: "null" },
+  backup_set_device_name: { args: "{ name: string }", result: "null" },
+  add_project: { args: "{ name: string; path: string }", result: "string" },
+  fetch_leaderboard: { args: "{ board: string | null }", result: "{ owner: string; name: string; installs: number; source: string }[]" },
+  search_skillssh: { args: "{ query: string; limit: number }", result: "{ owner: string; name: string; installs: number; source: string }[]" },
+  install_from_skillssh: { args: "{ source: string; name: string }", result: "{ id: string; name: string }" },
+  record_effect: { args: "{ kind: string; id: string; body: string }", result: "string" },
 };
 
 export function commandNames(source) {
@@ -49,17 +99,17 @@ if (selfTest) {
 }
 
 if (!selfTest || check) {
-  const rust = fs.readFileSync(rustPath, "utf8");
+  const rust = rustPaths.map((file) => fs.readFileSync(file, "utf8")).join("\n");
   const names = commandNames(rust);
   const rendered = render(names);
   if (names.length === 0) {
-    console.error(`no #[tauri::command] fns in ${rustPath}`);
+    console.error(`no #[tauri::command] fns in ${rustPaths.join(", ")}`);
     process.exit(1);
   }
   if (check) {
     const current = fs.readFileSync(dtsPath, "utf8");
     if (current.trim() !== rendered.trim()) {
-      console.error(`${dtsPath} is out of date with ${rustPath}`);
+      console.error(`${dtsPath} is out of date with ${rustPaths.join(", ")}`);
       console.error(rendered);
       process.exit(1);
     }

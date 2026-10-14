@@ -11,8 +11,10 @@ describe("install", () => {
     expect(screen.getByTestId("marketplace")).toBeInTheDocument();
     expect(screen.getByLabelText("Search marketplace")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Local Install" }));
+    await user.type(screen.getByLabelText("Select folder"), "/path/to/demo");
     await user.click(screen.getByRole("button", { name: "Install local" }));
     expect(screen.getByText("Imported demo")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Select archive"), "/path/to/demo.skill");
     await user.click(screen.getByRole("button", { name: "Install archive" }));
     expect(screen.getByText("Imported demo.skill")).toBeInTheDocument();
     leaderboard.unmount();
@@ -28,9 +30,11 @@ describe("install", () => {
     installIpc();
     const user = userEvent.setup();
     renderAt("/install?tab=git");
-    expect(await screen.findByLabelText("Git URL")).toHaveValue("https://github.com/acme/skills/tree/feature/slash/tools/demo");
+    const url = await screen.findByLabelText("Git URL");
+    await user.type(url, "https://github.com/acme/skills/tree/feature/slash/tools/demo");
     await user.click(screen.getByRole("button", { name: "Clone & Preview" }));
     expect(screen.getByTestId("git-preview")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Rename skill"), "renamed-demo");
     await user.click(screen.getByRole("button", { name: "Import Selected" }));
     expect(screen.getByText("Imported renamed-demo")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel clone" }));

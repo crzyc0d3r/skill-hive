@@ -8,6 +8,8 @@ import {
   type ProjectSkill,
 } from "@/features/project/model";
 import { setProjectSkills } from "@/features/project/store";
+import { addProject, setSkillsEnabled, syncSkillToTool } from "@/lib/ipc/actions";
+import { persistEffect } from "@/lib/ipc/persist";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -35,11 +37,12 @@ export function ProjectView() {
         onClick={() => {
           setLinked(true);
           setProjectSkills([skill]);
+          void addProject("fixture", "");
         }}
       >
         {t("project.link")}
       </button>
-      <button type="button" className="ml-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => setLinked(true)}>
+      <button type="button" className="ml-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => { setLinked(true); void addProject(skill.name, ""); }}>
         {t("project.linked")}
       </button>
       {linked ? (
@@ -49,16 +52,16 @@ export function ProjectView() {
             <span data-testid="project-dot" data-color={dotColor(skill)} className="ml-2 inline-block h-2 w-2 rounded-full bg-current" />
           </p>
           <p>{t("project.agents")}: {skill.agents.join(", ") || "—"}</p>
-          <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => update(addSkillToAgents(skill, ["claude_code", "codex"]))}>
+          <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { update(addSkillToAgents(skill, ["claude_code", "codex"])); void syncSkillToTool(skill.id, "claude_code"); void syncSkillToTool(skill.id, "codex"); }}>
             {t("project.add")}
           </button>
-          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => update(toggleSkill(skill, !skill.enabled))}>
+          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { update(toggleSkill(skill, !skill.enabled)); void setSkillsEnabled([skill.id], !skill.enabled); }}>
             {t("project.disable")}
           </button>
-          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => update(pullCenter(skill))}>
+          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { update(pullCenter(skill)); persistEffect("project", skill.id, skill.center); }}>
             {t("project.pull")}
           </button>
-          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => update({ ...skill, enabled: true })}>
+          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { update({ ...skill, enabled: true }); void setSkillsEnabled([skill.id], true); }}>
             {t("project.batch")}
           </button>
           <div className="flex gap-2">

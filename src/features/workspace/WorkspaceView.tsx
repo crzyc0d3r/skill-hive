@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
+import { deleteManagedSkills, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
 import { t } from "@/lib/i18n";
 
 export interface WorkspaceCard {
@@ -28,8 +29,8 @@ export function WorkspaceView({
   agents?: AgentRow[];
   library?: SkillCard[];
   agentKey?: string;
-  onApply?: (id: string) => void;
-  onCreate?: (name: string) => void;
+  onApply: (id: string) => void | Promise<void>;
+  onCreate: (name: string) => void | Promise<void>;
 }) {
   const [applied, setApplied] = useState<string | null>(null);
   const [name, setName] = useState("Research");
@@ -65,8 +66,11 @@ export function WorkspaceView({
     if (pending.kind === "remove" || pending.kind === "delete") {
       setRows((current) => current.filter((row) => !pending.ids.includes(row.id)));
       setSelected([]);
+      if (pending.kind === "remove" && agentKey) pending.ids.forEach((id) => void unsyncSkillFromTool(id, agentKey));
+      if (pending.kind === "delete") void deleteManagedSkills(pending.ids);
     } else {
       setRows((current) => current.map((row) => (pending.ids.includes(row.id) ? { ...row, status: "in_sync", managed: true } : row)));
+      if (agentKey) pending.ids.forEach((id) => void syncSkillToTool(id, agentKey));
     }
     setPending(null);
   }
@@ -79,7 +83,7 @@ export function WorkspaceView({
           className="mt-3 flex gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            onCreate?.(name);
+            void onCreate(name);
           }}
         >
           <input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
@@ -98,7 +102,7 @@ export function WorkspaceView({
                 className="rounded-full border border-border px-3 py-1 text-sm"
                 onClick={() => {
                   setApplied(preset.id);
-                  onApply?.(preset.id);
+                  void onApply(preset.id);
                 }}
               >
                 {presetLabel(preset.name, synced, total)}
@@ -177,6 +181,7 @@ export function WorkspaceView({
                 className="mr-2 text-sm"
                 onClick={() => {
                   setRows((current) => current.some((row) => row.id === skill.id) ? current : [...current, { id: skill.id, name: skill.name, status: "in_sync", tags: skill.tags, body: skill.body, center: skill.sourceBody, managed: true }]);
+                  if (agentKey) void syncSkillToTool(skill.id, agentKey);
                   setAdding(false);
                 }}
               >
