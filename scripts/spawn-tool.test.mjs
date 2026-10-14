@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { commandLaunch, packageBin, spawnCommandSync } from "./spawn-tool.mjs";
-import { tauriDevCommand } from "./tauri-dev.mjs";
+import { absorbDevLog, createDevProbeState, DEV_PROBE_HOLD_MS, DEV_PROBE_LIMIT_MS, devProbeDecision, tauriDevCommand } from "./tauri-dev.mjs";
 
 test("tauri dev launches the local CLI with node, not npx", () => {
   const command = tauriDevCommand();
@@ -42,4 +42,40 @@ test("windows cmd shims are spawned through the shell", () => {
     assert.equal(node.file, "node");
     assert.equal(node.shell, false);
   }
+});
+
+test("vite ignores cargo output and other non-frontend directories", () => {
+  const source = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+  for (const pattern of [
+    "**/target/**",
+    "**/src-tauri/target/**",
+    "crates/**",
+    "**/crates/**",
+    "graphify-out/**",
+    "**/graphify-out/**",
+    "automations/**",
+    "**/automations/**",
+  ]) {
+    assert.equal(source.includes(`"${pattern}"`), true, pattern);
+  }
+});
+
+test("the dev probe stays up through cargo compile and fails on EBUSY", () => {
+  const started = 1_000;
+  const state = createDevProbeState(started);
+  absorbDevLog(state, "Running DevCommand (`cargo run`)", started + 100);
+  absorbDevLog(state, "\u001b[1m\u001b[92m   Compiling\u001b[0m hive-core", started + 200);
+  assert.equal(devProbeDecision(state, started + 200 + DEV_PROBE_HOLD_MS - 1), "wait");
+  assert.equal(devProbeDecision(state, started + 200 + DEV_PROBE_HOLD_MS), "ok");
+  absorbDevLog(state, "EBUSY: resource busy or locked, watch 'E:\\\\code\\\\skill-hive\\\\target\\\\debug\\\\build\\\\build_script_build-1.exe'", started + 300);
+  assert.equal(devProbeDecision(state, started + 200 + DEV_PROBE_HOLD_MS), "fail");
+
+  const cached = createDevProbeState(started);
+  absorbDevLog(cached, "Running DevCommand (`cargo run`)", started + 50);
+  absorbDevLog(cached, "Finished `dev` profile", started + 80);
+  assert.equal(devProbeDecision(cached, started + 50 + 9_000), "wait");
+  assert.equal(devProbeDecision(cached, started + 50 + 10_000), "ok");
+
+  const stalled = createDevProbeState(started);
+  assert.equal(devProbeDecision(stalled, started + DEV_PROBE_LIMIT_MS), "fail");
 });

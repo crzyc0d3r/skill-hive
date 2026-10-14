@@ -98,7 +98,7 @@ jobs:
       - name: CLI help
         run: npm run cli -- --help
 
-      - name: tauri dev startup
+      - name: tauri dev startup while cargo compiles
         run: npm run tauri:dev
         env:
           SKILL_HIVE_TAURI_DEV_PROBE: "1"
