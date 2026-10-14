@@ -32,12 +32,12 @@ fn hive_db_migrates_to_v8_and_layout_is_created() {
     let version: u32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 8, "hive.db must migrate to schema v8");
+    assert_eq!(version, 9, "hive.db must migrate to schema v9");
     run_migrations(&conn).unwrap();
     let again: u32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(again, 8);
+    assert_eq!(again, 9);
 
     let store = SkillStore::new(&db_path).unwrap();
     assert_eq!(

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use clap::{Parser, Subcommand};
+use hive_core::authoring::Profile;
 use hive_core::backup::git_backup;
 use hive_core::db::skill_store::{ScenarioRecord, SkillStore};
 use hive_core::deploy::scenario_service::{self, DeployIntent, SyncOne};
@@ -99,6 +100,20 @@ enum AgentsCmd {
         #[arg(long)]
         path: PathBuf,
     },
+    Def {
+        #[command(subcommand)]
+        command: AgentDefCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum AgentDefCmd {
+    Validate {
+        #[arg(long)]
+        path: PathBuf,
+        #[arg(long, default_value_t = false)]
+        plugin: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -175,6 +190,12 @@ enum SkillsCmd {
     Tag {
         #[command(subcommand)]
         command: TagCmd,
+    },
+    Validate {
+        #[arg(long)]
+        path: PathBuf,
+        #[arg(long, default_value = "portable")]
+        profile: String,
     },
 }
 
@@ -516,11 +537,45 @@ fn agents(ctx: &Ctx, command: &AgentsCmd) -> Result<Value, Fail> {
             };
             Ok(json!({"command": "agents.add-custom", "key": key, "result": label}))
         }
+        AgentsCmd::Def { command } => match command {
+            AgentDefCmd::Validate { path, plugin } => {
+                let findings = hive_core::authoring::validate_agent(path, *plugin);
+                let errors = findings
+                    .iter()
+                    .filter(|finding| finding.severity == hive_core::authoring::Severity::Error)
+                    .count();
+                Ok(
+                    json!({"command": "agents.def.validate", "errors": errors, "findings": findings}),
+                )
+            }
+        },
+    }
+}
+
+fn profile_name(profile: Profile) -> &'static str {
+    match profile {
+        Profile::Portable => "portable",
+        Profile::ClaudeCode => "claude-code",
     }
 }
 
 fn skills(ctx: &Ctx, command: &SkillsCmd) -> Result<Value, Fail> {
     match command {
+        SkillsCmd::Validate { path, profile } => {
+            let profile = Profile::parse(profile)
+                .ok_or_else(|| Fail::usage("profile must be portable or claude-code"))?;
+            let findings = hive_core::authoring::validate_skill(path, profile);
+            let errors = findings
+                .iter()
+                .filter(|finding| finding.severity == hive_core::authoring::Severity::Error)
+                .count();
+            Ok(json!({
+                "command": "skills.validate",
+                "profile": profile_name(profile),
+                "errors": errors,
+                "findings": findings
+            }))
+        }
         SkillsCmd::List => {
             let rows = ctx
                 .store

@@ -1,0 +1,18 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-14T01:36:58+00:00",
+  "finished": null,
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {},
+  "attempts": [],
+  "acceptance": [],
+  "events": [
+    {
+      "at": "2026-10-14T01:57:37+00:00",
+      "type": "decision",
+      "msg": "graphifyy 0.9.90 provides the graphify CLI. extract --code-only --force and cluster-only --no-viz --no-label wrote graphify-out/graph.json (172 communities). n1 owns communities 1, 7, 8, 9, 10, 63, and 76 because they share tests.rs. n2 owns communities 31, 46, 60, and 64 because they share App.tsx. Shadcn communities and the vendored reference skill_store were not given nodes."
+    }
+  ],
+  "completion": null
+}

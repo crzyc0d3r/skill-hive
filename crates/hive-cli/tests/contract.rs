@@ -322,6 +322,40 @@ fn contract_suite_exercises_every_subcommand() {
     assert_eq!(code, 0, "{parsed}");
     seen.push(record(state, &parsed));
 
+    let (code, parsed) = run(
+        state,
+        &config,
+        &[
+            "skills",
+            "validate",
+            "--path",
+            skill_src.to_str().unwrap(),
+            "--profile",
+            "portable",
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+    let agent = state.join("reviewer.md");
+    fs::write(
+        &agent,
+        "---\nname: reviewer\ndescription: Reviews code.\nmodel: sonnet\n---\nReview.\n",
+    )
+    .unwrap();
+    let (code, parsed) = run(
+        state,
+        &config,
+        &[
+            "agents",
+            "def",
+            "validate",
+            "--path",
+            agent.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+
     let (code, parsed) = run(state, &config, &["skills", "remove", "--id", &id]);
     assert_eq!(code, 0, "{parsed}");
     seen.push(record(state, &parsed));
