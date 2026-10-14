@@ -310,8 +310,8 @@ fn scrub_removes_secrets_from_logs_payloads_and_debug() {
     let cleaned = scrub(&leaked, &[secret.to_string()]);
     assert!(!cleaned.contains(secret));
     assert!(cleaned.contains("<redacted>"));
-    let vendor = scrub("sk-ant-phase4-fixture-secret", &[]);
-    assert!(!vendor.contains("sk-ant-phase4-fixture-secret"));
+    let vendor = scrub("sk-ant-endpoint-fixture-secret", &[]);
+    assert!(!vendor.contains("sk-ant-endpoint-fixture-secret"));
     let hidden = SecretString::new(secret);
     assert!(!format!("{hidden:?}").contains(secret));
     assert_eq!(hidden.expose(), secret);
@@ -481,7 +481,7 @@ fn record_then_replay_is_stable_and_costs_zero() {
         max_retries: 0,
         limiter: Limiter::new(1),
         sleeper: Box::new(NoopSleeper::new()),
-        secrets: vec!["sk-ant-phase4-fixture-secret".into()],
+        secrets: vec!["sk-ant-endpoint-fixture-secret".into()],
         pricing: Pricing::anthropic_defaults("claude-opus-5-5").unwrap(),
         provider_id: "scripted".into(),
         hits: Mutex::new(0),
@@ -539,7 +539,7 @@ fn record_then_replay_is_stable_and_costs_zero() {
 
 #[test]
 fn anthropic_openai_and_ollama_answer_on_localhost() {
-    let secret = "sk-ant-phase4-fixture-secret";
+    let secret = "sk-ant-endpoint-fixture-secret";
     let calls = Arc::new(AtomicUsize::new(0));
     let seen = Arc::new(Mutex::new(Vec::new()));
     let calls_h = calls.clone();
@@ -620,7 +620,7 @@ fn http_429_and_a_truncated_stream_are_retried() {
     let provider = AnthropicProvider::new(
         "anthropic",
         &server.base,
-        SecretString::new("sk-ant-phase4-fixture-secret"),
+        SecretString::new("sk-ant-endpoint-fixture-secret"),
     );
     let middleware = Middleware {
         mode: RunMode::Live,
@@ -654,7 +654,7 @@ fn http_429_and_a_truncated_stream_are_retried() {
 
 #[test]
 fn seven_stage_probe_covers_anthropic_ollama_and_claude_cli() {
-    let secret = "sk-ant-phase4-fixture-secret";
+    let secret = "sk-ant-endpoint-fixture-secret";
     let server = serve(Arc::new(|_method, path, headers, body| {
         if path.ends_with("/api/tags") {
             return (200, r#"{"models":[{"name":"fixture-model"}]}"#.into());

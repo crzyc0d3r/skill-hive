@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn credentials_round_trip_on_the_platform_backend() {
         let tmp = tempfile::tempdir().unwrap();
-        let account = format!("phase2-{}", std::process::id());
+        let account = format!("backup-{}", std::process::id());
         let secret = "local-bare-remote-token";
         let kind = store_credential(&account, secret, tmp.path()).unwrap();
         if cfg!(target_os = "linux")

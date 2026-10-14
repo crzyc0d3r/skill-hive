@@ -4,7 +4,7 @@ Phase 1 exit criterion 6 asks for a design review of every Phase 1 screen on Web
 
 ## What CI can review
 
-`e2e/phase1-visual.spec.ts` runs in the frontend workflow on ubuntu-22.04 with Playwright Chromium. For each Phase 1 screen, in light and dark, at 1100 by 640, it checks:
+`e2e/shell-visual.spec.ts` runs in the frontend workflow on ubuntu-22.04 with Playwright Chromium. For each shell screen, in light and dark, at 1100 by 640, it checks:
 
 - the screen landmark is visible
 - the status bar reads Skill Hive 0.0.1

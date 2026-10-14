@@ -9,13 +9,14 @@ import { listBaseEntries } from "../../lib/ipc/settings";
 import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, t } from "../../lib/i18n";
-import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "../../lib/phase1/client";
-import { moveById } from "../../lib/phase1/model";
-import { lobsterAgents } from "../../lib/phase2/model";
-import { useProjectDot } from "../../lib/phase2/store";
-import { SKILL_TEMPLATES } from "../../lib/phase3/model";
-import { closePicker, createSkill, openPicker, useAuthoring } from "../../lib/phase3/store";
-import { CloseGuardDialog, HelpDialog } from "../../views/phase2/screens";
+import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
+import { moveById } from "@/features/library/model";
+import { lobsterAgents } from "@/features/lobster/model";
+import { useProjectDot } from "@/features/project/store";
+import { SKILL_TEMPLATES } from "@/lib/authoring/model";
+import { closePicker, createSkill, openPicker, useAuthoring } from "@/lib/authoring/store";
+import { CloseGuardDialog } from "./CloseGuardDialog";
+import { HelpDialog } from "./HelpDialog";
 import { Kbd } from "../Kbd";
 import { StatusBanner } from "../StatusBanner";
 
@@ -509,7 +510,7 @@ function runAction(href: string, navigate: (path: string) => void): void {
 
 export interface ShellOutletContext {
   listing: string[];
-  skills: import("../../lib/phase1/model").SkillCard[];
+  skills: import("@/features/library/model").SkillCard[];
   presets: PresetRow[];
   setPresets: (next: PresetRow[]) => void;
   agents: AgentRow[];

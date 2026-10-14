@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { demoEnabled } from "../phase1/demo";
+import { demoEnabled } from "../demo";
 import type { IpcCommands } from "./ipc";
 
 function demoSettingKey(key: string) {

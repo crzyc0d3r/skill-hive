@@ -290,7 +290,7 @@ fn touches_central_repo(event: &Event) -> bool {
 }
 
 fn notify_central_change() {
-    // Auto-backup lands in Phase 2. The call site stays so that reconnecting
+    // Auto-backup is not connected here. The call site stays so that reconnecting
     // it does not require another pass over the watch loop.
 }
 

@@ -187,7 +187,7 @@ try {
   await click("[data-testid=backup-now]");
   await click("[data-testid=backup-restore]");
   await find("[data-testid=backup]");
-  console.log("tauri-driver suite: phase 1 routes plus project, marketplace, update, and backup");
+  console.log("tauri-driver suite: shell routes plus project, marketplace, update, and backup");
 } finally {
   if (promoter) clearInterval(promoter);
   if (session) {

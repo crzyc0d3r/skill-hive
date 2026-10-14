@@ -4,22 +4,22 @@ Phase 2 covers every parity row marked *should*, plus the *later* rows that shar
 
 | Priority | Row | Status | Evidence |
 |---|---|---|---|
-| should | Dashboard recent activity | done | Phase 1 `phase1.test.tsx` empty dashboard; the recent list is `dashboard.recent` |
-| should | Sidebar Backup | done | `NAV_ITEMS` `/backup` and `e2e/phase2-flows.spec.ts` restore flow |
-| should | Sidebar Project Workspaces | done | `AppShell` project row and `sidebar-project-dot` in `src/test/phase2.test.tsx` |
+| should | Dashboard recent activity | done | `src/features/dashboard/view.test.tsx` empty dashboard; the recent list is `dashboard.recent` |
+| should | Sidebar Backup | done | `NAV_ITEMS` `/backup` and `e2e/backup-flows.spec.ts` restore flow |
+| should | Sidebar Project Workspaces | done | `AppShell` project row and `sidebar-project-dot` in `src/features/project/view.test.tsx` |
 | should | Relink / Keep local copy | done | `UpdateFlow` buttons; Rust `updates::tests` |
 | should | Git status button and Needs attention badge | done | `GitStatusButton` and the inert `library.needsAttention` badge. Conflict actions stay deferred with the merge engine |
 | should | Detail panel Project Workspaces | done | `library.detail.projects` in `LibraryView` |
-| should | skills.sh marketplace | done | `marketplace.rs` fixtures and zip limits; `phase2.test.tsx` search, filter, install, cancel |
+| should | skills.sh marketplace | done | `marketplace.rs` fixtures and zip limits; `src/features/install/marketplace.test.tsx` search, filter, install, cancel |
 | should | Global workspace batch remove / delete | done | Phase 1 agent-page vitest |
-| should | Project route, card, batch, detail, add from library | done | `/project/:id` in `ProjectView`; dot, two agents, toggle, pull in `phase2.test.tsx` |
+| should | Project route, card, batch, detail, add from library | done | `/project/:id` in `ProjectView`; dot, two agents, toggle, pull in `src/features/project/view.test.tsx` |
 | should | Backup route, git setup, recovery, first-run | done | `BackupView` setup, recovery, set-aside, first-run copy; Rust `git_backup` round trip |
 | should | Close behaviour and tray settings | done | `CloseGuardDialog` remember path; `effective_close` when the tray is hidden |
 | should | Network proxy URL | done | `proxyOk` and Settings save; Rust `diagnostics::validate_proxy_url`; `proxy_url` stays in `SENSITIVE_KEYS` |
 | should | Skill auto-update frequency | done | Settings Off / Daily / Auto-apply; Rust `AutoUpdateSchedule` |
 | should | About extras | done | Report, export, crash and repo banners in Settings About. In-app install of an updater package stays platform-specific |
 | should | Report Issue and Export Logs | done | About link to the GitHub issue form and Export Logs status. Rust `export_logs_zip` redacts tokens, email, and home paths |
-| should | Help dialog | done | Eight `help.card.*` entries; `phase2.test.tsx` counts `[data-help-card]` |
+| should | Help dialog | done | Eight `help.card.*` entries; `src/components/shell/dialogs.test.tsx` counts `[data-help-card]` |
 | should | System tray | done | `build_tray_menu_from_data` and `src-tauri/src/tray.rs`. Interactive icon clicks need a display; see `m2-limits.md` |
 | should | Startup app-update notification toast | done | `startup.toast` when `skill-hive-app-update` is set |
 | later | Lobster Agents | done | Sidebar hidden unless `skill-hive-home` contains `.openclaw`; `/global-workspace/openclaw` redirects |
