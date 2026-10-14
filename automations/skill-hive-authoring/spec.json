@@ -1,0 +1,35 @@
+{
+  "inputs": {
+    "sources": ["src", "src-tauri", "crates/hive-core"],
+    "scope": ["docs/authoring-wiring.md", "automations/skill-hive-authoring/**"],
+    "checks": [
+      {"text": "record_effect is gone from the app", "cmd": "python3 automations/skill-hive-authoring/code/verify_commands.py"},
+      {"text": "persist.ts is gone", "cmd": "test ! -e src/lib/ipc/persist.ts"},
+      {"text": "the authoring table names keyring and the updater", "cmd": "grep -q keyring docs/authoring-wiring.md && grep -q download_and_install_update docs/authoring-wiring.md"}
+    ]
+  },
+  "nodes": [
+    {
+      "id": "n1_verify",
+      "kind": "code",
+      "scope": "Confirm record_effect is gone and the dedicated authoring commands are registered in the app source.",
+      "reads": ["src-tauri/src/commands.rs", "src-tauri/src/lib.rs", "src/lib/ipc/actions.ts"],
+      "run": "python3 automations/skill-hive-authoring/code/verify_commands.py",
+      "writes": "automations/skill-hive-authoring/out/n1_verify.md",
+      "check": {"cmd": "grep -q 'no record_effect' automations/skill-hive-authoring/out/n1_verify.md"},
+      "deps": [],
+      "risky": false
+    },
+    {
+      "id": "n2_table",
+      "kind": "code",
+      "scope": "Publish the before and after table of authoring controls to docs/authoring-wiring.md.",
+      "reads": ["automations/skill-hive-authoring/code/authoring-wiring.md", "automations/skill-hive-authoring/out/n1_verify.md"],
+      "run": "python3 automations/skill-hive-authoring/code/publish_doc.py",
+      "writes": "docs/authoring-wiring.md",
+      "check": {"cmd": "grep -q keyring docs/authoring-wiring.md && grep -q download_and_install_update docs/authoring-wiring.md"},
+      "deps": ["n1_verify"],
+      "risky": true
+    }
+  ]
+}

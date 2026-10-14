@@ -22,8 +22,8 @@ pub use pricing::{cost_usd, lookup, seed_models, Pricing};
 pub use probe::{probe_offline, probe_provider, ProbeStage};
 pub use scripted::ScriptedProvider;
 pub use secrets::{
-    clear_provider_secret, has_provider_secret, load_env_secret, load_provider_secret,
-    store_provider_secret, SecretBackend,
+    clear_git_token, clear_provider_secret, has_git_token, has_provider_secret, load_env_secret,
+    load_provider_secret, store_git_token, store_provider_secret, SecretBackend,
 };
 pub use store::{
     get_provider, list_named_providers, list_providers, provider_public_json, referenced_by_preset,

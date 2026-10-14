@@ -65,6 +65,34 @@ fn updater_proxy(url: String) -> Option<String> {
 }
 
 #[tauri::command]
+async fn download_and_install_update(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let outcome = match app.updater() {
+        Ok(updater) => match updater.check().await {
+            Ok(Some(update)) => {
+                let version = update.version.clone();
+                match update.download_and_install(|_, _| {}, || {}).await {
+                    Ok(()) => format!("installed:{version}"),
+                    Err(err) => format!("download-failed:{err}"),
+                }
+            }
+            Ok(None) => "current".into(),
+            Err(err) => format!("unavailable:{err}"),
+        },
+        Err(err) => format!("unavailable:{err}"),
+    };
+    if let Some(store) = app.try_state::<Arc<SkillStore>>() {
+        let _ = store.set_setting("updater_last_result", &outcome);
+    }
+    Ok(outcome)
+}
+
+#[tauri::command]
+fn rebuild_tray_menu(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    tray::refresh(&app).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 fn list_base_entries() -> Result<Vec<String>, AppError> {
     let dir = central_repo::skills_dir();
     let mut names = Vec::new();
@@ -313,7 +341,29 @@ pub fn run() {
             commands::fetch_leaderboard,
             commands::search_skillssh,
             commands::install_from_skillssh,
-            commands::record_effect
+            commands::cancel_market_install,
+            commands::save_skill_draft,
+            commands::snapshot_skill_draft,
+            commands::restore_skill_draft,
+            commands::publish_skill_draft,
+            commands::fix_skill_draft,
+            commands::save_agent_draft,
+            commands::export_agent_draft,
+            commands::save_generated_draft,
+            commands::apply_optimized_description,
+            commands::record_compare_verdict,
+            commands::write_history_baseline,
+            commands::set_provider_secret,
+            commands::clear_endpoint_secret,
+            commands::store_backup_pat,
+            commands::revoke_backup_token,
+            commands::set_aside_backup,
+            commands::pull_project_center,
+            commands::export_diagnostics,
+            commands::git_backup_restore_remote,
+            commands::skip_first_run_restore,
+            download_and_install_update,
+            rebuild_tray_menu
         ])
         .run(tauri::generate_context!())
         .expect("error while running Skill Hive");

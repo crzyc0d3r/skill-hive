@@ -33,6 +33,16 @@ writeFileSync(path.join(seededClaude, "SKILL.md"), "---\nname: seeded-claude\nde
 const localSkill = path.join(base, "local-skill");
 mkdirSync(localSkill, { recursive: true });
 writeFileSync(path.join(localSkill, "SKILL.md"), "---\nname: local-skill\ndescription: local\n---\nLocal body\n");
+const restoreWork = path.join(base, "restore-work");
+mkdirSync(restoreWork, { recursive: true });
+writeFileSync(path.join(restoreWork, "restored-marker.txt"), "restored-from-remote\n");
+git(restoreWork, ["init", "-b", "main"]);
+git(restoreWork, ["config", "user.email", "hive@localhost"]);
+git(restoreWork, ["config", "user.name", "Skill Hive"]);
+git(restoreWork, ["add", "."]);
+git(restoreWork, ["commit", "-m", "marker"]);
+const restoreBare = path.join(base, "restore.git");
+execFileSync("git", ["clone", "--bare", restoreWork, restoreBare], { stdio: "inherit" });
 const gitWork = path.join(base, "git-work");
 const gitSkill = path.join(gitWork, "seeded-git");
 mkdirSync(gitSkill, { recursive: true });
@@ -47,6 +57,8 @@ git(gitWork, ["add", "."]);
 git(gitWork, ["commit", "-m", "seed"]);
 const bare = path.join(base, "seeded.git");
 execFileSync("git", ["clone", "--bare", gitWork, bare], { stdio: "inherit" });
+process.env.SKILL_HIVE_MARKET_FIXTURE = localSkill;
+process.env.SKILL_HIVE_MARKET_PAUSE = "1";
 process.env.SKILL_HIVE_CONFIG_DIR = path.join(base, "config");
 const webviewProfile = path.join(base, "webview-profile");
 mkdirSync(webviewProfile, { recursive: true });
@@ -239,8 +251,14 @@ try {
   }
   function skillNames() {
     const db = path.join(base, "hive.db");
+    if (!existsSync(db)) return "";
     const script = `import sqlite3; c=sqlite3.connect(${JSON.stringify(db)}); print("\\n".join(row[0] for row in c.execute("select name from skills")))`;
     return execFileSync(pythonBin(), ["-c", script], { encoding: "utf8" });
+  }
+  function sql(query) {
+    const db = path.join(base, "hive.db");
+    const script = `import sqlite3; c=sqlite3.connect(${JSON.stringify(db)}); row=c.execute(${JSON.stringify(query)}).fetchone(); print("" if row is None or row[0] is None else row[0])`;
+    return execFileSync(pythonBin(), ["-c", script], { encoding: "utf8" }).trim();
   }
   function setting(key) {
     const db = path.join(base, "hive.db");
@@ -257,6 +275,46 @@ try {
     const id = await find(selector);
     await call("POST", `${prefix}/element/${id}/clear`, {});
     await call("POST", `${prefix}/element/${id}/value`, { text: value, value: [...value] });
+  }
+  async function openPath(pathname) {
+    const current = await call("GET", `${prefix}/url`);
+    const origin = new URL(String(current.value)).origin;
+    await call("POST", `${prefix}/url`, { url: `${origin}${pathname}` });
+  }
+  async function waitUntil(label, predicate, timeout = 15000) {
+    const deadline = Date.now() + timeout;
+    let last = "";
+    while (Date.now() < deadline) {
+      try {
+        const value = await predicate();
+        if (value) return value;
+        last = String(value);
+      } catch (err) {
+        last = err.message;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error(`${label} timed out\n${last}`);
+  }
+  function walkFiles(dir, found = []) {
+    if (!existsSync(dir)) return found;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walkFiles(full, found);
+      else if (entry.isFile()) found.push(full);
+    }
+    return found;
+  }
+  function treeContains(token) {
+    const needle = Buffer.from(token);
+    return walkFiles(base).some((file) => {
+      if (file.includes(`${path.sep}webview-profile${path.sep}`)) return false;
+      try {
+        return readFileSync(file).includes(needle);
+      } catch {
+        return false;
+      }
+    });
   }
   async function restart() {
     await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE" }).catch(() => {});
@@ -277,6 +335,19 @@ try {
     session = created.value?.sessionId ?? created.sessionId;
     prefix = `/session/${session}`;
     await find("[data-testid=sidebar]");
+  }
+
+  await click("a[href='/install']");
+  await click("[data-testid=tab-leaderboard]");
+  await find("[data-testid=marketplace]");
+  await clickText("Install");
+  await find("//button[normalize-space()=\"Cancel install\"]", "xpath");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await clickText("Cancel install");
+  const cancelDeadline = Date.now() + 12000;
+  while (Date.now() < cancelDeadline) {
+    if (skillNames().includes("local-skill")) throw new Error("cancel did not stop the marketplace install");
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   await click("a[href='/install']");
@@ -373,7 +444,142 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
-  console.log("tauri-driver suite: shell routes plus install, scan, delete, sync, agent, git, and backup");
+  const endpointSecret = "sk-authoring-endpoint-token";
+  const backupPat = "ghp_authoringPAT0123456789abcd";
+  const authoring = path.join(base, "skills", ".skill-hive", "authoring");
+
+  await openPath("/skills/warnings/edit");
+  await find("[data-testid=skill-editor]");
+  await clickText("Save");
+  await waitUntil("skill draft", () => existsSync(path.join(authoring, "skill", "warnings", "SKILL.md")));
+  await clickText("Snapshot version");
+  await waitUntil(
+    "snapshot",
+    () => walkFiles(path.join(authoring, "skill", "warnings-workspace", "versions")).some((file) => file.endsWith(`${path.sep}SKILL.md`)),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await typeInto('input[aria-label="Description"]', "authoring-restore-marker");
+  await clickText("Save");
+  await waitUntil("changed draft", () => readFileSync(path.join(authoring, "skill", "warnings", "SKILL.md"), "utf8").includes("authoring-restore-marker"));
+  await clickText("Versions");
+  await clickText("Restore into draft");
+  await waitUntil(
+    "restored draft",
+    () => {
+      const text = readFileSync(path.join(authoring, "skill", "warnings", "SKILL.md"), "utf8");
+      return text.includes("Use <files> carefully") && !text.includes("authoring-restore-marker");
+    },
+  );
+  const warningSkill = path.join(authoring, "skill", "warnings", "SKILL.md");
+  const warningEvals = path.join(authoring, "skill", "warnings", "evals", "evals.json");
+  await clickText("Fix");
+  await waitUntil("unknown key removed", () => !readFileSync(warningSkill, "utf8").includes("unknown-key:"));
+  await clickText("Fix");
+  await waitUntil("missing reference", () => existsSync(path.join(authoring, "skill", "warnings", "references", "missing.md")));
+  await clickText("Fix");
+  await clickText("Fix");
+  await waitUntil("evals renamed", () => readFileSync(warningEvals, "utf8").includes('"warnings"'));
+
+  await openPath("/skills/preview-skill/edit");
+  await find("[data-testid=skill-editor]");
+  await clickText("Save");
+  await waitUntil("preview draft", () => existsSync(path.join(authoring, "skill", "preview-skill", "SKILL.md")));
+  await clickText("Publish");
+  await waitUntil("published skill", () => existsSync(path.join(base, "skills", "preview-skill", "SKILL.md")));
+
+  await openPath("/agents/reviewer/edit");
+  await find("[data-testid=agent-editor]");
+  await clickText("Save");
+  await waitUntil("agent draft", () => readFileSync(path.join(authoring, "agent", "reviewer", "AGENT.md"), "utf8").includes("disallowed_tools"));
+  await clickText("Fix");
+  await waitUntil("agent fix", () => readFileSync(path.join(authoring, "agent", "reviewer", "AGENT.md"), "utf8").includes("disallowedTools"));
+  await clickText("User");
+  await waitUntil("agent export", () => existsSync(path.join(authoring, "agent", "reviewer", "export", "AGENT.md")));
+
+  await openPath("/generate/authoring");
+  await find("[data-testid=generate-wizard]");
+  await typeInto("#generate-goal", "authoring-goal");
+  await clickText("Continue");
+  await clickText("Accept all defaults");
+  await clickText("Continue");
+  await clickText("Open diff");
+  await clickText("Save");
+  await waitUntil("generated draft", () => readFileSync(path.join(authoring, "generate", "draft", "SKILL.md"), "utf8").includes("authoring-goal"));
+
+  await openPath("/testing");
+  await find("[data-testid=suite]");
+  await clickText("Optimize description");
+  await clickText("Apply");
+  await waitUntil("optimized suite", () => {
+    const evals = readFileSync(path.join(authoring, "suite", "optimized", "evals", "evals.json"), "utf8");
+    const skill = readFileSync(path.join(authoring, "generate", "draft", "SKILL.md"), "utf8");
+    return evals.includes("authoring-goal") && skill.includes("description: authoring-goal");
+  });
+
+  await openPath("/compare/comparison");
+  await find("[data-testid=compare]");
+  await clickText("Record verdict");
+  await waitUntil("compare verdict", () => sql("select verdict from comparisons where id = 'comparison'") === "Output A");
+
+  await openPath("/skills/warnings/history");
+  await find("[data-testid=history]");
+  await clickText("Baseline");
+  await waitUntil("history baseline", () => {
+    const history = readFileSync(path.join(authoring, "history", "baseline", "history.json"), "utf8");
+    return history.includes("v2-optimized") && history.includes("\"is_current_best\": true");
+  });
+
+  await openPath("/settings/endpoints");
+  await find("[data-testid=endpoints]");
+  await typeInto('input[type="password"]', endpointSecret);
+  await clickText("Save key");
+  await waitUntil("endpoint secret stored", () => {
+    const backend = setting("endpoint_secret_backend");
+    const labelled = process.platform !== "linux" || walkFiles(path.join(base, "secrets")).some((file) => readFileSync(file, "utf8").includes("label=skill-hive-provider"));
+    return (backend === "keyring" || backend === "labelledfallback") && labelled && !treeContains(endpointSecret);
+  });
+
+  await openPath("/backup");
+  await find("[data-testid=first-run-restore]");
+  await typeInto('input[aria-label="Personal access token"]', backupPat);
+  await waitUntil("backup token stored", () => {
+    const backend = setting("backup_pat_backend");
+    const labelled = process.platform !== "linux" || walkFiles(path.join(base, "secrets")).some((file) => readFileSync(file, "utf8").includes("label=skill-hive-git-backup"));
+    return (backend === "keyring" || backend === "labelledfallback") && labelled && !treeContains(backupPat);
+  });
+  await clickText("Revoke authorization");
+  await waitUntil("backup token revoked", () => setting("backup_pat_backend") === "cleared" && !treeContains(backupPat) && !walkFiles(path.join(base, "secrets")).some((file) => readFileSync(file, "utf8").includes("label=skill-hive-git-backup")));
+  await clickText("Set aside local changes");
+  await waitUntil("set aside", () => setting("backup_aside").includes(`${path.sep}aside${path.sep}`) && walkFiles(path.join(base, "aside")).some((file) => file.endsWith(`${path.sep}note.txt`)));
+  await typeInto('input[aria-label="Restore remote"]', restoreBare);
+  await clickText("Use remote library");
+  await waitUntil("first-run restore", () => readFileSync(path.join(base, "skills", "restored-marker.txt"), "utf8").includes("restored-from-remote"));
+
+  await openPath("/project/fixture");
+  await click("[data-testid=link-project]");
+  await clickText("Pull center");
+  await waitUntil("project center", () => readFileSync(path.join(base, "skills", "projects", "notes", "SKILL.md"), "utf8").includes("center v2"));
+
+  const diagnostics = path.join(base, "diagnostics.zip");
+  await openPath("/settings?tab=about");
+  await find("[data-testid=settings]");
+  await typeInto('input[aria-label="Diagnostics path"]', diagnostics);
+  await clickText("Export Logs");
+  await waitUntil("diagnostics zip", () => {
+    if (!existsSync(diagnostics)) return false;
+    const text = execFileSync(pythonBin(), ["-c", `import zipfile; print(zipfile.ZipFile(${JSON.stringify(diagnostics)}).read("logs/app.log").decode())`], { encoding: "utf8" });
+    return text.includes("<token>") && !text.includes("ghp_");
+  });
+  await clickText("Check for Updates");
+  await waitUntil("updater result", () => /^(installed:|current|unavailable:|download-failed:)/.test(setting("updater_last_result")), 25000);
+
+  await clickText("New Preset");
+  await waitUntil("tray presets", () => {
+    const menu = readFileSync(path.join(base, "tray-menu.json"), "utf8");
+    return menu.includes("apply:") && menu.includes("Preset");
+  });
+
+  console.log("tauri-driver suite: shell routes, install, and authoring artifacts");
 } finally {
   if (promoter) clearInterval(promoter);
   if (session) {

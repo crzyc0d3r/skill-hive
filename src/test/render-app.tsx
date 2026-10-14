@@ -30,7 +30,7 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
     if (failSettings) throw new Error("database unreadable");
     return text("key") === "theme" ? "light" : null;
   }
-  if (cmd === "set_settings" || cmd === "log_startup_event" || cmd === "record_effect") return null;
+  if (cmd === "set_settings" || cmd === "log_startup_event") return null;
   if (cmd === "list_base_entries") return [];
   if (cmd === "check_app_update") return "current";
   if (cmd === "get_managed_skills") return state.skills;

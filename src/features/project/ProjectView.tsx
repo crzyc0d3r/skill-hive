@@ -8,8 +8,7 @@ import {
   type ProjectSkill,
 } from "@/features/project/model";
 import { setProjectSkills } from "@/features/project/store";
-import { addProject, setSkillsEnabled, syncSkillToTool } from "@/lib/ipc/actions";
-import { persistEffect } from "@/lib/ipc/persist";
+import { addProject, pullProjectCenter, setSkillsEnabled, syncSkillToTool } from "@/lib/ipc/actions";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -58,7 +57,7 @@ export function ProjectView() {
           <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { update(toggleSkill(skill, !skill.enabled)); void setSkillsEnabled([skill.id], !skill.enabled); }}>
             {t("project.disable")}
           </button>
-          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { update(pullCenter(skill)); persistEffect("project", skill.id, skill.center); }}>
+          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { update(pullCenter(skill)); void pullProjectCenter(skill.name, skill.center); }}>
             {t("project.pull")}
           </button>
           <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { update({ ...skill, enabled: true }); void setSkillsEnabled([skill.id], true); }}>

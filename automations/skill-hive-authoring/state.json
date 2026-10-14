@@ -1,0 +1,295 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-14T18:11:28+00:00",
+  "finished": "2026-10-14T18:12:25+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n1_verify": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "e281e6774f547939bbaf1bf473f35e6d88034bd15c0ce67637cea4e17bedda69",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q 'no record_effect' automations/skill-hive-authoring/out/n1_verify.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: verified 21 authoring commands and no record_effect"
+          ]
+        ],
+        "at": "2026-10-14T18:12:12+00:00",
+        "output_hash": "e281e6774f547939bbaf1bf473f35e6d88034bd15c0ce67637cea4e17bedda69",
+        "log": "automations/skill-hive-authoring/runs/r1/gates/n1_verify.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q 'no record_effect' automations/skill-hive-authoring/out/n1_verify.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: verified 21 authoring commands and no record_effect"
+            ]
+          ],
+          "at": "2026-10-14T18:12:12+00:00",
+          "output_hash": "e281e6774f547939bbaf1bf473f35e6d88034bd15c0ce67637cea4e17bedda69",
+          "log": "automations/skill-hive-authoring/runs/r1/gates/n1_verify.a1.md"
+        }
+      ]
+    },
+    "n2_table": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "2dd20819bb9a8b932a38eb418257d90121c2854ec41d7830bd990a7053c3add5",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`grep -q keyring docs/authoring-wiring.md && grep -q download_and_install_update docs/authoring-wiring.md` → exit 0: (no output)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: wrote /workspace/docs/authoring-wiring.md (3916 bytes)"
+          ]
+        ],
+        "at": "2026-10-14T18:12:12+00:00",
+        "output_hash": "2dd20819bb9a8b932a38eb418257d90121c2854ec41d7830bd990a7053c3add5",
+        "log": "automations/skill-hive-authoring/runs/r1/gates/n2_table.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`grep -q keyring docs/authoring-wiring.md && grep -q download_and_install_update docs/authoring-wiring.md` → exit 0: (no output)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote /workspace/docs/authoring-wiring.md (3916 bytes)"
+            ]
+          ],
+          "at": "2026-10-14T18:12:12+00:00",
+          "output_hash": "2dd20819bb9a8b932a38eb418257d90121c2854ec41d7830bd990a7053c3add5",
+          "log": "automations/skill-hive-authoring/runs/r1/gates/n2_table.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_verify",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T18:12:12+00:00",
+      "finished": "2026-10-14T18:12:12+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-authoring/out/n1_verify.md",
+      "evidence": "exit 0: verified 21 authoring commands and no record_effect",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "automations/skill-hive-authoring/runs/r1/snapshots/n1_verify/a1/n1_verify.md"
+    },
+    {
+      "node": "n2_table",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-14T18:12:12+00:00",
+      "finished": "2026-10-14T18:12:12+00:00",
+      "verdict": "pass",
+      "output": "docs/authoring-wiring.md",
+      "evidence": "exit 0: wrote /workspace/docs/authoring-wiring.md (3916 bytes)",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "skipped: docs/authoring-wiring.md did not exist yet"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/skill-hive-authoring/code/verify_commands.py` → exit 0: verified 21 authoring commands and no record_effect",
+      "at": "2026-10-14T18:12:25+00:00"
+    },
+    {
+      "index": 1,
+      "verdict": "pass",
+      "evidence": "`test ! -e src/lib/ipc/persist.ts` → exit 0: (no output)",
+      "at": "2026-10-14T18:12:25+00:00"
+    },
+    {
+      "index": 2,
+      "verdict": "pass",
+      "evidence": "`grep -q keyring docs/authoring-wiring.md && grep -q download_and_install_update docs/authoring-wiring.md` → exit 0: (no output)",
+      "at": "2026-10-14T18:12:25+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-14T18:12:05+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash 3995620eff9d5b23)"
+    },
+    {
+      "at": "2026-10-14T18:12:05+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto; implementation of commands.rs, lib.rs, and the frontend stores ran inline because they share one write surface"
+    },
+    {
+      "at": "2026-10-14T18:12:05+00:00",
+      "type": "baseline",
+      "msg": "2/5 pass before the run"
+    },
+    {
+      "at": "2026-10-14T18:12:12+00:00",
+      "type": "snapshot",
+      "msg": "n1_verify: saved automations/skill-hive-authoring/out/n1_verify.md to automations/skill-hive-authoring/runs/r1/snapshots/n1_verify/a1/n1_verify.md"
+    },
+    {
+      "at": "2026-10-14T18:12:12+00:00",
+      "type": "gate",
+      "msg": "n1_verify attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T18:12:12+00:00",
+      "type": "snapshot",
+      "msg": "n2_table: skipped: docs/authoring-wiring.md did not exist yet"
+    },
+    {
+      "at": "2026-10-14T18:12:12+00:00",
+      "type": "gate",
+      "msg": "n2_table attempt 1: pass"
+    },
+    {
+      "at": "2026-10-14T18:12:25+00:00",
+      "type": "learn",
+      "msg": "Shared command and store files stay on one inline node; code nodes only verify and publish the table."
+    },
+    {
+      "at": "2026-10-14T18:12:25+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-14T18:12:25+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 3995620eff9d5b23"
+      ],
+      [
+        "n1_verify: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-authoring/out/n1_verify.md (52 bytes)"
+      ],
+      [
+        "n1_verify: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T18:12:12+00:00"
+      ],
+      [
+        "n2_table: output exists and can be opened",
+        "pass",
+        "docs/authoring-wiring.md (3916 bytes)"
+      ],
+      [
+        "n2_table: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-14T18:12:12+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 2 of 2 declared nodes"
+      ],
+      [
+        "acceptance 0: record_effect is gone from the app",
+        "pass",
+        "`python3 automations/skill-hive-authoring/code/verify_commands.py` → exit 0: verified 21 authoring commands and no record_effect"
+      ],
+      [
+        "acceptance 1: persist.ts is gone",
+        "pass",
+        "`test ! -e src/lib/ipc/persist.ts` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 2: the authoring table names keyring and the updater",
+        "pass",
+        "`grep -q keyring docs/authoring-wiring.md && grep -q download_and_install_update docs/authoring-wiring.md` → exit 0: (no output)"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "docs/authoring-wiring.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-14T18:12:05+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "docs/authoring-wiring.md absent"
+      ],
+      [
+        "acceptance 0: record_effect is gone from the app",
+        "pass",
+        "`python3 automations/skill-hive-authoring/code/verify_commands.py` → exit 0: verified 21 authoring commands and no record_effect"
+      ],
+      [
+        "acceptance 1: persist.ts is gone",
+        "pass",
+        "`test ! -e src/lib/ipc/persist.ts` → exit 0: (no output)"
+      ],
+      [
+        "acceptance 2: the authoring table names keyring and the updater",
+        "fail",
+        "`grep -q keyring docs/authoring-wiring.md && grep -q download_and_install_update docs/authoring-wiring.md` → exit 2: [stderr]\ngrep: docs/authoring-wiring.md: No such file or directory"
+      ],
+      [
+        "note",
+        "noted",
+        "record_effect removed in the working tree; authoring doc not published yet"
+      ]
+    ]
+  }
+}

@@ -16,7 +16,7 @@ import {
   setToolOrder,
   removeCustomTool,
 } from "@/lib/ipc/actions";
-import { persistEffect } from "@/lib/ipc/persist";
+import { downloadAndInstallUpdate, exportDiagnostics } from "@/lib/ipc/actions";
 import type { ThemeChoice } from "@/lib/theme";
 import { decideUpdate, desktopPlatform, LINUX_DOWNLOAD_URL } from "@/lib/updater";
 
@@ -59,6 +59,7 @@ export function SettingsView({
   const [trayOn, setTrayOn] = useState(true);
   const [autoApply, setAutoApply] = useState(false);
   const [exported, setExported] = useState(false);
+  const [diagnosticsPath, setDiagnosticsPath] = useState("");
   const [restartArmed, setRestartArmed] = useState(false);
   const crash = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-panic") === "1";
   const repoWarn = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-repo-warn") === "1";
@@ -277,6 +278,7 @@ export function SettingsView({
               });
               setUpdateNote(decision.state === "available" ? t(decision.messageKey, { version: decision.version }) : t(decision.messageKey));
               setUpdateAction(decision.state === "available" ? decision.action : null);
+              void downloadAndInstallUpdate();
               if (decision.state === "available" && decision.action === "install") {
                 localStorage.setItem("skill-hive-pending-install", decision.version);
               } else {
@@ -307,7 +309,11 @@ export function SettingsView({
           {crash ? <p role="alert">{t("settings.about.crash")}</p> : null}
           {repoWarn ? <p role="alert">{t("settings.about.repo")}</p> : null}
           <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href="https://github.com/crzyc0d3r/skill-hive/issues/new" target="_blank" rel="noreferrer">{t("settings.about.report")}</a>
-          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { persistEffect("export", "diagnostics", JSON.stringify({ theme, agents: agents.map((agent) => agent.key) })); setExported(true); }}>{t("settings.about.export")}</button>
+          <label className="mt-2 block">
+            Diagnostics path
+            <input aria-label="Diagnostics path" value={diagnosticsPath} onChange={(event) => setDiagnosticsPath(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
+          </label>
+          <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => { void exportDiagnostics(diagnosticsPath).then(() => setExported(true)); }}>{t("settings.about.export")}</button>
           {exported ? <p role="status">{t("settings.about.exported")}</p> : null}
           {restartArmed ? <p role="status"><button type="button">{t("settings.about.restart")}</button></p> : null}
           <h2 className="mt-4 text-sm font-medium">{t("settings.about.ack")}</h2>
