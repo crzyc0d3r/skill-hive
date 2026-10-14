@@ -1,0 +1,25 @@
+import { cleanup, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it } from "vitest";
+import { resetEndpoints } from "@/features/endpoints/store";
+import { renderShell as renderAt } from "@/test/render-app";
+
+describe("suites", () => {
+  afterEach(() => {
+    cleanup();
+    resetEndpoints();
+    localStorage.clear();
+  });
+
+it("confirms a budget pause and shows the run chip", async () => {
+    const user = userEvent.setup();
+    renderAt("/skills/skill-research/tests");
+    expect(await screen.findByTestId("suite")).toBeInTheDocument();
+    expect(screen.getByTestId("run-chip")).toHaveAttribute("href", "/runs/run-fixture");
+    await user.click(screen.getByRole("link", { name: "Run suite" }));
+    await user.click(await screen.findByRole("button", { name: "Budget" }));
+    expect(screen.getByTestId("budget-dialog")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(screen.getByText("Paused")).toBeInTheDocument();
+  });
+});

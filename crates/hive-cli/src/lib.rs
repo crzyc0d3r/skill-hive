@@ -2,8 +2,10 @@
 //!
 //! Exit codes: 0 success, 1 operational error, 2 usage error (`INVALID_ARGUMENT`).
 
-mod phase4;
-mod phase5;
+mod agent_defs;
+mod eval;
+mod generate;
+mod providers;
 mod schema;
 
 use std::collections::BTreeMap;
@@ -584,43 +586,43 @@ fn dispatch(cli: &Cli) -> Result<Value, Fail> {
 
 fn providers_cmd(command: &ProvidersCmd) -> Result<Value, Fail> {
     match command {
-        ProvidersCmd::List => phase4::providers_list(),
-        ProvidersCmd::Add { id, name, kind } => phase4::providers_add(id, name, kind),
-        ProvidersCmd::SetSecret { id, secret } => phase4::providers_set_secret(id, secret),
-        ProvidersCmd::HasSecret { id } => phase4::providers_has_secret(id),
+        ProvidersCmd::List => providers::providers_list(),
+        ProvidersCmd::Add { id, name, kind } => providers::providers_add(id, name, kind),
+        ProvidersCmd::SetSecret { id, secret } => providers::providers_set_secret(id, secret),
+        ProvidersCmd::HasSecret { id } => providers::providers_has_secret(id),
         ProvidersCmd::Probe { id, offline } => {
             if !offline {
                 return Err(Fail::other(
                     "live vendor probes are unavailable without an API key",
                 ));
             }
-            phase4::providers_probe_offline(id)
+            providers::providers_probe_offline(id)
         }
-        ProvidersCmd::Test { id } => phase5::providers_test(id),
-        ProvidersCmd::Models { id } => phase5::providers_models(id),
+        ProvidersCmd::Test { id } => providers::providers_test(id),
+        ProvidersCmd::Models { id } => providers::providers_models(id),
     }
 }
 
 fn test_cmd(command: &TestCmd) -> Result<Value, Fail> {
     match command {
-        TestCmd::SaveSuite { skill } => phase4::test_save_suite(skill),
+        TestCmd::SaveSuite { skill } => eval::test_save_suite(skill),
         TestCmd::Run { skill, mode } => {
-            phase5::replay_mode(mode)?;
-            phase4::test_run(skill)
+            eval::replay_mode(mode)?;
+            eval::test_run(skill)
         }
-        TestCmd::Show => phase4::test_show(),
-        TestCmd::Suites => phase5::test_suites(),
-        TestCmd::Status => phase5::test_status(),
-        TestCmd::Results => phase5::test_results(),
-        TestCmd::Export => phase5::test_export(),
+        TestCmd::Show => eval::test_show(),
+        TestCmd::Suites => eval::test_suites(),
+        TestCmd::Status => eval::test_status(),
+        TestCmd::Results => eval::test_results(),
+        TestCmd::Export => eval::test_export(),
     }
 }
 
 fn generate_cmd(command: &GenerateCmd) -> Result<Value, Fail> {
     match command {
-        GenerateCmd::Skill { name, replay } => phase5::generate_skill(name, *replay),
-        GenerateCmd::Agent { name, replay } => phase5::generate_agent(name, *replay),
-        GenerateCmd::Evals { name, replay } => phase5::generate_evals(name, *replay),
+        GenerateCmd::Skill { name, replay } => generate::generate_skill(name, *replay),
+        GenerateCmd::Agent { name, replay } => generate::generate_agent(name, *replay),
+        GenerateCmd::Evals { name, replay } => generate::generate_evals(name, *replay),
     }
 }
 
@@ -698,10 +700,10 @@ fn agents(ctx: &Ctx, command: &AgentsCmd) -> Result<Value, Fail> {
                     json!({"command": "agents.def.validate", "errors": errors, "findings": findings}),
                 )
             }
-            AgentDefCmd::List => phase5::agent_def_list(),
-            AgentDefCmd::Show { name } => phase5::agent_def_show(name),
-            AgentDefCmd::Deploy { name } => phase5::agent_def_deploy(name),
-            AgentDefCmd::Undeploy { name } => phase5::agent_def_undeploy(name),
+            AgentDefCmd::List => agent_defs::agent_def_list(),
+            AgentDefCmd::Show { name } => agent_defs::agent_def_show(name),
+            AgentDefCmd::Deploy { name } => agent_defs::agent_def_deploy(name),
+            AgentDefCmd::Undeploy { name } => agent_defs::agent_def_undeploy(name),
         },
     }
 }

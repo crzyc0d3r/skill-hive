@@ -1,5 +1,5 @@
 //! Skill and agent authoring: frontmatter, validation, drafts, and versions.
-//! Phase 4 (providers and the test engine) is intentionally not implemented here.
+//! Providers and the test engine live in their own modules.
 
 pub mod agents;
 pub mod frontmatter;

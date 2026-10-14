@@ -19,7 +19,7 @@ fn suite() -> Suite {
         skill_name: "fixture-skill".into(),
         evals: vec![SuiteCase {
             id: 1,
-            prompt: "Write the fixture answer. token sk-ant-phase4-fixture-secret".into(),
+            prompt: "Write the fixture answer. token sk-ant-endpoint-fixture-secret".into(),
             expected_output: "PINECONE".into(),
             files: Vec::new(),
             expectations: vec![
@@ -70,7 +70,7 @@ fn plan(root: &Path, mode: RunMode) -> Plan {
         crash_after: None,
         recordings: root.join("recordings"),
         personal_skills: None,
-        secret: "sk-ant-phase4-fixture-secret".into(),
+        secret: "sk-ant-endpoint-fixture-secret".into(),
         usd_per_cell: None,
         model: "fixture-model".into(),
         kind: "anthropic".into(),
@@ -274,7 +274,7 @@ fn fixture_run_writes_the_skill_creator_layout_live_and_replay() {
         Some(999)
     );
     let transcript = fs::read_to_string(cell.join("transcript.jsonl")).unwrap();
-    assert!(!transcript.contains("sk-ant-phase4-fixture-secret"));
+    assert!(!transcript.contains("sk-ant-endpoint-fixture-secret"));
     assert!(transcript.contains("<token>") || transcript.contains("<redacted>"));
     assert!(!transcript.contains("HIVE_SKILL_MARKER_9f3a"));
     let plain = fs::read_to_string(
@@ -609,7 +609,7 @@ fn local_http_endpoint_can_drive_one_live_cell() {
     let provider = AnthropicProvider::new(
         "local",
         format!("http://127.0.0.1:{port}"),
-        SecretString::new("sk-ant-phase4-fixture-secret"),
+        SecretString::new("sk-ant-endpoint-fixture-secret"),
     );
     let report = run_plan(&spec, &provider).unwrap();
     assert_eq!(report.status, "done");

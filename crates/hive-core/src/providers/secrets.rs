@@ -132,8 +132,8 @@ mod tests {
     #[test]
     fn linux_without_dbus_uses_labelled_fallback_and_hides_the_secret() {
         let tmp = tempfile::tempdir().unwrap();
-        let account = format!("phase4-{}", std::process::id());
-        let secret = "sk-ant-phase4-fixture-secret";
+        let account = format!("endpoint-{}", std::process::id());
+        let secret = "sk-ant-endpoint-fixture-secret";
         let kind = store_provider_secret(&account, secret, tmp.path()).unwrap();
         if cfg!(target_os = "linux")
             && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1")

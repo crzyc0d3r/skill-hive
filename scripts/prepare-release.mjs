@@ -22,8 +22,8 @@ replaceVersion("src-tauri/tauri.conf.json", /("version": ")([^"]+)(")/);
 replaceVersion("Cargo.toml", /(\nversion = ")([^"]+)(")/);
 replaceVersion("src/components/shell/AppShell.tsx", /(Skill Hive )(\d+\.\d+\.\d+)()/);
 replaceVersion("src/test/shell.test.tsx", /(Skill Hive )(\d+\.\d+\.\d+)()/);
-replaceVersion("e2e/phase1-visual.spec.ts", /(Skill Hive )(\d+\.\d+\.\d+)()/);
-replaceVersion("e2e/phase3-flows.spec.ts", /(Skill Hive )(\d+\.\d+\.\d+)()/);
+replaceVersion("e2e/shell-visual.spec.ts", /(Skill Hive )(\d+\.\d+\.\d+)()/);
+replaceVersion("e2e/editor-flows.spec.ts", /(Skill Hive )(\d+\.\d+\.\d+)()/);
 
 const members = ["crates/hive-core/Cargo.toml", "crates/hive-cli/Cargo.toml", "src-tauri/Cargo.toml"];
 for (const file of members) {

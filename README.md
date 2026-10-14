@@ -1,6 +1,6 @@
 # Skill Hive
 
-Desktop studio for creating, generating, and testing agent skills. The repository is `skill-hive`. Phase 0 is the shell, the design tokens, the IPC plumbing, and the infrastructure ported from skills-manager. Later phases are specified in `PLAN.md` and are not implemented here.
+Desktop studio for creating, generating, and testing agent skills. The repository is `skill-hive`. Screens are grouped by feature under `src/features/`. The delivery plan remains in `PLAN.md`.
 
 Identifier: `com.skillhive.desktop`. Database: `hive.db`. Default base directory: `~/.skill-hive`. Development base: `.dev-base` via `npm run tauri:dev`.
 
@@ -12,8 +12,9 @@ crates/hive-core/     library, no Tauri dependency
   src/db/               migrations v1–v8 and skill store (hive.db)
   src/library/          central repository layout and the adapter table the watcher tests need
   src/deploy/           ported deploy helpers kept so the reference tests still compile
-crates/hive-cli/      skill-hive-cli (version command in Phase 0)
+crates/hive-cli/      skill-hive-cli
 src-tauri/              Tauri 2 shell, commands, capabilities, tightened CSP
+src/features/           screens, models, and tests grouped by feature
 src/                    React 19 shell: sidebar, header, status bar, command palette, tokens
 src/components/ui/      shadcn/ui new-york primitives
 src/lib/ipc/            typed invoke wrappers and generated ipc.d.ts

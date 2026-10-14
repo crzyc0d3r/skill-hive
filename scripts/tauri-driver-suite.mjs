@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
+import { spawnCommand } from "./spawn-tool.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -21,7 +21,7 @@ process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS =
 const driverArgs = process.env.TAURI_NATIVE_DRIVER
   ? ["--native-driver", process.env.TAURI_NATIVE_DRIVER]
   : [];
-const driver = spawn("tauri-driver", driverArgs, { stdio: "inherit" });
+const driver = spawnCommand("tauri-driver", driverArgs, { stdio: "inherit" });
 await new Promise((resolve) => setTimeout(resolve, 1000));
 
 async function call(method, urlPath, body) {
@@ -187,7 +187,7 @@ try {
   await click("[data-testid=backup-now]");
   await click("[data-testid=backup-restore]");
   await find("[data-testid=backup]");
-  console.log("tauri-driver suite: phase 1 routes plus project, marketplace, update, and backup");
+  console.log("tauri-driver suite: shell routes plus project, marketplace, update, and backup");
 } finally {
   if (promoter) clearInterval(promoter);
   if (session) {

@@ -12,6 +12,20 @@ pub mod updater;
 pub mod util;
 
 #[cfg(test)]
-mod phase0_tests;
+mod agent_catalog_tests;
 #[cfg(test)]
-mod phase1_tests;
+mod db_layout_tests;
+#[cfg(test)]
+mod deploy_tests;
+#[cfg(test)]
+mod install_tests;
+#[cfg(test)]
+mod library_import_tests;
+#[cfg(test)]
+mod library_sidecar_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod watcher_tests;
+#[cfg(test)]
+mod workspace_tests;

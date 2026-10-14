@@ -50,7 +50,7 @@ jobs:
 
       - name: Release tooling
         run: |
-          node --test scripts/release.test.mjs
+          node --test scripts/release.test.mjs scripts/spawn-tool.test.mjs
           node scripts/check-hardening.mjs
           node scripts/check-distribution.mjs
           node scripts/check-docs.mjs
@@ -66,3 +66,39 @@ jobs:
 
       - name: npm audit
         run: npm audit --audit-level=high
+
+  windows-dev:
+    name: Windows dev and CLI
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: ". -> target"
+          save-if: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Spawn path
+        run: node --test scripts/spawn-tool.test.mjs
+
+      - name: CLI help
+        run: npm run cli -- --help
+
+      - name: tauri dev startup while cargo compiles
+        run: npm run tauri:dev
+        env:
+          SKILL_HIVE_TAURI_DEV_PROBE: "1"

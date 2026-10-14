@@ -10,7 +10,7 @@ These items need a person or a display. The automated checks cover the protocol 
 
 `crates/hive-core/src/util/tray_menu.rs` builds the status line, update item, Presets apply/remove submenu, Open, Check for skill updates, Open Skills Folder, and Quit. `left_click_restores` is true on Windows and Linux and false on macOS. `src-tauri/src/tray.rs` installs that menu and hides the window when close behaviour is minimize and the tray is enabled. A hidden tray falls back to Ask.
 
-Clicking the operating-system icon, confirming the submenu on a real menu bar, and watching the window restore still needs a desktop session on each operating system. The close dialog itself is covered by `src/test/phase2.test.tsx` and `e2e/phase2-flows.spec.ts`: Ask opens the dialog, and Remember stores `minimize` or `quit`.
+Clicking the operating-system icon, confirming the submenu on a real menu bar, and watching the window restore still needs a desktop session on each operating system. The close dialog itself is covered by `src/components/shell/dialogs.test.tsx` and `e2e/shell-flows.spec.ts`: Ask opens the dialog, and Remember stores `minimize` or `quit`.
 
 ## tauri-driver
 
