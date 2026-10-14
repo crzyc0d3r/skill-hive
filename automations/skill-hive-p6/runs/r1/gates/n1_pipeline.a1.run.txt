@@ -1,0 +1,3 @@
+$ bash automations/skill-hive-p6/code/n1_pipeline.sh
+(exit 0)
+

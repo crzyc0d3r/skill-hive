@@ -8,6 +8,7 @@ pub mod generation;
 pub mod library;
 pub mod providers;
 pub mod testing;
+pub mod updater;
 pub mod util;
 
 #[cfg(test)]

@@ -24,7 +24,7 @@ async function prepare(page: Page, theme: "light" | "dark") {
 }
 
 async function assertFrame(page: Page, theme: "light" | "dark", name: string) {
-  await expect(page.getByTestId("status-bar")).toContainText("Skill Hive 0.0.1");
+  await expect(page.getByTestId("status-bar")).toContainText("Skill Hive 1.0.0");
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
   if (theme === "dark") await expect(page.locator("html")).toHaveClass(/dark/);
   const overflow = await page.evaluate(

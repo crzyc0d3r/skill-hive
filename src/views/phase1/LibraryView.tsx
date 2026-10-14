@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard } from "@/lib/phase1/model";
+import { windowRows } from "@/lib/perf";
 import { badgeFor } from "@/lib/phase5/model";
 import { usePhase5 } from "@/lib/phase5/store";
 import { t } from "@/lib/i18n";
@@ -65,7 +66,7 @@ export function LibraryView({
   const tags = useMemo(() => [...new Set(skills.flatMap((skill) => skill.tags))], [skills]);
   const visible = filterSkills(skills, query, filter, source, tag);
   const open = skills.find((skill) => skill.id === openId) ?? null;
-  const rendered = visible.length > 100 ? visible.slice(0, 100) : visible;
+  const rendered = windowRows(visible, 100);
   const members = memberIds.map((id) => skills.find((skill) => skill.id === id)?.name ?? id);
 
   return (

@@ -15,7 +15,7 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.getByTestId("skill-editor")).toBeVisible();
     await expect(page.getByTestId("editor-tabs")).toBeVisible();
     await expect(page.getByTestId("status-bar")).toContainText("2 errors · 3 warnings");
-    await expect(page.getByTestId("status-bar")).toContainText("Skill Hive 0.0.1");
+    await expect(page.getByTestId("status-bar")).toContainText("Skill Hive 1.0.0");
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);

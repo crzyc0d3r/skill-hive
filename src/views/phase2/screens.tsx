@@ -206,6 +206,17 @@ export function BackupView() {
   );
 }
 
+const HELP_ANCHORS: Record<(typeof HELP_CARDS)[number], string> = {
+  "help.card.library": "library",
+  "help.card.install": "install-skills",
+  "help.card.workspace": "global-workspace",
+  "help.card.project": "project-workspace",
+  "help.card.backup": "backup",
+  "help.card.updates": "updates",
+  "help.card.tray": "tray",
+  "help.card.cli": "cli",
+};
+
 export function HelpDialog({ onClose }: { onClose: () => void }) {
   return (
     <div role="dialog" aria-label={t("help.title")} className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
@@ -214,14 +225,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         <ul className="mt-3 grid grid-cols-2 gap-2 text-sm">
           {HELP_CARDS.map((key) => (
             <li key={key} className="rounded-md border border-border p-2" data-help-card={key}>
-              {key === "help.card.library" ? t("help.card.library") : null}
-              {key === "help.card.install" ? t("help.card.install") : null}
-              {key === "help.card.workspace" ? t("help.card.workspace") : null}
-              {key === "help.card.project" ? t("help.card.project") : null}
-              {key === "help.card.backup" ? t("help.card.backup") : null}
-              {key === "help.card.updates" ? t("help.card.updates") : null}
-              {key === "help.card.tray" ? t("help.card.tray") : null}
-              {key === "help.card.cli" ? t("help.card.cli") : null}
+              <a href={`https://github.com/crzyc0d3r/skill-hive/blob/main/docs/user-guide.md#${HELP_ANCHORS[key]}`}>{t(key)}</a>
             </li>
           ))}
         </ul>

@@ -6,6 +6,7 @@ import { moveById } from "@/lib/phase1/model";
 import { EDITOR_SHORTCUTS } from "@/lib/phase3/model";
 import { proxyOk } from "@/lib/phase2/model";
 import type { ThemeChoice } from "@/lib/theme";
+import { decideUpdate, desktopPlatform, LINUX_DOWNLOAD_URL } from "@/lib/updater";
 
 const TABS = ["general", "appearance", "agents", "backup", "keyboard", "about"] as const;
 
@@ -34,6 +35,7 @@ export function SettingsView({
   const [agentPath, setAgentPath] = useState("~/.field-notes/skills");
   const [syncMode, setSyncMode] = useState<"symlink" | "copy">("symlink");
   const [updateNote, setUpdateNote] = useState<string | null>(null);
+  const [updateAction, setUpdateAction] = useState<"install" | "download" | null>(null);
   const [refreshed, setRefreshed] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [motion, setMotion] = useState(false);
@@ -43,6 +45,7 @@ export function SettingsView({
   const [trayOn, setTrayOn] = useState(true);
   const [autoApply, setAutoApply] = useState(false);
   const [exported, setExported] = useState(false);
+  const [restartArmed, setRestartArmed] = useState(false);
   const crash = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-panic") === "1";
   const repoWarn = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-repo-warn") === "1";
   const choices: ThemeChoice[] = ["light", "dark", "system"];
@@ -241,14 +244,54 @@ export function SettingsView({
       {tab === "about" ? (
         <div className="mt-4 text-sm">
           <p>{t("settings.about.version")}</p>
-          <button type="button" className="mt-2 rounded-md border border-border px-2 py-1" onClick={() => setUpdateNote(t("settings.about.latest"))}>{t("settings.about.updates")}</button>
+          <button
+            type="button"
+            className="mt-2 rounded-md border border-border px-2 py-1"
+            onClick={() => {
+              const remote = localStorage.getItem("skill-hive-update-version");
+              const runs = Number(localStorage.getItem("skill-hive-active-runs") ?? "0");
+              const decision = decideUpdate({
+                remoteVersion: remote,
+                platform: desktopPlatform(navigator.userAgent, localStorage.getItem("skill-hive-platform")),
+                activeRuns: Number.isFinite(runs) ? runs : 0,
+              });
+              setUpdateNote(decision.state === "available" ? t(decision.messageKey, { version: decision.version }) : t(decision.messageKey));
+              setUpdateAction(decision.state === "available" ? decision.action : null);
+              if (decision.state === "available" && decision.action === "install") {
+                localStorage.setItem("skill-hive-pending-install", decision.version);
+              } else {
+                localStorage.removeItem("skill-hive-pending-install");
+              }
+            }}
+          >
+            {t("settings.about.updates")}
+          </button>
           {updateNote ? <p role="status">{updateNote}</p> : null}
+          {localStorage.getItem("skill-hive-pending-install") && desktopPlatform(navigator.userAgent, localStorage.getItem("skill-hive-platform")) !== "linux" ? (
+            <button
+              type="button"
+              className="mt-2 rounded-md border border-border px-2 py-1"
+              data-proxy={proxyOk(proxy) && proxy.trim() ? proxy.trim() : ""}
+              onClick={() => {
+                localStorage.setItem("skill-hive-restart-now", "1");
+                setRestartArmed(true);
+                window.dispatchEvent(new Event("skill-hive-restart"));
+              }}
+            >
+              {t("settings.about.install")}
+            </button>
+          ) : null}
+          {updateAction === "download" ? (
+            <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href={LINUX_DOWNLOAD_URL}>{t("settings.about.download")}</a>
+          ) : null}
           {crash ? <p role="alert">{t("settings.about.crash")}</p> : null}
           {repoWarn ? <p role="alert">{t("settings.about.repo")}</p> : null}
           <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href="https://github.com/crzyc0d3r/skill-hive/issues/new" target="_blank" rel="noreferrer">{t("settings.about.report")}</a>
           <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => setExported(true)}>{t("settings.about.export")}</button>
           {exported ? <p role="status">{t("settings.about.exported")}</p> : null}
-          <p className="mt-2 text-muted-foreground">Update notification only. Installing an update arrives later.</p>
+          {restartArmed ? <p role="status"><button type="button">{t("settings.about.restart")}</button></p> : null}
+          <h2 className="mt-4 text-sm font-medium">{t("settings.about.ack")}</h2>
+          <p className="mt-1 text-muted-foreground">{t("settings.about.mit")}</p>
         </div>
       ) : null}
     </section>

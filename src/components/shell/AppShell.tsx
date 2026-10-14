@@ -58,6 +58,14 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     (typeof localStorage !== "undefined" ? localStorage.getItem("skill-hive-home") ?? "" : "").split(",").filter(Boolean),
   );
   const showUpdate = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-app-update") === "1";
+  const [restartNow, setRestartNow] = useState(
+    () => typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-restart-now") === "1",
+  );
+  useEffect(() => {
+    const onRestart = () => setRestartNow(localStorage.getItem("skill-hive-restart-now") === "1");
+    window.addEventListener("skill-hive-restart", onRestart);
+    return () => window.removeEventListener("skill-hive-restart", onRestart);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -351,7 +359,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       >
         <span>{authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : "Ready"}</span>
         <Link to="/runs/run-fixture" data-testid="run-chip" className="rounded px-1 hover:bg-accent">{t("run.chip")}</Link>
-        <span>Skill Hive 0.0.1</span>
+        <span>Skill Hive 1.0.0</span>
       </footer>
       {paletteOpen ? (
         <div
@@ -467,7 +475,15 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           </form>
         </div>
       ) : null}
-      {showUpdate ? <div role="alert" data-testid="update-toast" className="fixed bottom-8 right-3 rounded-md border border-border bg-popover px-3 py-2 text-sm">{t("startup.toast")}</div> : null}
+      {showUpdate || restartNow ? (
+        <div role="status" data-testid="update-toast" className="fixed bottom-8 right-3 z-50 rounded-md border border-border bg-popover px-3 py-2 text-sm">
+          {restartNow ? (
+            <button type="button" onClick={() => setRestartNow(true)}>{t("settings.about.restart")}</button>
+          ) : (
+            t("startup.toast")
+          )}
+        </div>
+      ) : null}
       {helpOpen ? <HelpDialog onClose={() => setHelpOpen(false)} /> : null}
       {closeOpen ? (
         <CloseGuardDialog
