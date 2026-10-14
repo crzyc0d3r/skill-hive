@@ -14,7 +14,11 @@ import { InstallView } from "./views/phase1/InstallView";
 import { LibraryView } from "./views/phase1/LibraryView";
 import { SettingsView } from "./views/phase1/SettingsView";
 import { WorkspaceView } from "./views/phase1/WorkspaceView";
+import { centerChangedNames, draftSkillCards, useAuthoring } from "./lib/phase3/store";
 import { BackupView, LobsterView, ProjectView } from "./views/phase2/screens";
+import { AgentEditor } from "./views/phase3/AgentEditor";
+import { AgentsView } from "./views/phase3/AgentsView";
+import { SkillEditor } from "./views/phase3/SkillEditor";
 
 function DashboardPage() {
   const { skills } = useOutletContext<ShellOutletContext>();
@@ -23,6 +27,8 @@ function DashboardPage() {
 
 function LibraryPage() {
   const { skills, presets, setPresets } = useOutletContext<ShellOutletContext>();
+  useAuthoring();
+  const drafts = draftSkillCards();
   const [params] = useSearchParams();
   const [rows, setRows] = useState(skills);
   useEffect(() => {
@@ -31,7 +37,7 @@ function LibraryPage() {
   const memberIds = presets.find((preset) => preset.id === "research")?.skillIds ?? presets[0]?.skillIds ?? [];
   return (
     <LibraryView
-      skills={rows}
+      skills={[...drafts.filter((draft) => !rows.some((skill) => skill.id === draft.id)), ...rows.map((skill) => (drafts.some((draft) => draft.id === skill.id) ? { ...skill, draft: true } : skill))]}
       initialId={params.get("skill")}
       memberIds={memberIds}
       onAddTag={(skillId, tag) =>
@@ -93,10 +99,15 @@ function InstallPage() {
 }
 
 function workspaceCards(skills: SkillCard[], agentKey: string): WorkspaceCard[] {
-  return skills.map((skill) => ({
+  const changed = new Set(centerChangedNames());
+  const merged = [...skills];
+  for (const draft of draftSkillCards()) {
+    if (!merged.some((skill) => skill.id === draft.id)) merged.push(draft);
+  }
+  return merged.map((skill) => ({
     id: skill.id,
     name: skill.name,
-    status: skill.name.includes("diff") ? "center_changed" : skill.agents.includes(agentKey) ? "in_sync" : "local_only",
+    status: changed.has(skill.name) || skill.name.includes("diff") ? "center_changed" : skill.agents.includes(agentKey) ? "in_sync" : "local_only",
     tags: skill.tags,
     body: skill.body,
     center: skill.sourceBody,
@@ -106,6 +117,7 @@ function workspaceCards(skills: SkillCard[], agentKey: string): WorkspaceCard[] 
 
 function WorkspacePage() {
   const { presets, skills, agents } = useOutletContext<ShellOutletContext>();
+  useAuthoring();
   const { agentKey } = useParams();
   if (agentKey === "openclaw") return <Navigate to="/lobster-workspace/openclaw" replace />;
   return (
@@ -159,6 +171,9 @@ function screenFor(path: string) {
   if (path === "/backup") return <BackupView />;
   if (path === "/project/:id") return <ProjectView />;
   if (path === "/lobster-workspace" || path === "/lobster-workspace/:agentKey") return <LobsterPage />;
+  if (path === "/agents") return <AgentsView />;
+  if (path === "/agents/:id/edit") return <AgentEditor />;
+  if (path === "/skills/:id/edit") return <SkillEditor />;
   if (path === "/dev/tokens") return <TokensView />;
   return <PlaceholderView />;
 }

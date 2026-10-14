@@ -14,6 +14,14 @@ use crate::util::crypto;
 /// Settings keys whose values are encrypted at rest with AES-256-GCM.
 const SENSITIVE_KEYS: &[&str] = &["proxy_url", "git_backup_remote_url"];
 
+#[derive(Debug, Clone)]
+pub struct AgentRow {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub library_path: String,
+}
+
 pub struct SkillStore {
     conn: Mutex<Connection>,
     secret_key: [u8; 32],
@@ -1387,6 +1395,47 @@ impl SkillStore {
             stmt.query_map([], map_row)?
                 .collect::<rusqlite::Result<Vec<_>>>()?
         };
+        Ok(rows)
+    }
+
+    pub fn upsert_agent(
+        &self,
+        id: &str,
+        name: &str,
+        description: Option<&str>,
+        tags: &str,
+        library_path: &str,
+        updated_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO agents (id, name, description, tags, library_path, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                description = excluded.description,
+                tags = excluded.tags,
+                library_path = excluded.library_path,
+                updated_at = excluded.updated_at",
+            params![id, name, description, tags, library_path, updated_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_agents(&self) -> Result<Vec<AgentRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT id, name, description, library_path FROM agents ORDER BY name")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(AgentRow {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    library_path: row.get(3)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     }
 }

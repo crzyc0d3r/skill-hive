@@ -3,10 +3,11 @@ import { useSearchParams } from "react-router-dom";
 import type { AgentRow } from "@/lib/phase1/client";
 import { applyTextSize, setLocale, t, type TextSize } from "@/lib/i18n";
 import { moveById } from "@/lib/phase1/model";
+import { EDITOR_SHORTCUTS } from "@/lib/phase3/model";
 import { proxyOk } from "@/lib/phase2/model";
 import type { ThemeChoice } from "@/lib/theme";
 
-const TABS = ["general", "appearance", "agents", "backup", "about"] as const;
+const TABS = ["general", "appearance", "agents", "backup", "keyboard", "about"] as const;
 
 export function SettingsView({
   theme,
@@ -57,6 +58,21 @@ export function SettingsView({
           </button>
         ))}
       </div>
+      {tab === "keyboard" ? (
+        <div className="mt-4">
+          <h2 className="text-sm font-medium">{t("shortcuts.editor")}</h2>
+          <table className="mt-2 text-sm">
+            <tbody>
+              {EDITOR_SHORTCUTS.map((row) => (
+                <tr key={row.id}>
+                  <td className="pr-4">{row.keys}</td>
+                  <td>{row.action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       {tab === "appearance" ? (
         <div className="mt-4">
           <h2 className="text-sm font-medium">{t("settings.appearance")}</h2>

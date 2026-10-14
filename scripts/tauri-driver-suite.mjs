@@ -141,17 +141,28 @@ try {
   console.log(`attached ${last}`);
 
   async function find(selector) {
-    try {
-      const found = await call("POST", `${prefix}/element`, { using: "css selector", value: selector });
-      const id = found.value?.["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(found.value ?? {})[0];
-      if (!id) throw new Error(`missing ${selector}: ${JSON.stringify(found)}`);
-      return id;
-    } catch (err) {
-      const url = await call("GET", `${prefix}/url`).catch(() => ({}));
-      const source = await call("GET", `${prefix}/source`).catch(() => ({}));
-      const html = String(source.value ?? "").replace(/\s+/g, " ").slice(0, 700);
-      throw new Error(`${err.message}\nurl ${url.value}\nsource ${html}`);
+    const deadline = Date.now() + 10000;
+    let last = `missing ${selector}`;
+    while (Date.now() < deadline) {
+      try {
+        const found = await call("POST", `${prefix}/element`, { using: "css selector", value: selector });
+        const id = found.value?.["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(found.value ?? {})[0];
+        if (id) return id;
+        last = `missing ${selector}: ${JSON.stringify(found)}`;
+      } catch (err) {
+        last = err.message;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    const url = await call("GET", `${prefix}/url`).catch(() => ({}));
+    const source = await call("GET", `${prefix}/source`).catch(() => ({}));
+    const html = String(source.value ?? "")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/\s+/g, " ");
+    const bodyAt = html.indexOf("<body");
+    const slice = (bodyAt >= 0 ? html.slice(bodyAt) : html).slice(0, 1200);
+    throw new Error(`${selector} not found\n${last}\nurl ${url.value}\nsource ${slice}`);
   }
 
   async function click(selector) {

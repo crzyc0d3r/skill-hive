@@ -13,6 +13,8 @@ import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } fr
 import { moveById } from "../../lib/phase1/model";
 import { lobsterAgents } from "../../lib/phase2/model";
 import { useProjectDot } from "../../lib/phase2/store";
+import { SKILL_TEMPLATES } from "../../lib/phase3/model";
+import { closeLater, closePicker, createSkill, openLater, openPicker, useAuthoring } from "../../lib/phase3/store";
 import { CloseGuardDialog, HelpDialog } from "../../views/phase2/screens";
 import { Kbd } from "../Kbd";
 import { StatusBanner } from "../StatusBanner";
@@ -26,9 +28,9 @@ const ACTIONS = [
 const SHORTCUTS = [
   { id: "1", href: "/" },
   { id: "2", href: "/my-skills" },
-  { id: "3", href: "/install" },
-  { id: "4", href: "/global-workspace" },
-  { id: "5", href: "/settings" },
+  { id: "3", href: "/agents" },
+  { id: "4", href: "/install" },
+  { id: "5", href: "/backup" },
 ];
 
 export function AppShell({ platform = "linux" }: { platform?: string }) {
@@ -49,6 +51,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const projectDot = useProjectDot();
+  const authoring = useAuthoring();
+  const [templateId, setTemplateId] = useState("blank");
+  const [templateName, setTemplateName] = useState("draft-skill");
   const lobsterRows = lobsterAgents(
     (typeof localStorage !== "undefined" ? localStorage.getItem("skill-hive-home") ?? "" : "").split(",").filter(Boolean),
   );
@@ -139,9 +144,21 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       } else if (key === "f") {
         event.preventDefault();
         document.querySelector<HTMLInputElement>("[data-search]")?.focus();
-      } else if (event.key === "/") {
+      } else       if (event.key === "/") {
         event.preventDefault();
         setShortcutsOpen(true);
+      } else if (key === "n" && event.shiftKey) {
+        event.preventDefault();
+        openPicker("agent");
+      } else if (key === "n") {
+        event.preventDefault();
+        openPicker("skill");
+      } else if (key === "g" && event.shiftKey) {
+        event.preventDefault();
+        openLater("agent");
+      } else if (key === "g") {
+        event.preventDefault();
+        openLater("skill");
       } else {
         const shortcut = shortcutRows.find((item) => item.id === key);
         if (shortcut) {
@@ -167,7 +184,14 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     const presetHits = shownPresets
       .filter((preset) => !needle || preset.name.toLowerCase().includes(needle))
       .map((preset) => ({ id: preset.id, label: preset.name, href: "/global-workspace", group: "Presets" }));
-    const actionHits = ACTIONS.filter((action) => !needle || action.label.toLowerCase().includes(needle)).map((action) => ({
+    const actions = [
+      ...ACTIONS,
+      { id: "new-skill", label: t("palette.newSkill"), href: "action:skill" },
+      { id: "new-agent", label: t("palette.newAgent"), href: "action:agent" },
+      { id: "generate-skill", label: t("palette.generateSkill"), href: "action:generate-skill" },
+      { id: "generate-agent", label: t("palette.generateAgent"), href: "action:generate-agent" },
+    ];
+    const actionHits = actions.filter((action) => !needle || action.label.toLowerCase().includes(needle)).map((action) => ({
       ...action,
       group: "Actions",
     }));
@@ -325,7 +349,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         data-testid="status-bar"
         className="flex h-6 items-center justify-between border-t border-border bg-sidebar px-3 text-xs text-muted-foreground"
       >
-        <span>Ready</span>
+        <span>{authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : "Ready"}</span>
         <span>Skill Hive 0.0.1</span>
       </footer>
       {paletteOpen ? (
@@ -350,7 +374,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 if (event.key === "Enter" && matches[0]) {
                   event.preventDefault();
                   setPaletteOpen(false);
-                  navigate(matches[0].href);
+                  runAction(matches[0].href, navigate);
                 }
               }}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -366,7 +390,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                       className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
                       onClick={() => {
                         setPaletteOpen(false);
-                        navigate(action.href);
+                        runAction(action.href, navigate);
                       }}
                     >
                       <span>{action.label}</span>
@@ -413,6 +437,43 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           </div>
         </div>
       ) : null}
+      {authoring.picker ? (
+        <div role="dialog" aria-label={t("editor.template.title")} className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
+          <form
+            className="w-80 rounded-lg border border-border bg-popover p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (authoring.picker === "skill") {
+                const draft = createSkill(templateId, templateName);
+                navigate(`/skills/${draft.id}/edit`);
+              } else {
+                closePicker();
+                navigate("/agents/reviewer/edit");
+              }
+            }}
+          >
+            <h2 className="font-medium">{t("editor.template.title")}</h2>
+            <div className="mt-2 flex flex-col gap-1">
+              {SKILL_TEMPLATES.map((item) => (
+                <button key={item.id} type="button" aria-pressed={templateId === item.id} className="rounded-md border border-border px-2 py-1 text-left text-sm" onClick={() => setTemplateId(item.id)}>
+                  {t(item.labelKey)}
+                </button>
+              ))}
+            </div>
+            <input aria-label={t("editor.template.name")} value={templateName} onChange={(event) => setTemplateName(event.target.value)} className="mt-2 w-full rounded-md border border-input px-2 py-1 text-sm" />
+            <button type="submit" className="mt-2 rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground">{t("editor.template.create")}</button>
+            <button type="button" className="mt-2 ml-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => closePicker()}>{t("agents.cancel")}</button>
+          </form>
+        </div>
+      ) : null}
+      {authoring.later ? (
+        <div role="dialog" aria-label={t("editor.generate.later")} className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
+          <div className="rounded-lg border border-border bg-popover p-4">
+            <p>{t("editor.generate.later")}</p>
+            <button type="button" className="mt-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => closeLater()}>{t("agents.cancel")}</button>
+          </div>
+        </div>
+      ) : null}
       {showUpdate ? <div role="alert" data-testid="update-toast" className="fixed bottom-8 right-3 rounded-md border border-border bg-popover px-3 py-2 text-sm">{t("startup.toast")}</div> : null}
       {helpOpen ? <HelpDialog onClose={() => setHelpOpen(false)} /> : null}
       {closeOpen ? (
@@ -427,6 +488,14 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       <Toaster />
     </div>
   );
+}
+
+function runAction(href: string, navigate: (path: string) => void): void {
+  if (href === "action:skill") openPicker("skill");
+  else if (href === "action:agent") openPicker("agent");
+  else if (href === "action:generate-skill") openLater("skill");
+  else if (href === "action:generate-agent") openLater("agent");
+  else navigate(href);
 }
 
 export interface ShellOutletContext {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard } from "@/lib/phase1/model";
 import { t } from "@/lib/i18n";
 import { GitStatusButton, UpdateFlow } from "@/views/phase2/screens";
@@ -46,7 +47,7 @@ export function LibraryView({
   useEffect(() => {
     if (initialId) setOpenId(initialId);
   }, [initialId]);
-  const [tab, setTab] = useState<"local" | "diff" | "source">("local");
+  const [tab, setTab] = useState<"local" | "diff" | "source" | "edit">("local");
   const [rename, setRename] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [syncOpen, setSyncOpen] = useState(false);
@@ -222,6 +223,7 @@ export function LibraryView({
               />
               <button type="button" className="text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                 <span className="block font-medium whitespace-normal">{skill.name}</span>
+                {skill.draft ? <span data-testid="draft-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.draft")}</span> : null}
                 <span className="block text-sm text-muted-foreground">{skill.description}</span>
               </button>
             </label>
@@ -251,6 +253,8 @@ export function LibraryView({
             </button>
             {menuId === skill.id ? (
               <div className="mt-1 flex gap-2">
+                <Link to={`/skills/${skill.id}/edit`} className="text-xs">{t("library.menu.edit")}</Link>
+                <button type="button" className="text-xs" disabled title={t("editor.runTests.later")}>{t("library.menu.tests")}</button>
                 <button type="button" className="text-xs" onClick={() => setChecked(skill.name)}>{t("library.menu.check")}</button>
                 <button type="button" className="text-xs" onClick={() => onDeleteSkills?.([skill.id])}>{t("library.menu.delete")}</button>
               </div>
@@ -278,7 +282,7 @@ export function LibraryView({
       {open ? (
         <aside data-testid="detail-panel" className="mt-4 rounded-lg border border-border p-3">
           <div className="flex flex-wrap gap-2">
-            {(["local", "diff", "source"] as const).map((item) => (
+            {(["local", "diff", "source", "edit"] as const).map((item) => (
               <button key={item} type="button" aria-pressed={tab === item} className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setTab(item)}>
                 {t(`library.detail.${item}`)}
               </button>
@@ -297,6 +301,7 @@ export function LibraryView({
               </button>
             ))}
           </div>
+          {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
           {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap text-sm">{open.body}</pre> : null}
           {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap text-sm">{open.sourceBody}</pre> : null}
           {tab === "diff" ? (
