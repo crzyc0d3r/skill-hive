@@ -22,11 +22,21 @@ const files = [
   "packaging/homebrew/Formula/skill-hive-cli.rb",
   "packaging/winget/manifests/s/SkillHive/SkillHive/SkillHive.SkillHive.installer.yaml",
 ];
+const version = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
+
+function replaceNextPending(text, needle, sha) {
+  const index = text.indexOf(needle);
+  if (index === -1) return text;
+  const pending = text.indexOf("PENDING", index);
+  if (pending === -1) return text;
+  return `${text.slice(0, pending)}${sha}${text.slice(pending + "PENDING".length)}`;
+}
+
 for (const file of files) {
   let text = fs.readFileSync(file, "utf8");
   for (const [name, sha] of hashes) {
-    if (!text.includes(name)) continue;
-    text = text.replaceAll("PENDING", sha);
+    const needle = text.includes(name) ? name : name.replaceAll(version, "#{version}");
+    text = replaceNextPending(text, needle, sha);
   }
   fs.writeFileSync(file, text);
 }

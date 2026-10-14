@@ -8,7 +8,7 @@ const locale = fs.readFileSync("packaging/winget/manifests/s/SkillHive/SkillHive
 const version = fs.readFileSync("packaging/winget/manifests/s/SkillHive/SkillHive/SkillHive.SkillHive.yaml", "utf8");
 
 for (const [label, text, needles] of [
-  ["cask", cask, ["cask \"skill-hive\"", "Skill Hive", "on_arm", "on_intel", "app \"Skill Hive.app\""]],
+  ["cask", cask, ["cask \"skill-hive\"", "Skill Hive", "Skill.Hive_", "on_arm", "on_intel", "app \"Skill Hive.app\""]],
   ["formula", formula, ["class SkillHiveCli", "skill-hive-cli"]],
   ["winget installer", installer, ["PackageIdentifier: SkillHive.SkillHive", "InstallerType: wix", "Architecture: x64"]],
   ["winget locale", locale, ["PackageName: Skill Hive", "Publisher: Skill Hive", "Moniker: SkillHive"]],

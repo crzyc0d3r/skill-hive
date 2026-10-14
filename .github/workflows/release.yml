@@ -135,12 +135,30 @@ jobs:
       - name: Build CLI binary
         run: cargo build --release -p hive-cli --target ${{ matrix.target }}
 
-      - name: Build bundles
+      - name: Build unsigned bundles
+        if: needs.signing-plan.outputs.apple != 'sign'
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.signing-plan.outputs.updater == 'sign' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.signing-plan.outputs.updater == 'sign' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          WINDOWS_CERTIFICATE: ${{ needs.signing-plan.outputs.windows == 'sign' && secrets.WINDOWS_CERTIFICATE || '' }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ needs.signing-plan.outputs.windows == 'sign' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
+        with:
+          tagName: ${{ github.event_name == 'schedule' && 'nightly' || github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
+          releaseName: Skill Hive ${{ github.event_name == 'schedule' && 'nightly' || github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
+          releaseBody: ${{ needs.signing-plan.outputs.updater == 'sign' && 'Signed Skill Hive release. See docs/release/secrets.md.' || 'Unsigned Skill Hive build. Signing and notarization run when the secrets in docs/release/secrets.md are present.' }}
+          releaseDraft: true
+          prerelease: ${{ github.event_name == 'schedule' || contains(github.ref_name, '-') }}
+          args: --target ${{ matrix.target }}
+
+      - name: Build signed bundles
+        if: needs.signing-plan.outputs.apple == 'sign'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.signing-plan.outputs.updater == 'sign' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.signing-plan.outputs.updater == 'sign' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -150,8 +168,8 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE: ${{ needs.signing-plan.outputs.windows == 'sign' && secrets.WINDOWS_CERTIFICATE || '' }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ needs.signing-plan.outputs.windows == 'sign' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
         with:
           tagName: ${{ github.event_name == 'schedule' && 'nightly' || github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}
           releaseName: Skill Hive ${{ github.event_name == 'schedule' && 'nightly' || github.ref_type == 'tag' && github.ref_name || 'v0.0.1-dev' }}

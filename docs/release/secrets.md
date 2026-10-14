@@ -1,6 +1,6 @@
 # Secrets for signed Skill Hive releases
 
-No certificate, notarization credential, or updater private key is stored in this repository. Unsigned builds succeed when every secret below is unset. If any secret in a set is present and the set is incomplete, the release workflow fails before `tauri-action` can ad-hoc sign.
+No certificate, notarization credential, or updater private key is stored in this repository. Unsigned builds succeed when every secret below is unset. If any secret in a set is present and the set is incomplete, the release workflow fails before `tauri-action` can ad-hoc sign. An empty `APPLE_CERTIFICATE` still counts as set to the bundler, so the unsigned macOS job omits the Apple environment variables entirely.
 
 Add these in the GitHub repository settings, Actions secrets. Names are exact.
 
