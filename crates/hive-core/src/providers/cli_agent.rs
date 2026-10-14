@@ -429,6 +429,7 @@ pub fn kill_tree(child: &mut Child) -> Result<(), ProviderError> {
 }
 
 #[cfg(windows)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub struct JobChild {
     job: windows_sys::Win32::Foundation::HANDLE,
     process: windows_sys::Win32::Foundation::HANDLE,
@@ -436,6 +437,7 @@ pub struct JobChild {
 }
 
 #[cfg(windows)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn spawn_killed_with_job(
     program: &str,
     args: &[String],
@@ -525,6 +527,7 @@ pub fn spawn_killed_with_job(
 }
 
 #[cfg(windows)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn kill_job(child: &JobChild) {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::JobObjects::TerminateJobObject;
