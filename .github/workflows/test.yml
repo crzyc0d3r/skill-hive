@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   rust-tests:
+    permissions:
+      contents: read
+      checks: write
     strategy:
       fail-fast: false
       matrix:
