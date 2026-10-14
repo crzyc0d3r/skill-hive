@@ -432,8 +432,6 @@ pub fn kill_tree(child: &mut Child) -> Result<(), ProviderError> {
 #[cfg_attr(not(test), allow(dead_code))]
 pub struct JobChild {
     job: windows_sys::Win32::Foundation::HANDLE,
-    process: windows_sys::Win32::Foundation::HANDLE,
-    pub pid: u32,
 }
 
 #[cfg(windows)]
@@ -518,11 +516,8 @@ pub fn spawn_killed_with_job(
         }
         ResumeThread(process_info.hThread);
         CloseHandle(process_info.hThread);
-        Ok(JobChild {
-            job,
-            process: process_info.hProcess,
-            pid: process_info.dwProcessId,
-        })
+        CloseHandle(process_info.hProcess);
+        Ok(JobChild { job })
     }
 }
 
@@ -533,7 +528,6 @@ pub fn kill_job(child: &JobChild) {
     use windows_sys::Win32::System::JobObjects::TerminateJobObject;
     unsafe {
         TerminateJobObject(child.job, 1);
-        CloseHandle(child.process);
         CloseHandle(child.job);
     }
 }
