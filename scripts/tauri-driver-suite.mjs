@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
+import { spawnCommand } from "./spawn-tool.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -21,7 +21,7 @@ process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS =
 const driverArgs = process.env.TAURI_NATIVE_DRIVER
   ? ["--native-driver", process.env.TAURI_NATIVE_DRIVER]
   : [];
-const driver = spawn("tauri-driver", driverArgs, { stdio: "inherit" });
+const driver = spawnCommand("tauri-driver", driverArgs, { stdio: "inherit" });
 await new Promise((resolve) => setTimeout(resolve, 1000));
 
 async function call(method, urlPath, body) {

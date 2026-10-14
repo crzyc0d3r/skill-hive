@@ -1,23 +1,30 @@
 import { existsSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnCommandSync } from "./spawn-tool.mjs";
 
 function canRun(command, args = ["--version"]) {
-  const result = spawnSync(command, args, { stdio: "ignore" });
+  const result = spawnCommandSync(command, args, { stdio: "ignore" });
   return result.status === 0;
 }
 
+function existingBinary(file) {
+  if (existsSync(file)) return file;
+  if (process.platform === "win32" && existsSync(`${file}.exe`)) return `${file}.exe`;
+  return null;
+}
+
 function resolveCargo() {
-  if (process.env.CARGO && existsSync(process.env.CARGO)) {
-    return process.env.CARGO;
+  if (process.env.CARGO) {
+    const fromEnv = existingBinary(process.env.CARGO);
+    if (fromEnv) return fromEnv;
   }
   if (canRun("cargo")) return "cargo";
-  const rustupCheck = spawnSync("rustup", ["which", "rustc"], { encoding: "utf8" });
+  const rustupCheck = spawnCommandSync("rustup", ["which", "rustc"], { encoding: "utf8" });
   if (rustupCheck.status === 0) {
     const rustcPath = rustupCheck.stdout.trim();
     if (rustcPath) {
-      const cargoPath = join(dirname(rustcPath), "cargo");
-      if (existsSync(cargoPath)) return cargoPath;
+      const cargoPath = existingBinary(join(dirname(rustcPath), "cargo"));
+      if (cargoPath) return cargoPath;
     }
   }
   console.error("cargo not found. Install Rust or ensure cargo/rustup is on PATH.");
@@ -42,7 +49,7 @@ if (!cargoArgs) {
   process.exit(2);
 }
 
-const result = spawnSync(cargo, cargoArgs, {
+const result = spawnCommandSync(cargo, cargoArgs, {
   stdio: "inherit",
   env: {
     ...process.env,
