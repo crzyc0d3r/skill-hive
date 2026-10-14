@@ -4,6 +4,8 @@ pub mod backup;
 pub mod db;
 pub mod deploy;
 pub mod library;
+pub mod providers;
+pub mod testing;
 pub mod util;
 
 #[cfg(test)]

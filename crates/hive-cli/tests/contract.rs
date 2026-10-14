@@ -360,6 +360,74 @@ fn contract_suite_exercises_every_subcommand() {
     assert_eq!(code, 0, "{parsed}");
     seen.push(record(state, &parsed));
 
+    let secret = "sk-test-secret-value";
+    let (code, parsed) = run(
+        state,
+        &config,
+        &[
+            "providers",
+            "add",
+            "--id",
+            "local",
+            "--name",
+            "Local",
+            "--kind",
+            "anthropic",
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+    let (code, parsed) = run(
+        state,
+        &config,
+        &[
+            "providers",
+            "set-secret",
+            "--id",
+            "local",
+            "--secret",
+            secret,
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    assert!(!parsed.to_string().contains(secret), "{parsed}");
+    seen.push(record(state, &parsed));
+    for args in [
+        vec!["providers", "has-secret", "--id", "local"],
+        vec!["providers", "list"],
+        vec!["providers", "probe", "--id", "local", "--offline"],
+    ] {
+        let (code, parsed) = run(state, &config, &args);
+        assert_eq!(code, 0, "{args:?} {parsed}");
+        assert!(!parsed.to_string().contains(secret), "{parsed}");
+        seen.push(record(state, &parsed));
+    }
+    let skill = state.join("fixture-skill");
+    let (code, parsed) = run(
+        state,
+        &config,
+        &["test", "save-suite", "--skill", skill.to_str().unwrap()],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+    let (code, parsed) = run(
+        state,
+        &config,
+        &[
+            "test",
+            "run",
+            "--skill",
+            skill.to_str().unwrap(),
+            "--mode",
+            "offline",
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+    let (code, parsed) = run(state, &config, &["test", "show"]);
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+
     seen.sort();
     seen.dedup();
     let mut expected = command_ids();

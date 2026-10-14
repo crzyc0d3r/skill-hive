@@ -1,0 +1,6 @@
+[
+  {
+    "query": "use the fixture skill",
+    "should_trigger": true
+  }
+]

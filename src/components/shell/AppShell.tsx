@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { NAV_ITEMS } from "../../app/routes";
 import { BASE_LISTING_KEY, SKILLS_KEY } from "../../lib/events/files";
@@ -350,6 +350,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         className="flex h-6 items-center justify-between border-t border-border bg-sidebar px-3 text-xs text-muted-foreground"
       >
         <span>{authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : "Ready"}</span>
+        <Link to="/runs/run-fixture" data-testid="run-chip" className="rounded px-1 hover:bg-accent">{t("run.chip")}</Link>
         <span>Skill Hive 0.0.1</span>
       </footer>
       {paletteOpen ? (
