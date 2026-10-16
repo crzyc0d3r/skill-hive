@@ -31,3 +31,4 @@ tauri-plugin-updater = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 hive-core = { path = "../crates/hive-core" }
+anyhow = { workspace = true }

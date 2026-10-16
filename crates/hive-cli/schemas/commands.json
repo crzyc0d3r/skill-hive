@@ -71,5 +71,8 @@
   "agents.def.list": {"type": "object", "required": ["command", "agents"], "properties": {"command": {"type": "string"}, "agents": {"type": "array"}}},
   "agents.def.show": {"type": "object", "required": ["command", "name"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}}},
   "agents.def.deploy": {"type": "object", "required": ["command", "name"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}}},
-  "agents.def.undeploy": {"type": "object", "required": ["command", "name"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}}}
+  "agents.def.undeploy": {"type": "object", "required": ["command", "name"], "properties": {"command": {"type": "string"}, "name": {"type": "string"}}},
+  "skills.tag.set": {"type": "object", "required": ["command", "tags"], "properties": {"command": {"type": "string"}, "tags": {"type": "array"}}},
+  "skills.tag.rename": {"type": "object", "required": ["command", "tags"], "properties": {"command": {"type": "string"}, "tags": {"type": "array"}}},
+  "skills.tag.delete": {"type": "object", "required": ["command", "tags"], "properties": {"command": {"type": "string"}, "tags": {"type": "array"}}}
 }

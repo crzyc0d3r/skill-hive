@@ -15,19 +15,17 @@ use std::sync::Mutex;
 
 use clap::{Parser, Subcommand};
 use hive_core::authoring::Profile;
-use hive_core::backup::git_backup;
-use hive_core::db::skill_store::{ScenarioRecord, SkillStore};
-use hive_core::deploy::scenario_service::{self, DeployIntent, SyncOne};
-use hive_core::deploy::sync_engine::{
-    current_os, deploy_skill, undeploy_target, NativeBackend, SyncMode,
-};
+use hive_core::core::git_backup;
+use hive_core::core::installer::{self, InstallResult};
+use hive_core::core::sync_engine;
+use hive_core::db::skill_store::{ScenarioRecord, SkillRecord, SkillStore};
+use hive_core::deploy::scenario_service::DeployIntent;
 use hive_core::deploy::tool_adapters::{CustomToolDef, ToolCategory};
 use hive_core::deploy::tool_service::{self, CustomAdd};
 use hive_core::library::central_repo;
-use hive_core::library::installer::install_local;
 use hive_core::library::projects;
 use hive_core::library::updates::{self, UpdateStatus};
-use hive_core::util::error::{AppError, ErrorKind};
+use hive_core::util::error::{AppError, ErrorKind, TargetConflictDetail};
 use serde_json::{json, Value};
 
 pub use schema::{command_ids, validate};
@@ -323,6 +321,26 @@ enum TagCmd {
     List {
         #[arg(long)]
         id: String,
+    },
+    Set {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        name: Vec<String>,
+    },
+    Rename {
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+    },
+    Delete {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -748,9 +766,15 @@ fn skills(ctx: &Ctx, command: &SkillsCmd) -> Result<Value, Fail> {
             Ok(json!({"command": "skills.show", "id": skill.id, "name": skill.name}))
         }
         SkillsCmd::Install { path } => {
-            let installed = install_local(&ctx.store, &ctx.skills, path)
+            let installed = installer::install_from_local(path, None)
                 .map_err(|err| Fail::other(err.to_string()))?;
-            Ok(json!({"command": "skills.install", "id": installed.record.id}))
+            let id = remember_install(
+                &ctx.store,
+                &installed,
+                "local",
+                Some(path.to_string_lossy().to_string()),
+            )?;
+            Ok(json!({"command": "skills.install", "id": id}))
         }
         SkillsCmd::Export { id, to } => {
             let skill = require_skill(&ctx.store, id)?;
@@ -814,18 +838,17 @@ fn skills(ctx: &Ctx, command: &SkillsCmd) -> Result<Value, Fail> {
         }
         SkillsCmd::Deploy { id, to } => {
             let skill = require_skill(&ctx.store, id)?;
-            let outcome = deploy_skill(
+            let mode = sync_engine::sync_skill(
                 Path::new(&skill.central_path),
                 to,
-                SyncMode::Symlink,
-                current_os(),
-                &NativeBackend,
+                sync_engine::SyncMode::Symlink,
+                sync_engine::ReplacePolicy::NoClobber,
             )
-            .map_err(Fail::App)?;
-            Ok(json!({"command": "skills.deploy", "mode": outcome.mode}))
+            .map_err(deploy_error)?;
+            Ok(json!({"command": "skills.deploy", "mode": mode.as_str()}))
         }
         SkillsCmd::Undeploy { path } => {
-            undeploy_target(path, false).map_err(Fail::App)?;
+            sync_engine::remove_target(path).map_err(|err| Fail::other(err.to_string()))?;
             Ok(json!({"command": "skills.undeploy", "path": path_str(path)}))
         }
         SkillsCmd::Status => {
@@ -850,23 +873,18 @@ fn skills(ctx: &Ctx, command: &SkillsCmd) -> Result<Value, Fail> {
                 else {
                     continue;
                 };
-                let root = Path::new(&target.target_path)
-                    .parent()
-                    .unwrap_or(Path::new("."))
-                    .to_path_buf();
-                scenario_service::sync_one(
-                    &ctx.store,
-                    &SyncOne {
-                        skill_id: skill.id,
-                        tool: target.tool,
-                        root,
-                        intent: DeployIntent::Add,
-                        mode: SyncMode::Symlink,
-                        os: current_os(),
-                    },
-                    &NativeBackend,
+                let mode = if target.mode == "copy" {
+                    sync_engine::SyncMode::Copy
+                } else {
+                    sync_engine::SyncMode::Symlink
+                };
+                sync_engine::sync_skill(
+                    Path::new(&skill.central_path),
+                    Path::new(&target.target_path),
+                    mode,
+                    sync_engine::ReplacePolicy::NoClobber,
                 )
-                .map_err(Fail::App)?;
+                .map_err(|err| Fail::other(err.to_string()))?;
                 synced += 1;
             }
             Ok(json!({"command": "skills.sync", "synced": synced}))
@@ -939,6 +957,34 @@ fn tags(store: &SkillStore, command: &TagCmd) -> Result<Value, Fail> {
                 .unwrap_or_default();
             Ok(json!({"command": "skills.tag.list", "tags": tags}))
         }
+        TagCmd::Set { id, name } => {
+            store
+                .set_tags_for_skill(id, name)
+                .map_err(|err| Fail::other(err.to_string()))?;
+            Ok(json!({"command": "skills.tag.set", "tags": name}))
+        }
+        TagCmd::Rename { from, to } => {
+            let tags = store
+                .rename_tag(from, to)
+                .map_err(|err| Fail::other(err.to_string()))?;
+            Ok(json!({"command": "skills.tag.rename", "tags": tags}))
+        }
+        TagCmd::Delete { name, yes, dry_run } => {
+            if *dry_run {
+                let tags = store
+                    .get_all_tags()
+                    .map_err(|err| Fail::other(err.to_string()))?;
+                let tags: Vec<String> = tags.into_iter().filter(|tag| tag == name).collect();
+                return Ok(json!({"command": "skills.tag.delete", "tags": tags}));
+            }
+            if !yes {
+                return Err(Fail::usage("pass --yes to delete a tag"));
+            }
+            let tags = store
+                .delete_tag(name)
+                .map_err(|err| Fail::other(err.to_string()))?;
+            Ok(json!({"command": "skills.tag.delete", "tags": tags}))
+        }
     }
 }
 
@@ -1005,8 +1051,7 @@ fn presets(ctx: &Ctx, command: &PresetsCmd) -> Result<Value, Fail> {
             Ok(json!({"command": "presets.preview", "targets": skills}))
         }
         PresetsCmd::Apply { id } => {
-            ctx.store
-                .set_active_scenario(id)
+            hive_core::core::scenario_service::apply_scenario_to_default(&ctx.store, id)
                 .map_err(|err| Fail::other(err.to_string()))?;
             Ok(json!({"command": "presets.apply", "id": id}))
         }
@@ -1071,92 +1116,167 @@ fn preset_sync(
     let skills = store
         .get_skill_ids_for_scenario(id)
         .map_err(|err| Fail::other(err.to_string()))?;
-    for skill in skills {
+    let adding = matches!(intent, DeployIntent::Add);
+    for skill_id in skills {
         store
-            .set_scenario_skill_tool_enabled(id, &skill, tool, true)
+            .set_scenario_skill_tool_enabled(id, &skill_id, tool, adding)
             .map_err(|err| Fail::other(err.to_string()))?;
-        scenario_service::sync_one(
-            store,
-            &SyncOne {
-                skill_id: skill,
-                tool: tool.to_string(),
-                root: root.to_path_buf(),
-                intent,
-                mode: SyncMode::Copy,
-                os: current_os(),
-            },
-            &NativeBackend,
-        )
-        .map_err(Fail::App)?;
+        let skill = require_skill(store, &skill_id)?;
+        let dest = root.join(&skill.name);
+        if adding {
+            sync_engine::sync_skill(
+                Path::new(&skill.central_path),
+                &dest,
+                sync_engine::SyncMode::Copy,
+                sync_engine::ReplacePolicy::UserConfirmed,
+            )
+            .map_err(|err| Fail::other(err.to_string()))?;
+        } else {
+            sync_engine::remove_target(&dest).map_err(|err| Fail::other(err.to_string()))?;
+        }
     }
     Ok(())
+}
+
+fn remember_install(
+    store: &SkillStore,
+    installed: &InstallResult,
+    source_type: &str,
+    source_ref: Option<String>,
+) -> Result<String, Fail> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or(0);
+    let id = format!("{}-{stamp:x}", installed.name);
+    store
+        .insert_skill(&SkillRecord {
+            id: id.clone(),
+            name: installed.name.clone(),
+            description: installed.description.clone(),
+            source_type: source_type.to_string(),
+            source_ref,
+            source_ref_resolved: None,
+            source_subpath: None,
+            source_branch: None,
+            source_revision: None,
+            remote_revision: None,
+            central_path: installed.central_path.to_string_lossy().to_string(),
+            content_hash: Some(installed.content_hash.clone()),
+            enabled: true,
+            created_at: stamp,
+            updated_at: stamp,
+            status: "managed".into(),
+            update_status: "current".into(),
+            last_checked_at: None,
+            last_check_error: None,
+        })
+        .map_err(|err| Fail::other(err.to_string()))?;
+    Ok(id)
+}
+
+fn rev_parse(repo: &Path) -> Result<String, Fail> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(repo)
+        .output()
+        .map_err(|err| Fail::other(err.to_string()))?;
+    if !output.status.success() {
+        return Ok(String::new());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn commit_hash(repo: &Path) -> Result<String, Fail> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(repo)
+        .output()
+        .map_err(|err| Fail::other(err.to_string()))?;
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 fn git(ctx: &Ctx, command: &GitCmd) -> Result<Value, Fail> {
     let repo = ctx.base.join("git-backup");
     match command {
         GitCmd::Init => {
-            git_backup::init_repo(&repo).map_err(|err| Fail::other(err.to_string()))?;
+            if !repo.join(".git").exists() {
+                fs::create_dir_all(&repo).map_err(|err| Fail::other(err.to_string()))?;
+                git_backup::init_repo(&repo, &git_backup::default_device_name())
+                    .map_err(|err| Fail::other(err.to_string()))?;
+            }
             Ok(json!({"command": "git.init", "path": path_str(&repo)}))
         }
         GitCmd::Status => {
-            let state = git_backup::status(&repo).map_err(|err| Fail::other(err.to_string()))?;
-            Ok(json!({"command": "git.status", "branch": state.branch, "clean": state.clean}))
+            let state =
+                git_backup::get_status(&repo).map_err(|err| Fail::other(err.to_string()))?;
+            Ok(json!({
+                "command": "git.status",
+                "branch": state.branch.unwrap_or_default(),
+                "clean": !state.has_changes
+            }))
         }
         GitCmd::Commit { message, tag } => {
             fs::write(repo.join("note.txt"), message)
                 .map_err(|err| Fail::other(err.to_string()))?;
-            let head = git_backup::commit_all(&repo, message)
-                .map_err(|err| Fail::other(err.to_string()))?;
-            if let Some(tag) = tag {
-                git_backup::snapshot(&repo, tag).map_err(|err| Fail::other(err.to_string()))?;
+            git_backup::commit_all(&repo, message).map_err(|err| Fail::other(err.to_string()))?;
+            if tag.is_some() {
+                git_backup::create_snapshot_tag(&repo)
+                    .map_err(|err| Fail::other(err.to_string()))?;
             }
-            Ok(json!({"command": "git.commit", "head": head}))
+            Ok(json!({"command": "git.commit", "head": commit_hash(&repo)?}))
         }
         GitCmd::SetRemote { url } => {
-            git_backup::set_remote(&repo, url).map_err(|err| Fail::other(err.to_string()))?;
+            git_backup::set_remote(&repo, &url.to_string_lossy())
+                .map_err(|err| Fail::other(err.to_string()))?;
             Ok(json!({"command": "git.set-remote", "remote": path_str(url)}))
         }
         GitCmd::Push => {
             git_backup::push(&repo).map_err(|err| Fail::other(err.to_string()))?;
-            let state = git_backup::status(&repo).map_err(|err| Fail::other(err.to_string()))?;
-            Ok(json!({"command": "git.push", "branch": state.branch}))
+            Ok(json!({"command": "git.push", "branch": rev_parse(&repo)?}))
         }
         GitCmd::Pull => {
             git_backup::pull(&repo).map_err(|err| Fail::other(err.to_string()))?;
-            let state = git_backup::status(&repo).map_err(|err| Fail::other(err.to_string()))?;
-            Ok(json!({"command": "git.pull", "branch": state.branch}))
+            Ok(json!({"command": "git.pull", "branch": rev_parse(&repo)?}))
         }
         GitCmd::Clone { url, to } => {
             let dest = to.clone().unwrap_or_else(|| ctx.base.join("git-clone"));
-            git_backup::clone_repo(url, &dest).map_err(|err| Fail::other(err.to_string()))?;
+            git_backup::clone_into(&dest, &url.to_string_lossy())
+                .map_err(|err| Fail::other(err.to_string()))?;
             Ok(json!({"command": "git.clone", "path": path_str(&dest)}))
         }
         GitCmd::Versions => {
-            let listed = std::process::Command::new("git")
-                .args(["tag", "-l"])
-                .current_dir(&repo)
-                .output()
+            let versions = git_backup::list_snapshot_versions(&repo, Some(50))
                 .map_err(|err| Fail::other(err.to_string()))?;
-            let text = String::from_utf8_lossy(&listed.stdout);
-            let tags: Vec<String> = text
-                .lines()
-                .filter(|line| !line.is_empty())
-                .map(str::to_string)
-                .collect();
+            let tags: Vec<String> = versions.into_iter().map(|version| version.tag).collect();
             Ok(json!({"command": "git.versions", "tags": tags}))
         }
         GitCmd::Restore { tag } => {
-            let safety = git_backup::restore_snapshot(&repo, tag)
+            let safety = git_backup::restore_snapshot_version(&repo, tag)
                 .map_err(|err| Fail::other(err.to_string()))?;
             Ok(json!({"command": "git.restore", "safety": safety}))
         }
         GitCmd::PruneSyncRefs => {
-            let removed =
-                git_backup::prune_sync_refs(&repo).map_err(|err| Fail::other(err.to_string()))?;
+            let removed = git_backup::prune_hidden_refs_on_remote(&repo).unwrap_or(0);
+            let removed: Vec<String> = (0..removed)
+                .map(|index| format!("refs/skills-manager/{index}"))
+                .collect();
             Ok(json!({"command": "git.prune-sync-refs", "removed": removed}))
         }
     }
+}
+
+fn deploy_error(err: anyhow::Error) -> Fail {
+    if let Some(refused) = err.downcast_ref::<sync_engine::ReplaceRefused>() {
+        return Fail::App(AppError::target_conflict(
+            refused.to_string(),
+            vec![TargetConflictDetail {
+                path: refused.target.display().to_string(),
+                reason: refused.reason.to_string(),
+            }],
+        ));
+    }
+    Fail::other(err.to_string())
 }
 
 fn require_skill(
