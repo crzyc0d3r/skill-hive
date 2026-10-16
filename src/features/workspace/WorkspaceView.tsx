@@ -1,5 +1,8 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { SearchIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
@@ -120,7 +123,10 @@ export function WorkspaceView({
       <div data-testid="agent-page">
         <h1 className="font-mono text-[22px] font-semibold">{agentKey}</h1>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Input aria-label={t("workspace.search")} data-search value={query} onChange={(event) => setQuery(event.target.value)} className="h-8" />
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input aria-label={t("workspace.search")} data-search value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("workspace.search")} className="h-8 w-56 pl-8" />
+          </div>
           <Button type="button" variant="outline" size="sm" onClick={() => setLayout(layout === "grid" ? "list" : "grid")}>
             {layout === "grid" ? t("workspace.view.list") : t("workspace.view.grid")}
           </Button>
@@ -142,20 +148,22 @@ export function WorkspaceView({
         {notice ? <p role="status">{notice}</p> : null}
         <ul data-layout={layout} className={layout === "grid" ? "mt-4 grid grid-cols-2 gap-3" : "mt-4 space-y-2"}>
           {visible.map((card) => (
-            <li key={card.id} className="rounded-md border border-border p-3 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" aria-label={`Select ${card.name}`} checked={selected.includes(card.id)} onChange={() => setSelected((current) => current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id])} />
-                <button type="button" className="font-medium" onClick={() => { setOpenId(card.id); setSheet("local"); }}>{card.name}</button>
-              </label>
-              <span className="ml-2 text-muted-foreground">
-                {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
-              </span>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setPending({ ids: [card.id], kind: "upload" })}>{t("workspace.upload")}</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setPending({ ids: [card.id], kind: "pull" })}>{t("workspace.pull")}</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setPending({ ids: [card.id], kind: "remove" })}>{t("workspace.remove")}</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setPending({ ids: [card.id], kind: "delete" })}>{t("workspace.delete")}</Button>
-              </div>
+            <li key={card.id}>
+              <Card className="group/card gap-2 rounded-lg border-border px-3 py-3 shadow-none">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" className={`size-4 rounded border-input ${selected.length > 0 ? "opacity-100" : "opacity-0 group-hover/card:opacity-100"}`} aria-label={`Select ${card.name}`} checked={selected.includes(card.id)} onChange={() => setSelected((current) => current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id])} />
+                  <button type="button" className="font-medium" onClick={() => { setOpenId(card.id); setSheet("local"); }}>{card.name}</button>
+                  <Badge variant="outline" className="ml-auto font-normal">
+                    {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "upload" })}>{t("workspace.upload")}</Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "pull" })}>{t("workspace.pull")}</Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "remove" })}>{t("workspace.remove")}</Button>
+                  <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setPending({ ids: [card.id], kind: "delete" })}>{t("workspace.delete")}</Button>
+                </div>
+              </Card>
             </li>
           ))}
         </ul>
