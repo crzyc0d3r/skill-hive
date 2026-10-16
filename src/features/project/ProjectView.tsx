@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { useState } from "react";
 import { t } from "@/lib/i18n";
 import {
@@ -28,21 +29,26 @@ export function ProjectView() {
     setProjectSkills([next]);
   };
   return (
-    <section data-testid="project">
-      <h1 className="font-mono text-[22px] font-semibold">{t("project.title")}</h1>
-      <Button type="button" data-testid="link-project" variant="outline" size="sm" className="mt-3" onClick={() => {
-          setLinked(true);
-          setProjectSkills([skill]);
-          void addProject("fixture", "");
-        }}
-      >
-        {t("project.link")}
-      </Button>
-      <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { setLinked(true); void addProject(skill.name, ""); }}>
-        {t("project.linked")}
-      </Button>
+    <section data-testid="project" className="flex w-full flex-col gap-4">
+      <h1 className="font-mono text-[22px] font-semibold tracking-tight">{t("project.title")}</h1>
+      <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 shadow-none">
+        <p className="text-sm text-muted-foreground">{t("project.linked")}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" data-testid="link-project" size="sm" onClick={() => {
+              setLinked(true);
+              setProjectSkills([skill]);
+              void addProject("fixture", "");
+            }}
+          >
+            {t("project.link")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { setLinked(true); void addProject(skill.name, ""); }}>
+            {t("project.linked")}
+          </Button>
+        </div>
+      </Card>
       {linked ? (
-        <div className="mt-4 space-y-2 text-sm">
+        <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 text-sm shadow-none">
           <p>
             {skill.name}
             <span data-testid="project-dot" data-color={dotColor(skill)} className="ml-2 inline-block h-2 w-2 rounded-full bg-current" />
@@ -65,7 +71,7 @@ export function ProjectView() {
             <span>{t("library.detail.diff")}</span>
             <span>{t("workspace.detail.center")}</span>
           </div>
-        </div>
+        </Card>
       ) : null}
     </section>
   );

@@ -142,7 +142,7 @@ export function BackupView() {
         <p>{t("backup.firstRun")}</p>
         <label>
           Remote
-          <Input name="remote" aria-label="Restore remote" className="h-8 ml-2" />
+          <Input name="remote" aria-label="Restore remote" className="mt-1 h-8 max-w-xl" />
         </label>
         <Button type="submit" variant="outline" size="sm" className="ml-2">Use remote library</Button>
       </form>

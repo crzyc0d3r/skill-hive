@@ -114,7 +114,7 @@ export function InstallView({
       ) : null}
       {active === "git" ? (
         <form
-          className="mt-4 space-y-2"
+          className="max-w-xl space-y-3 rounded-lg border border-border bg-card p-4"
           onSubmit={(event) => {
             event.preventDefault();
             return act(async () => {

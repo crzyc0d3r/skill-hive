@@ -217,11 +217,11 @@ export function SettingsView({
                 <span className="ml-2 text-muted-foreground">{agent.installed ? "Detected" : "Other supported"}</span>
                 <label className="mt-1 block">
                   {t("settings.agents.reset")}
-                  <Input aria-label={`${t("settings.agents.reset")} ${agent.name}`} value={agent.path} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: pathValue } : item)); void setCustomToolPath(agent.key, pathValue); }} className="h-8 ml-2" />
+                  <Input aria-label={`${t("settings.agents.reset")} ${agent.name}`} value={agent.path} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: pathValue } : item)); void setCustomToolPath(agent.key, pathValue); }} className="mt-1 h-8 max-w-xl" />
                 </label>
                 <label className="mt-1 block">
                   {t("settings.agents.project")}
-                  <Input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, projectPath: pathValue } : item)); void setCustomToolProjectPath(agent.key, pathValue); }} className="h-8 ml-2" />
+                  <Input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, projectPath: pathValue } : item)); void setCustomToolProjectPath(agent.key, pathValue); }} className="mt-1 h-8 max-w-xl" />
                 </label>
                 <Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => Promise.resolve(onResetPath(agent.key)).then((next) => { if (next) return onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: next } : item)); })}>{t("settings.agents.reset")}</Button>
                 {agent.custom ? (

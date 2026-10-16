@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { t } from "../../lib/i18n";
@@ -36,16 +37,24 @@ export function GenerateWizard() {
     save: t("generate.step.save"),
   };
   return (
-    <section data-testid="generate-wizard" className="mx-auto max-w-3xl space-y-3">
-      <h1 className="font-mono text-xl font-semibold">{t("generate.title")}</h1>
-      <p className="text-sm text-muted-foreground">{sessionId}</p>
-      <ol className="flex flex-wrap gap-2 text-sm">
+    <section data-testid="generate-wizard" className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      <header>
+        <h1 className="font-mono text-[22px] font-semibold tracking-tight">{t("generate.title")}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{sessionId}</p>
+      </header>
+      <ol className="inline-flex w-fit flex-wrap rounded-lg bg-muted p-0.5 text-sm">
         {STEPS.map((step) => (
-          <li key={step} data-testid={`generate-step-${step}`} aria-current={wizard.step === step ? "step" : undefined}>
+          <li
+            key={step}
+            data-testid={`generate-step-${step}`}
+            aria-current={wizard.step === step ? "step" : undefined}
+            className={wizard.step === step ? "rounded-md bg-background px-3 py-1 font-medium shadow-sm" : "px-3 py-1 text-muted-foreground"}
+          >
             {stepLabel[step]}
           </li>
         ))}
       </ol>
+      <Card className="gap-3 rounded-lg border-border px-4 py-4 shadow-none">
       {wizard.step === "goal" ? (
         <form
           className="space-y-2"
@@ -55,7 +64,7 @@ export function GenerateWizard() {
           }}
         >
           <label className="block text-sm" htmlFor="generate-goal">{t("generate.goal")}</label>
-          <textarea id="generate-goal" className="w-full rounded-md border border-input p-2 text-sm" value={wizard.goal} onChange={(event) => setGoal(event.target.value)} />
+          <textarea id="generate-goal" className="min-h-24 w-full rounded-md border border-input bg-background p-2 text-sm" value={wizard.goal} onChange={(event) => setGoal(event.target.value)} />
           <Button type="submit" size="sm">{t("generate.continue")}</Button>
         </form>
       ) : null}
@@ -85,6 +94,7 @@ export function GenerateWizard() {
           {wizard.saved ? <p data-testid="generate-saved">{t("generate.step.save")}</p> : null}
         </div>
       ) : null}
+      </Card>
       {wizard.discardAsk ? (
         <div role="dialog" aria-label={t("generate.discard.title")} className="rounded-md border border-border p-3">
           <p>{t("generate.discard.title")}</p>

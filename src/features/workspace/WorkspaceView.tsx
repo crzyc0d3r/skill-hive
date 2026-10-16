@@ -91,7 +91,7 @@ export function WorkspaceView({
             void onCreate(name);
           }}
         >
-          <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8" />
+          <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8 w-56" />
           <Button type="submit" variant="outline" size="sm">{t("preset.new")}</Button>
         </form>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="preset-bar">
@@ -108,7 +108,7 @@ export function WorkspaceView({
         </div>
         <ul className="mt-4 grid grid-cols-2 gap-3" data-testid="agent-catalog">
           {agents.map((agent) => (
-            <li key={agent.key} className="rounded-md border border-border p-3 text-sm">
+            <li key={agent.key} className="rounded-lg border border-border bg-card p-3 text-sm shadow-none">
               <Link to={`/global-workspace/${agent.key}`}>{agent.name}</Link>
               <div className="text-muted-foreground">{agent.path}</div>
             </li>

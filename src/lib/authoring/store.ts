@@ -9,6 +9,7 @@ import {
   snapshotSkillDraft,
 } from "@/lib/ipc/actions";
 import type { SkillCard } from "@/features/library/model";
+import { DEMO, demoEnabled } from "@/lib/demo";
 import {
   applyAgentFix,
   applySkillFix,
@@ -108,12 +109,34 @@ export function setValidationCounts(findings: { severity: string }[] | null): vo
   });
 }
 
+function demoSkillDraft(card: SkillCard): SkillDraft {
+  return {
+    id: card.id,
+    name: card.name,
+    dir: `/skills/${card.name}`,
+    profile: "portable",
+    shellPreview: false,
+    deployments: [],
+    files: [
+      {
+        path: "SKILL.md",
+        executable: false,
+        content: `---\nname: ${card.name}\ndescription: ${card.description}\n---\n${card.body}\n`,
+      },
+    ],
+  };
+}
+
 function seed(id: string): SkillDraft | null {
   if (id === "warnings") return warningsFixture();
   if (id === "gauge") return longBodyFixture();
   if (id === "preview-skill") return previewFixture();
   if (id === "symlink-skill") return deployFixture(id, "symlink");
   if (id === "copy-skill") return deployFixture(id, "copy");
+  if (demoEnabled()) {
+    const card = DEMO.skills.find((skill) => skill.id === id);
+    if (card) return demoSkillDraft(card);
+  }
   return null;
 }
 
