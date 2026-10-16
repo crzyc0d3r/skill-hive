@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { t } from "../../lib/i18n";
 import { recordVerdict, useGenerate } from "@/features/generate/store";
 
@@ -17,7 +18,7 @@ export function CompareView() {
           <p>No findings.</p>
         </article>
       </div>
-      <button type="button" className="rounded-md border border-border px-3 py-1 text-sm" onClick={() => recordVerdict("Output A")}>{t("compare.verdict")}</button>
+      <Button type="button" variant="outline" size="sm" onClick={() => recordVerdict("Output A")}>{t("compare.verdict")}</Button>
       {revealed ? <p data-testid="compare-unblind">{t("compare.unblind")}: {wizard.verdict}</p> : null}
     </section>
   );
