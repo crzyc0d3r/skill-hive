@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
   backupSetDeviceName,
@@ -12,6 +14,7 @@ import { restoreBackupRemote, revokeBackupToken, setAsideBackup, storeBackupPat 
 import { demoEnabled } from "@/lib/demo";
 import { backupNow, restoreSnapshot } from "@/features/backup/model";
 import { t } from "@/lib/i18n";
+import { Screen } from "@/components/chrome";
 
 export function BackupView() {
   const [body, setBody] = useState("library v1");
@@ -37,16 +40,10 @@ export function BackupView() {
   }
 
   return (
-    <section data-testid="backup">
-      <h1 className="font-mono text-[22px] font-semibold">{t("backup.title")}</h1>
+    <Screen testId="backup" title={t("backup.title")}>
       <p className="mt-2 text-sm" role="status">{body}</p>
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        <button
-          type="button"
-          data-testid="backup-now"
-          disabled={busy}
-          className="rounded-md bg-primary px-2 py-1 text-primary-foreground"
-          onClick={() =>
+        <Button type="button" data-testid="backup-now" disabled={busy} size="sm" onClick={() =>
             void run(async () => {
               if (demoEnabled()) {
                 const snap = backupNow(body, [])[0];
@@ -61,12 +58,9 @@ export function BackupView() {
           }
         >
           {t("backup.now")}
-        </button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void run(async () => { const snap = await gitBackupSync("sync"); setHistory((current) => [snap, ...current]); setNote(snap.label); })}>{t("backup.sync")}</button>
-        <button
-          type="button"
-          className="rounded-md border border-border px-2 py-1"
-          onClick={() =>
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { const snap = await gitBackupSync("sync"); setHistory((current) => [snap, ...current]); setNote(snap.label); })}>{t("backup.sync")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() =>
             void run(async () => {
               if (remote.trim()) await gitBackupSetRemote(remote.trim());
               setNote("Remote saved. GitHub device login needs an OAuth client id, which this build does not ship.");
@@ -74,43 +68,37 @@ export function BackupView() {
           }
         >
           {t("backup.github")}
-        </button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void run(async () => { await gitBackupRemoveRemote(); setNote("Remote removed"); })}>{t("backup.disconnect")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { void revokeBackupToken(); setPat(""); setNote("Token cleared"); }}>{t("backup.revoke")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void run(async () => { const snap = await gitBackupSync("retry"); setHistory((current) => [snap, ...current]); })}>{t("backup.retry")}</button>
-        <a className="rounded-md border border-border px-2 py-1" href="https://github.com/settings/applications" target="_blank" rel="noreferrer">{t("backup.deletion")}</a>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void run(async () => { const status = await gitBackupStatus(); setNote(status.branch || "repository ready"); })}>{t("backup.setup")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => void gitBackupStatus().then((status) => setNote(status.head || "no commits yet")).catch((err: Error) => setError(err.message))}>{t("backup.recovery")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { void setAsideBackup(body); setNote("Set aside"); }}>{t("backup.setAside")}</button>
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { await gitBackupRemoveRemote(); setNote("Remote removed"); })}>{t("backup.disconnect")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => { void revokeBackupToken(); setPat(""); setNote("Token cleared"); }}>{t("backup.revoke")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { const snap = await gitBackupSync("retry"); setHistory((current) => [snap, ...current]); })}>{t("backup.retry")}</Button>
+        <Button asChild variant="outline" size="sm">
+          <a href="https://github.com/settings/applications" target="_blank" rel="noreferrer">{t("backup.deletion")}</a>
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { const status = await gitBackupStatus(); setNote(status.branch || "repository ready"); })}>{t("backup.setup")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void gitBackupStatus().then((status) => setNote(status.head || "no commits yet")).catch((err: Error) => setError(err.message))}>{t("backup.recovery")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => { void setAsideBackup(body); setNote("Set aside"); }}>{t("backup.setAside")}</Button>
       </div>
       <p className="mt-2 text-sm">{t("backup.public")}</p>
       <label className="mt-2 block text-sm">
         {t("backup.pat")}
-        <input
-          aria-label={t("backup.pat")}
-          value={pat}
-          onChange={(event) => {
+        <Input aria-label={t("backup.pat")} className="ml-2 h-8 w-56" value={pat} onChange={(event) => {
             const next = event.target.value;
             setPat(next);
             if (next.trim()) void storeBackupPat(next.trim());
           }}
-          className="ml-2 rounded-md border border-input px-2 py-1"
         />
       </label>
       <label className="mt-2 block text-sm">
         {t("backup.advanced")}
-        <input aria-label={t("backup.advanced")} value={remote} onChange={(event) => setRemote(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
+        <Input aria-label={t("backup.advanced")} className="ml-2 h-8 w-56" value={remote} onChange={(event) => setRemote(event.target.value)} />
       </label>
       <p className="mt-2 text-sm text-muted-foreground">{t("settings.engine.note")}</p>
-      <button type="button" disabled className="rounded-md border border-border px-2 py-1 text-sm">{t("settings.engine.libgit2")}</button>
+      <Button type="button" disabled variant="outline" size="sm">{t("settings.engine.libgit2")}</Button>
       <label className="mt-3 block text-sm">
         {t("backup.device")}
-        <input
-          aria-label={t("backup.device")}
-          value={device}
-          onChange={(event) => setDevice(event.target.value)}
+        <Input aria-label={t("backup.device")} className="ml-2 h-8 w-56" value={device} onChange={(event) => setDevice(event.target.value)}
           onBlur={() => { if (device.trim()) void backupSetDeviceName(device.trim()); }}
-          className="ml-2 rounded-md border border-input px-2 py-1"
         />
       </label>
       <p className="mt-2 text-sm text-muted-foreground">{t("backup.remote")} {remote}</p>
@@ -121,11 +109,7 @@ export function BackupView() {
         {history.map((snap) => (
           <li key={snap.id}>
             {snap.label}
-            <button
-              type="button"
-              data-testid="backup-restore"
-              className="ml-2 rounded-md border border-border px-2 py-1"
-              onClick={() =>
+            <Button type="button" data-testid="backup-restore" variant="outline" size="sm" className="ml-2" onClick={() =>
                 void run(async () => {
                   if (demoEnabled()) {
                     const restored = restoreSnapshot([{ id: snap.id, label: snap.label, body }], snap.id);
@@ -140,7 +124,7 @@ export function BackupView() {
               }
             >
               {t("backup.restore")}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -158,10 +142,10 @@ export function BackupView() {
         <p>{t("backup.firstRun")}</p>
         <label>
           Remote
-          <input name="remote" aria-label="Restore remote" className="ml-2 rounded-md border border-input px-2 py-1" />
+          <Input name="remote" aria-label="Restore remote" className="h-8 ml-2" />
         </label>
-        <button type="submit" className="ml-2 rounded-md border border-border px-2 py-1">Use remote library</button>
+        <Button type="submit" variant="outline" size="sm" className="ml-2">Use remote library</Button>
       </form>
-    </section>
+    </Screen>
   );
 }
