@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { t } from "@/lib/i18n";
@@ -24,8 +26,8 @@ export function AgentsView() {
           else importAgent(importName, "replace");
         }}
       >
-        <input aria-label={t("agents.import")} value={importName} onChange={(event) => setImportName(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
-        <button type="submit" className="rounded-md border border-border px-2 py-1 text-sm">{t("agents.import")}</button>
+        <Input aria-label={t("agents.import")} value={importName} onChange={(event) => setImportName(event.target.value)} className="h-8" />
+        <Button type="submit" variant="outline" size="sm">{t("agents.import")}</Button>
       </form>
       <ul className="mt-4 space-y-2">
         {agents.map((agent) => (

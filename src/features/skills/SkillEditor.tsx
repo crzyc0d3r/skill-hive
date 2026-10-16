@@ -1,9 +1,12 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { t } from "@/lib/i18n";
 import { bodyStats, parseFrontmatter, renderLoaded, skillMarkdown, validateSkill, type SkillDraft } from "@/lib/authoring/model";
 import { ensureSkill, fixSkill, publishSkill, restoreSkill, saveSkill, setValidationCounts, snapshotSkill, updateSkill, useAuthoring } from "@/lib/authoring/store";
 import { CodeEditor } from "@/features/editor/CodeEditor";
+import { Screen } from "@/components/chrome";
 
 const TABS = ["problems", "preview", "versions"] as const;
 
@@ -51,7 +54,13 @@ export function SkillEditor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [draft]);
 
-  if (!draft) return <p>{t("library.empty")}</p>;
+  if (!draft) {
+    return (
+      <Screen testId="skill-editor" title={id || t("library.empty")}>
+        <p className="text-sm text-muted-foreground">{t("library.empty")}</p>
+      </Screen>
+    );
+  }
   const findings = validateSkill(draft);
   const errors = findings.filter((item) => item.severity === "error").length;
   const stats = bodyStats(draft);
@@ -96,16 +105,16 @@ export function SkillEditor() {
             <option value="claude-code">claude-code</option>
           </select>
         </label>
-        <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => updateSkill({ ...draft, profile: draft.profile === "portable" ? "claude-code" : "portable" })}>{t("editor.portable")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1">{t("editor.rename")}</button>
+        <Button type="button" variant="outline" size="sm" onClick={() => updateSkill({ ...draft, profile: draft.profile === "portable" ? "claude-code" : "portable" })}>{t("editor.portable")}</Button>
+        <Button type="button" variant="outline" size="sm">{t("editor.rename")}</Button>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => saveSkill(draft)}>{t("editor.save")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => snapshotSkill(draft.id, "snapshot")}>{t("editor.snapshot")}</button>
-        <button type="button" className="rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground disabled:opacity-50" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""} onClick={() => publish(false)}>{t("editor.publish")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm disabled:opacity-50" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""}>{t("editor.package")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm disabled:opacity-50" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""}>{t("editor.deploy")}</button>
-        <button type="button" disabled title={t("editor.runTests.later")} className="rounded-md border border-border px-2 py-1 text-sm opacity-50">{t("library.menu.tests")}</button>
+        <Button type="button" variant="outline" size="sm" onClick={() => saveSkill(draft)}>{t("editor.save")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => snapshotSkill(draft.id, "snapshot")}>{t("editor.snapshot")}</Button>
+        <Button type="button" variant="default" size="sm" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""} onClick={() => publish(false)}>{t("editor.publish")}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""}>{t("editor.package")}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""}>{t("editor.deploy")}</Button>
+        <Button type="button" disabled title={t("editor.runTests.later")} variant="outline" size="sm">{t("library.menu.tests")}</Button>
       </div>
       <div className="mt-3 grid min-h-0 grid-cols-[9rem_minmax(0,1fr)_12rem] gap-2">
         <aside aria-label={t("editor.fileTree")} className="min-w-0 rounded-md border border-border p-2 text-sm">
@@ -116,7 +125,7 @@ export function SkillEditor() {
               </li>
             ))}
           </ul>
-          {rename ? <input aria-label={t("editor.renameFile")} value={rename} onChange={(event) => setRename(event.target.value)} className="mt-2 w-full rounded-md border border-input px-1 py-0.5 text-xs" /> : null}
+          {rename ? <Input aria-label={t("editor.renameFile")} value={rename} onChange={(event) => setRename(event.target.value)} className="mt-2 h-8 w-full" /> : null}
           <form
             className="mt-2"
             onSubmit={(event) => {
@@ -125,14 +134,14 @@ export function SkillEditor() {
               setImportError(resolved ? "invalid_input path escapes the skill directory" : null);
             }}
           >
-            <input aria-label={t("editor.importPath")} value={importPath} onChange={(event) => setImportPath(event.target.value)} className="w-full rounded-md border border-input px-1 py-0.5 text-xs" />
+            <Input aria-label={t("editor.importPath")} value={importPath} onChange={(event) => setImportPath(event.target.value)} className="h-8 w-full" />
           </form>
           {importError ? <p role="alert">{importError}</p> : null}
         </aside>
         <div className="min-w-0">
           <label className="block text-sm">
             {t("editor.description")}
-            <input aria-label={t("editor.description")} value={descriptionOf(draft)} onChange={(event) => changeDescription(event.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1 text-sm" />
+            <Input aria-label={t("editor.description")} value={descriptionOf(draft)} onChange={(event) => changeDescription(event.target.value)} className="mt-1 h-8 w-full" />
           </label>
           <p data-testid="body-gauge" data-amber={stats.amber ? "true" : "false"} className={`mt-2 text-xs ${stats.amber ? "text-warning-text" : "text-muted-foreground"}`}>
             {t("editor.gauge")} {stats.lines} / 500 · {stats.tokens} / 5000
@@ -144,9 +153,9 @@ export function SkillEditor() {
         <aside className="min-w-0">
           <div data-testid="editor-tabs" role="tablist" className="flex flex-col gap-1">
             {TABS.map((item) => (
-              <button key={item} type="button" role="tab" aria-selected={tab === item} className="rounded-md border border-border px-2 py-1 text-left text-sm" onClick={() => setTab(item)}>
+              <Button key={item} type="button" role="tab" aria-selected={tab === item} variant={tab === item ? "default" : "outline"} size="sm" className="whitespace-normal text-left" onClick={() => setTab(item)}>
                 {t(`editor.${item}`)}
-              </button>
+              </Button>
             ))}
           </div>
           {tab === "problems" ? (
@@ -165,7 +174,7 @@ export function SkillEditor() {
             <div data-testid="preview" className="mt-2 text-xs">
               <div className="flex flex-wrap gap-1">
                 {(["listing", "loaded", "resources"] as const).map((item) => (
-                  <button key={item} type="button" aria-pressed={preview === item} className="rounded-md border border-border px-1 py-0.5" onClick={() => setPreview(item)}>{t(`editor.${item}`)}</button>
+                  <Button key={item} type="button" aria-pressed={preview === item} variant="outline" size="sm" onClick={() => setPreview(item)}>{t(`editor.${item}`)}</Button>
                 ))}
               </div>
               {preview === "loaded" ? (
@@ -173,17 +182,14 @@ export function SkillEditor() {
                   <pre className="whitespace-pre-wrap">{loaded.text}</pre>
                   {loaded.showRun
                     ? loaded.commands.map((command) => (
-                        <button key={command} type="button" className="mt-1 rounded-md border border-border px-1 py-0.5" onClick={() => setRan(command)}>{t("editor.runNow")}</button>
+                        <Button key={command} type="button" variant="outline" size="sm" className="mt-1" onClick={() => setRan(command)}>{t("editor.runNow")}</Button>
                       ))
                     : <p>{t("editor.shellOff")}</p>}
                   {ran ? <p>{ran}</p> : null}
-                  <button
-                    type="button"
-                    className="mt-2 rounded-md border border-border px-1 py-0.5"
-                    onClick={() => updateSkill({ ...draft, shellPreview: !draft.shellPreview })}
+                  <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => updateSkill({ ...draft, shellPreview: !draft.shellPreview })}
                   >
                     {t("editor.shellToggle")}
-                  </button>
+                  </Button>
                 </div>
               ) : null}
               {preview === "listing" ? <p className="mt-2">{draft.name}: {descriptionOf(draft)}</p> : null}
@@ -206,7 +212,7 @@ export function SkillEditor() {
         <div role="dialog" aria-label={t("editor.confirm.title")} className="mt-3 rounded-md border border-border p-3">
           <h2 className="text-sm font-medium">{t("editor.confirm.title")}</h2>
           <ul>{confirm.map((agent) => <li key={agent}>{agent}</li>)}</ul>
-          <button type="button" className="mt-2 rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground" onClick={() => publish(true)}>{t("editor.confirm.action")}</button>
+          <Button type="button" variant="default" size="sm" className="mt-2" onClick={() => publish(true)}>{t("editor.confirm.action")}</Button>
         </div>
       ) : null}
     </section>
