@@ -1,3 +1,5 @@
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { t } from "../lib/i18n";
 
 export function StatusBanner({ message, onRetry }: { message: string | null; onRetry?: () => void }) {
@@ -5,15 +7,18 @@ export function StatusBanner({ message, onRetry }: { message: string | null; onR
     return <div data-testid="status-banner" hidden />;
   }
   return (
-    <div
+    <Alert
       data-testid="status-banner"
-      role="alert"
-      className="flex items-center justify-between gap-3 border-b border-border bg-destructive-subtle px-4 py-2 text-sm text-destructive-subtle-foreground"
+      variant="destructive"
+      className="rounded-none border-x-0 border-t-0 bg-destructive-subtle text-destructive-subtle-foreground"
     >
-      <span>{message}</span>
-      <button type="button" className="rounded-md border border-border px-2 py-1" onClick={onRetry}>
-        {t("banner.retry")}
-      </button>
-    </div>
+      <AlertTitle className="sr-only">{t("banner.retry")}</AlertTitle>
+      <AlertDescription className="flex items-center justify-between gap-3 text-destructive-subtle-foreground">
+        <span>{message}</span>
+        <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+          {t("banner.retry")}
+        </Button>
+      </AlertDescription>
+    </Alert>
   );
 }

@@ -1,5 +1,8 @@
 import { HELP_CARDS } from "@/lib/shell/help";
 import { t } from "@/lib/i18n";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const HELP_ANCHORS: Record<(typeof HELP_CARDS)[number], string> = {
   "help.card.library": "library",
@@ -14,18 +17,25 @@ const HELP_ANCHORS: Record<(typeof HELP_CARDS)[number], string> = {
 
 export function HelpDialog({ onClose }: { onClose: () => void }) {
   return (
-    <div role="dialog" aria-label={t("help.title")} className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
-      <div className="max-h-[80vh] w-[32rem] max-w-[90vw] overflow-auto rounded-lg border border-border bg-popover p-4">
-        <h2 className="font-medium">{t("help.title")}</h2>
-        <ul className="mt-3 grid grid-cols-2 gap-2 text-sm">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent aria-label={t("help.title")} className="sm:max-w-xl" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{t("help.title")}</DialogTitle>
+          <DialogDescription>Eight guides for the parts of Skill Hive you use every day.</DialogDescription>
+        </DialogHeader>
+        <ul className="grid grid-cols-2 gap-2 text-sm">
           {HELP_CARDS.map((key) => (
-            <li key={key} className="rounded-md border border-border p-2" data-help-card={key}>
-              <a href={`https://github.com/crzyc0d3r/skill-hive/blob/main/docs/user-guide.md#${HELP_ANCHORS[key]}`}>{t(key)}</a>
+            <li key={key} data-help-card={key}>
+              <Card className="gap-0 rounded-lg py-3 shadow-none">
+                <a className="px-3 text-sm leading-5 text-info-text underline-offset-2 hover:underline" href={`https://github.com/crzyc0d3r/skill-hive/blob/main/docs/user-guide.md#${HELP_ANCHORS[key]}`}>{t(key)}</a>
+              </Card>
             </li>
           ))}
         </ul>
-        <button type="button" className="mt-3 rounded-md border border-border px-2 py-1 text-sm" onClick={onClose}>Close</button>
-      </div>
-    </div>
+        <div className="flex justify-end">
+          <Button type="button" size="sm" variant="outline" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

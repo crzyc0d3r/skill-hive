@@ -6,7 +6,7 @@ export function PlaceholderView() {
     <section>
       <h1 className="font-mono text-[22px] font-semibold">Placeholder</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {location.pathname} arrives in a later phase.
+        {location.pathname} is not available in this build.
       </p>
     </section>
   );

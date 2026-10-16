@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { t } from "@/lib/i18n";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function CloseGuardDialog({
   onRemember,
@@ -10,17 +13,21 @@ export function CloseGuardDialog({
 }) {
   const [remember, setRemember] = useState(false);
   return (
-    <div role="dialog" aria-label={t("close.dialog")} className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
-      <div className="rounded-lg border border-border bg-popover p-4 text-sm">
-        <h2 className="font-medium">{t("close.dialog")}</h2>
-        <label className="mt-2 block">
-          <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /> {t("close.remember")}
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent aria-label={t("close.dialog")} className="sm:max-w-md" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{t("close.dialog")}</DialogTitle>
+          <DialogDescription>Choose what the window does when you close it.</DialogDescription>
+        </DialogHeader>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox aria-label={t("close.remember")} checked={remember} onCheckedChange={(value) => setRemember(value === true)} />
+          <span>{t("close.remember")}</span>
         </label>
-        <div className="mt-3 flex gap-2">
-          <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { if (remember) onRemember("minimize"); onClose(); }}>{t("settings.close.minimize")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1" onClick={() => { if (remember) onRemember("quit"); onClose(); }}>{t("settings.close.quit")}</button>
+        <div className="flex justify-end gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => { if (remember) onRemember("minimize"); onClose(); }}>{t("settings.close.minimize")}</Button>
+          <Button type="button" size="sm" variant="destructive" onClick={() => { if (remember) onRemember("quit"); onClose(); }}>{t("settings.close.quit")}</Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
