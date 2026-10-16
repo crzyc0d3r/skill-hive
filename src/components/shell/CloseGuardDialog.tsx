@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { t } from "@/lib/i18n";
+import { silent } from "@/lib/ipc/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,8 +25,8 @@ export function CloseGuardDialog({
           <span>{t("close.remember")}</span>
         </label>
         <div className="flex justify-end gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => { if (remember) onRemember("minimize"); onClose(); }}>{t("settings.close.minimize")}</Button>
-          <Button type="button" size="sm" variant="destructive" onClick={() => { if (remember) onRemember("quit"); onClose(); }}>{t("settings.close.quit")}</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => { if (remember) onRemember("minimize"); void silent("hide_to_tray"); onClose(); }}>{t("settings.close.minimize")}</Button>
+          <Button type="button" size="sm" variant="destructive" onClick={() => { if (remember) onRemember("quit"); void silent("app_exit"); onClose(); }}>{t("settings.close.quit")}</Button>
         </div>
       </DialogContent>
     </Dialog>

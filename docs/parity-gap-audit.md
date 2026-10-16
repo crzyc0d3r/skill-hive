@@ -11,10 +11,10 @@ Each row is one behavior. **works** means the Skill Hive code path performs that
 
 | class | count |
 |---|---|
-| works | 322 |
+| works | 323 |
 | partial | 129 |
 | fake | 27 |
-| missing | 10 |
+| missing | 9 |
 | total | 488 |
 
 | feature | works | partial | fake | missing |
@@ -25,8 +25,8 @@ Each row is one behavior. **works** means the Skill Hive code path performs that
 | Global Workspace | 2 | 5 | 0 | 0 |
 | Lobster Workspace | 0 | 1 | 0 | 0 |
 | Project Workspace | 0 | 3 | 1 | 1 |
-| Backup | 0 | 4 | 0 | 1 |
-| Settings | 9 | 10 | 4 | 3 |
+| Backup | 0 | 5 | 0 | 0 |
+| Settings | 10 | 9 | 4 | 3 |
 | Shell | 2 | 4 | 1 | 0 |
 | Sidebar | 4 | 6 | 0 | 0 |
 | Shortcuts | 2 | 0 | 0 | 1 |
@@ -61,7 +61,7 @@ Each row is one behavior. **works** means the Skill Hive code path performs that
 
 ## What was run
 
-Commands now call the ported engines for install, deploy, backup, and presets.
+Commands now call the ported engines for install, deploy, backup, and presets. The shadcn screens call those commands for backup, presets, projects, workspace skills, diagnostics, and the window.
 
 Skill Hive CLI build exit code: 0.
 CLI probes: 17 (exit codes {0: 15, 1: 2}).
@@ -227,8 +227,8 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | id | item | priority | class | evidence | note | port |
 |---|---|---|---|---|---|---|
 | `ui.046` | Route `/backup`: status card, Back Up Now / Sync Now / Retry, remote URL, history with restore, scope, auto-backup toggle, device name | should | partial | src/features/backup/BackupView.tsx:50 Back Up Now, line 65 Sync Now, line 80 Retry, line 112 device name, and line 136 restore call the git backup commands. The status text starts as the literal library v1 and there is no auto-backup toggle. | Backup, sync, retry, device name, and restore run. Live status, scope editing, and auto-backup do not. | src/views/Backup.tsx:779 |
-| `ui.047` | GitHub device-flow sign-in and PAT connect, public-repo warning, reconnect | later | partial | src/features/backup/BackupView.tsx:71 saves a remote and states that GitHub device login is not shipped. Line 95 stores a PAT via storeBackupPat. The public-repo sentence at line 86 is static text. | A remote URL and a PAT can be saved. Device-flow sign-in and reconnect are not implemented. | src/views/Backup.tsx:555 |
-| `ui.048` | Skill-aware merge conflicts ("Needs attention": keep mine / use remote / keep both) | later | missing | src/features/backup/BackupView.tsx:16 has no keep-mine, use-remote, or keep-both controls. Those actions live in src/views/Backup.tsx:522. | Skill-aware merge conflict choices are not on the backup screen. | src/views/Backup.tsx:522 |
+| `ui.047` | GitHub device-flow sign-in and PAT connect, public-repo warning, reconnect | later | partial | src/features/backup/BackupView.tsx Connect GitHub sanitizes the remote, stores it, starts github_device_flow_start, and polls github_device_flow_poll. A saved PAT calls github_backup_connect. The public-repo sentence stays on the page. | Device login and PAT connect call the backup commands. The page is still one form, not the reference reconnect dialog. | src/views/Backup.tsx:555 |
+| `ui.048` | Skill-aware merge conflicts ("Needs attention": keep mine / use remote / keep both) | later | partial | src/features/backup/BackupView.tsx lists git_backup_pending_conflicts and each row calls git_backup_resolve_conflict with keep_local, use_remote, or keep_both. The rows render when conflicts exist. | Keep mine, use remote, and keep both call the resolver. The reference attention card is not the resting layout. | src/views/Backup.tsx:522 |
 | `ui.049` | Git setup, recovery and set-aside dialogs; first-run restore wizard | should | partial | src/features/backup/BackupView.tsx:82 Git setup and line 83 recovery call gitBackupStatus, line 84 set-aside copies the library, and line 155 first-run calls git_backup_restore_remote. They are buttons, not the dialogs in src/components/GitSetupDialog.tsx. | Setup, recovery, set-aside, and first-run invoke backup commands. They are not the reference dialogs. | src/components/GitSetupDialog.tsx |
 | `ui.050` | Disconnect this machine / revoke authorization / open remote deletion page | later | partial | src/features/backup/BackupView.tsx:78 removes the git remote, line 79 clears the stored token, and line 81 links to https://github.com/settings/applications rather than the connected repository deletion page. | Disconnect and revoke clear the local remote and token. The deletion link is not the remote repo. | src/views/Backup.tsx:710 |
 
@@ -238,7 +238,7 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 |---|---|---|---|---|---|---|
 | `ui.051` | Route `/settings`: agent cards with enable toggle, path edit/reset, project path, drag-reorder, Enable All / Disable All, Refresh | must | partial | src/features/settings/SettingsView.tsx:199 Enable All and Disable All call setAllToolsEnabled, line 212 drag-reorders via setToolOrder, and line 226 edits paths. Refresh at line 201 only sets a local flag, and cards have no per-agent enable toggle. | Path edit, reorder, and enable-all persist. Per-agent enable and refresh do not. | src/views/Settings.tsx:828 |
 | `ui.052` | Custom agents: New Agent form and remove | must | works | src/features/settings/SettingsView.tsx:239 submits addCustomTool and line 234 removeCustomTool, which src-tauri/src/commands.rs:741 and line 782 persist as custom tools. | New Agent creates a custom tool and Remove deletes it. |  |
-| `ui.053` | Central repository path change/reset/open with restart-to-apply notice | must | partial | src/features/settings/SettingsView.tsx:147 saves the central path through setCentralRepoPath and line 163 resets it, then shows the restart notice. There is no open-folder control from src/views/Settings.tsx:1233. | Changing and resetting the repository path persist and warn about restart. Opening the folder does not. | src/views/Settings.tsx:455 |
+| `ui.053` | Central repository path change/reset/open with restart-to-apply notice | must | works | src/features/settings/SettingsView.tsx saves the central path through setCentralRepoPath, resets it, shows the restart notice, and Open folder calls open_central_repo_folder. | Changing, resetting, and opening the repository path all run, and a path change warns about restart. | src/views/Settings.tsx:455 |
 | `ui.054` | Default sync mode Symlink / File Copy | must | works | src/features/settings/SettingsView.tsx:156 writes sync_mode symlink or copy, and src-tauri/src/commands.rs:44 reads that setting when choosing SyncMode. | The symlink and file-copy choice is stored and used as the deploy mode. |  |
 | `ui.055` | Theme, text size, language | must | partial | src/components/shell/AppShell.tsx:363 persists theme through setSettings and applyTheme. src/features/settings/SettingsView.tsx:128 applies text size only in the DOM, and line 136 setLocale in src/lib/i18n.ts:20 is memory-only. | Theme is saved and applied. Text size and language apply for the session and are not saved. | src/views/Settings.tsx:1384 |
 | `ui.056` | Close behaviour and tray icon settings; close-action guard dialog | should | partial | src/features/settings/SettingsView.tsx:173 writes close_behavior and line 177 writes tray, while src-tauri/src/tray.rs:178 reads closeBehaviour and line 136 reads trayIcon. The dialog in src/components/shell/AppShell.tsx:507 writes the key the tray reads. | Close-to-tray works when the dialog saves closeBehaviour. The settings controls write keys the tray ignores. | src/components/CloseActionGuard.tsx |
