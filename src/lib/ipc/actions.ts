@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import type { AgentRow, PresetRow, ScanRow } from "@/lib/ipc/catalog";
 import type { SkillCard } from "@/features/library/model";
+import type { IpcCommands } from "@/lib/ipc/ipc";
 import { demoEnabled } from "@/lib/demo";
 
 export interface InstalledSkill {
@@ -148,3 +149,79 @@ export const rebuildTrayMenu = () => dispatch("rebuild_tray_menu");
 export const listPresetRows = () => command<PresetRow[]>("list_presets");
 export const listAgentRows = () => command<AgentRow[]>("get_tool_status");
 export const listScanRows = () => command<ScanRow[]>("scan_local_skills");
+
+type Cmd<Name extends keyof IpcCommands> = IpcCommands[Name]["result"];
+
+/** Background reads stay quiet in the demo shell and when the command is absent. */
+export async function silent<T>(name: string, args: Record<string, unknown> = {}): Promise<T | undefined> {
+  if (demoEnabled()) return undefined;
+  try {
+    return await invoke<T>(name, args);
+  } catch {
+    return undefined;
+  }
+}
+
+export const getGlobalLocalSkills = (tool: string) => command<Cmd<"get_global_local_skills">>("get_global_local_skills", { tool });
+export const getGlobalLocalSkillDocument = (tool: string, name: string) =>
+  command<Cmd<"get_global_local_skill_document">>("get_global_local_skill_document", { tool, name });
+export const importGlobalLocalSkillToCenter = (tool: string, name: string) =>
+  command<Cmd<"import_global_local_skill_to_center">>("import_global_local_skill_to_center", { tool, name });
+export const updateGlobalLocalSkillFromCenter = (tool: string, skillId: string) =>
+  command<Cmd<"update_global_local_skill_from_center">>("update_global_local_skill_from_center", { tool, skillId });
+export const deleteGlobalLocalSkill = (tool: string, name: string) =>
+  command<Cmd<"delete_global_local_skill">>("delete_global_local_skill", { tool, name });
+export const gitBackupFetch = () => command<Cmd<"git_backup_fetch">>("git_backup_fetch");
+export const gitBackupInit = () => command<Cmd<"git_backup_init">>("git_backup_init");
+export const githubBackupConnect = (token: string, repoName: string) =>
+  command<Cmd<"github_backup_connect">>("github_backup_connect", { token, repoName });
+export const githubDeviceFlowStart = () => command<Cmd<"github_device_flow_start">>("github_device_flow_start");
+export const githubDeviceFlowPoll = (deviceCode: string, repoName: string) =>
+  command<Cmd<"github_device_flow_poll">>("github_device_flow_poll", { deviceCode, repoName });
+export const gitBackupSanitizeRemoteUrl = (url: string) =>
+  command<Cmd<"git_backup_sanitize_remote_url">>("git_backup_sanitize_remote_url", { url });
+export const gitBackupCommit = (message?: string) =>
+  command<Cmd<"git_backup_commit">>("git_backup_commit", { message: message ?? null });
+export const gitBackupPush = () => command<Cmd<"git_backup_push">>("git_backup_push");
+export const gitBackupPull = () => command<Cmd<"git_backup_pull">>("git_backup_pull");
+export const gitBackupPendingConflicts = () => command<Cmd<"git_backup_pending_conflicts">>("git_backup_pending_conflicts");
+export const gitBackupResolveConflict = (skillId: string, action: "keep_local" | "use_remote" | "keep_both") =>
+  command<Cmd<"git_backup_resolve_conflict">>("git_backup_resolve_conflict", { skillId, action });
+export const gitBackupListVersions = (limit: number | null) =>
+  command<Cmd<"git_backup_list_versions">>("git_backup_list_versions", { limit });
+export const backupDeviceName = () => command<Cmd<"backup_device_name">>("backup_device_name");
+export const gitBackupSizeReport = () => command<Cmd<"git_backup_size_report">>("git_backup_size_report");
+export const gitBackupMigrateCredentials = () => command<Cmd<"git_backup_migrate_credentials">>("git_backup_migrate_credentials");
+export const getPresets = () => command<Cmd<"get_presets">>("get_presets");
+export const getActivePreset = () => command<Cmd<"get_active_preset">>("get_active_preset");
+export const switchPreset = (presetId: string) => command<Cmd<"switch_preset">>("switch_preset", { presetId });
+export const applyPresetToCodingAgents = (presetId: string) =>
+  command<Cmd<"apply_preset_to_coding_agents">>("apply_preset_to_coding_agents", { presetId });
+export const getProjects = () => command<Cmd<"get_projects">>("get_projects");
+export const addLinkedWorkspace = (name: string, path: string, agent?: string) =>
+  command<Cmd<"add_linked_workspace">>("add_linked_workspace", { name, path, agent: agent ?? null });
+export const revealProjectFolder = (id: string) => command<Cmd<"reveal_project_folder">>("reveal_project_folder", { id });
+export const getProjectSkills = (id: string) => command<Cmd<"get_project_skills">>("get_project_skills", { id });
+export const updateProjectSkillToCenter = (id: string, name: string, skillId: string) =>
+  command<Cmd<"update_project_skill_to_center">>("update_project_skill_to_center", { id, name, skillId });
+export const exportSkillToProject = (id: string, skillId: string, agent: string) =>
+  command<Cmd<"export_skill_to_project">>("export_skill_to_project", { id, skillId, agent });
+export const updateProjectSkillFromCenter = (id: string, skillId: string, agent: string) =>
+  command<Cmd<"update_project_skill_from_center">>("update_project_skill_from_center", { id, skillId, agent });
+export const toggleProjectSkill = (id: string, name: string, enabled: boolean) =>
+  command<Cmd<"toggle_project_skill">>("toggle_project_skill", { id, name, enabled });
+export const deleteProjectSkill = (id: string, name: string) =>
+  command<Cmd<"delete_project_skill">>("delete_project_skill", { id, name });
+export const getCentralRepoWarnings = () => command<Cmd<"get_central_repo_warnings">>("get_central_repo_warnings");
+export const openCentralRepoFolder = () => command<Cmd<"open_central_repo_folder">>("open_central_repo_folder");
+export const getDiagnosticInfo = () => command<Cmd<"get_diagnostic_info">>("get_diagnostic_info");
+export const checkLastPanic = () => command<Cmd<"check_last_panic">>("check_last_panic");
+export const clearLastPanic = () => command<Cmd<"clear_last_panic">>("clear_last_panic");
+export const exportLogsZip = (path: string) => command<Cmd<"export_logs_zip">>("export_logs_zip", { path });
+export const appExit = () => command<Cmd<"app_exit">>("app_exit");
+export const restartApp = () => command<Cmd<"restart_app">>("restart_app");
+export const hideToTray = () => command<Cmd<"hide_to_tray">>("hide_to_tray");
+export const getAllTags = () => command<Cmd<"get_all_tags">>("get_all_tags");
+export const getToolOrder = () => command<Cmd<"get_tool_order_cmd">>("get_tool_order_cmd");
+export const resetCustomToolProjectPath = (key: string) =>
+  command<Cmd<"reset_custom_tool_project_path">>("reset_custom_tool_project_path", { key });

@@ -2,7 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/chrome";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { AgentRow } from "@/lib/ipc/catalog";
 import { applyTextSize, setLocale, t, type TextSize } from "@/lib/i18n";
@@ -20,7 +20,7 @@ import {
   setToolOrder,
   removeCustomTool,
 } from "@/lib/ipc/actions";
-import { downloadAndInstallUpdate, exportDiagnostics } from "@/lib/ipc/actions";
+import { downloadAndInstallUpdate, exportDiagnostics, silent } from "@/lib/ipc/actions";
 import type { ThemeChoice } from "@/lib/theme";
 import { decideUpdate, desktopPlatform, LINUX_DOWNLOAD_URL } from "@/lib/updater";
 
@@ -67,6 +67,21 @@ export function SettingsView({
   const [restartArmed, setRestartArmed] = useState(false);
   const crash = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-panic") === "1";
   const repoWarn = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-repo-warn") === "1";
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
+  const [panicExcerpt, setPanicExcerpt] = useState<string | null>(null);
+  const [repoWarnings, setRepoWarnings] = useState<string[]>([]);
+  useEffect(() => {
+    if (tab !== "about") return;
+    void silent<{ version: string; os: string; libraryPath: string }>("get_diagnostic_info").then((info) => {
+      if (info?.version) setDiagnostics(`${info.version} · ${info.os} · ${info.libraryPath}`);
+    });
+    void silent<{ excerpt: string } | null>("check_last_panic").then((panic) => {
+      if (panic?.excerpt) setPanicExcerpt(panic.excerpt);
+    });
+    void silent<string[]>("get_central_repo_warnings").then((warnings) => {
+      if (Array.isArray(warnings)) setRepoWarnings(warnings);
+    });
+  }, [tab]);
   const choices: ThemeChoice[] = ["light", "dark", "system"];
   const sizes: TextSize[] = ["small", "medium", "large", "xl"];
 
@@ -134,6 +149,9 @@ export function SettingsView({
           onSubmit={(event) => {
             event.preventDefault();
             void onRepoPath(path);
+            void silent<string[]>("get_central_repo_warnings").then((warnings) => {
+              if (Array.isArray(warnings) && warnings.length) setRepoWarnings(warnings);
+            });
             setNotice(t("settings.restart"));
           }}
         >
@@ -146,6 +164,7 @@ export function SettingsView({
             <Button type="button" aria-pressed={syncMode === "copy"} variant="outline" size="sm" onClick={() => { setSyncMode("copy"); void writeSetting("sync_mode", "copy"); }}>{t("settings.sync.copy")}</Button>
           </div>
           <Button type="submit" size="sm">Save path</Button>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void silent("open_central_repo_folder"); }}>{t("settings.path.open")}</Button>
           <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { setPath("~/.skill-hive"); void onRepoPath("~/.skill-hive"); }}>
             {t("settings.path.reset")}
           </Button>
@@ -180,7 +199,7 @@ export function SettingsView({
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: true }))); void setAllToolsEnabled(true); }}>{t("settings.agents.enableAll")}</Button>
             <Button type="button" variant="outline" size="sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: false }))); void setAllToolsEnabled(false); }}>{t("settings.agents.disableAll")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setRefreshed(true)}>{t("settings.agents.refresh")}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setRefreshed(true); void silent<string[]>("get_tool_order_cmd"); }}>{t("settings.agents.refresh")}</Button>
           </div>
           {refreshed ? <p role="status">{t("settings.agents.refreshed")}</p> : null}
           <form
@@ -223,7 +242,7 @@ export function SettingsView({
                   {t("settings.agents.project")}
                   <Input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, projectPath: pathValue } : item)); void setCustomToolProjectPath(agent.key, pathValue); }} className="mt-1 h-8 max-w-xl" />
                 </label>
-                <Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => Promise.resolve(onResetPath(agent.key)).then((next) => { if (next) return onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: next } : item)); })}>{t("settings.agents.reset")}</Button>
+                <Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => { void silent("reset_custom_tool_project_path", { key: agent.key }); Promise.resolve(onResetPath(agent.key)).then((next) => { if (next) return onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: next } : item)); }); }}>{t("settings.agents.reset")}</Button>
                 {agent.custom ? (
                   <Button type="button" variant="outline" size="sm" className="ml-2 mt-1" onClick={() => { void onAgents(agents.filter((item) => item.key !== agent.key)); void removeCustomTool(agent.key); }}>{t("settings.agents.remove")} {agent.name}</Button>
                 ) : null}
@@ -247,26 +266,27 @@ export function SettingsView({
       {tab === "about" ? (
         <div className="mt-4 text-sm">
           <p>{t("settings.about.version")}</p>
+          {diagnostics ? <p>{diagnostics}</p> : null}
           <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { const remote = localStorage.getItem("skill-hive-update-version"); const runs = Number(localStorage.getItem("skill-hive-active-runs") ?? "0"); const decision = decideUpdate({ remoteVersion: remote, platform: desktopPlatform(navigator.userAgent, localStorage.getItem("skill-hive-platform")), activeRuns: Number.isFinite(runs) ? runs : 0, }); setUpdateNote(decision.state === "available" ? t(decision.messageKey, { version: decision.version }) : t(decision.messageKey)); setUpdateAction(decision.state === "available" ? decision.action : null); void downloadAndInstallUpdate(); if (decision.state === "available" && decision.action === "install") { localStorage.setItem("skill-hive-pending-install", decision.version); } else { localStorage.removeItem("skill-hive-pending-install"); } }}>
             {t("settings.about.updates")}
           </Button>
           {updateNote ? <p role="status">{updateNote}</p> : null}
           {localStorage.getItem("skill-hive-pending-install") && desktopPlatform(navigator.userAgent, localStorage.getItem("skill-hive-platform")) !== "linux" ? (
-            <Button type="button" variant="outline" size="sm" className="mt-2" data-proxy={proxyOk(proxy) && proxy.trim() ? proxy.trim() : ""} onClick={() => { localStorage.setItem("skill-hive-restart-now", "1"); setRestartArmed(true); window.dispatchEvent(new Event("skill-hive-restart")); }}>
+            <Button type="button" variant="outline" size="sm" className="mt-2" data-proxy={proxyOk(proxy) && proxy.trim() ? proxy.trim() : ""} onClick={() => { localStorage.setItem("skill-hive-restart-now", "1"); setRestartArmed(true); window.dispatchEvent(new Event("skill-hive-restart")); void silent("restart_app"); }}>
               {t("settings.about.install")}
             </Button>
           ) : null}
           {updateAction === "download" ? (
             <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href={LINUX_DOWNLOAD_URL}>{t("settings.about.download")}</a>
           ) : null}
-          {crash ? <p role="alert">{t("settings.about.crash")}</p> : null}
-          {repoWarn ? <p role="alert">{t("settings.about.repo")}</p> : null}
+          {crash || panicExcerpt ? <p role="alert">{panicExcerpt ?? t("settings.about.crash")}</p> : null}
+          {repoWarn || repoWarnings.length > 0 ? <p role="alert">{repoWarnings[0] ?? t("settings.about.repo")}</p> : null}
           <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href="https://github.com/crzyc0d3r/skill-hive/issues/new" target="_blank" rel="noreferrer">{t("settings.about.report")}</a>
           <label className="mt-2 block">
             Diagnostics path
             <Input aria-label="Diagnostics path" value={diagnosticsPath} onChange={(event) => setDiagnosticsPath(event.target.value)} className="h-8 ml-2" />
           </label>
-          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void exportDiagnostics(diagnosticsPath).then(() => setExported(true)); }}>{t("settings.about.export")}</Button>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { const logs = diagnosticsPath ? `${diagnosticsPath}.logs.zip` : ""; void silent("export_logs_zip", { path: logs }); void exportDiagnostics(diagnosticsPath).then(() => setExported(true)); }}>{t("settings.about.export")}</Button>
           {exported ? <p role="status">{t("settings.about.exported")}</p> : null}
           {restartArmed ? <p role="status"><button type="button">{t("settings.about.restart")}</button></p> : null}
           <h2 className="mt-4 text-sm font-medium">{t("settings.about.ack")}</h2>

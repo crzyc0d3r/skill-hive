@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
-import { deleteManagedSkills, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
+import { deleteManagedSkills, silent, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
 import { t } from "@/lib/i18n";
 
 export interface WorkspaceCard {
@@ -52,6 +52,16 @@ export function WorkspaceView({
   const [openId, setOpenId] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"local" | "diff" | "center">("local");
   const [adding, setAdding] = useState(false);
+  const [loadedPresets, setLoadedPresets] = useState<PresetRow[] | null>(null);
+  useEffect(() => {
+    void silent<{ id: string; name: string; skillIds: string[] }[]>("get_presets").then((rows) => {
+      if (Array.isArray(rows) && rows.length) setLoadedPresets(rows.map((row) => ({ ...row, synced: 0 })));
+    });
+    void silent<string | null>("get_active_preset").then((id) => {
+      if (typeof id === "string" && id) setApplied(id);
+    });
+  }, []);
+  const shownPresets = loadedPresets ?? presets;
 
   const tags = useMemo(() => [...new Set(rows.flatMap((row) => row.tags))], [rows]);
   const visible = rows.filter((row) => {
@@ -71,11 +81,32 @@ export function WorkspaceView({
     if (pending.kind === "remove" || pending.kind === "delete") {
       setRows((current) => current.filter((row) => !pending.ids.includes(row.id)));
       setSelected([]);
-      if (pending.kind === "remove" && agentKey) pending.ids.forEach((id) => void unsyncSkillFromTool(id, agentKey));
-      if (pending.kind === "delete") void deleteManagedSkills(pending.ids);
+      if (pending.kind === "remove" && agentKey) {
+        pending.ids.forEach((id) => {
+          void unsyncSkillFromTool(id, agentKey);
+          const name = rows.find((row) => row.id === id)?.name ?? id;
+          void silent("delete_global_local_skill", { tool: agentKey, name });
+        });
+      }
+      if (pending.kind === "delete") {
+        void deleteManagedSkills(pending.ids);
+        if (agentKey) {
+          pending.ids.forEach((id) => {
+            const name = rows.find((row) => row.id === id)?.name ?? id;
+            void silent("delete_global_local_skill", { tool: agentKey, name });
+          });
+        }
+      }
     } else {
       setRows((current) => current.map((row) => (pending.ids.includes(row.id) ? { ...row, status: "in_sync", managed: true } : row)));
-      if (agentKey) pending.ids.forEach((id) => void syncSkillToTool(id, agentKey));
+      if (agentKey) {
+        pending.ids.forEach((id) => {
+          void syncSkillToTool(id, agentKey);
+          const name = rows.find((row) => row.id === id)?.name ?? id;
+          if (pending.kind === "upload") void silent("import_global_local_skill_to_center", { tool: agentKey, name });
+          if (pending.kind === "pull") void silent("update_global_local_skill_from_center", { tool: agentKey, skillId: id });
+        });
+      }
     }
     setPending(null);
   }
@@ -95,12 +126,12 @@ export function WorkspaceView({
           <Button type="submit" variant="outline" size="sm">{t("preset.new")}</Button>
         </form>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="preset-bar">
-          {presets.map((preset) => {
+          {shownPresets.map((preset) => {
             const total = preset.skillIds.length;
             const synced = applied === preset.id ? total : 0;
             const fill = presetFill(synced, total);
             return (
-              <Button key={preset.id} type="button" data-fill={fill} variant="outline" size="sm" onClick={() => { setApplied(preset.id); void onApply(preset.id); }}>
+              <Button key={preset.id} type="button" data-fill={fill} variant="outline" size="sm" onClick={() => { setApplied(preset.id); void onApply(preset.id); void silent("switch_preset", { presetId: preset.id }); void silent("apply_preset_to_coding_agents", { presetId: preset.id }); void silent<string[]>("get_preset_skill_order", { presetId: preset.id }); }}>
                 {presetLabel(preset.name, synced, total)}
               </Button>
             );
@@ -152,7 +183,7 @@ export function WorkspaceView({
               <Card className="group/card gap-2 rounded-lg border-border px-3 py-3 shadow-none">
                 <div className="flex items-center gap-2">
                   <input type="checkbox" className={`size-4 rounded border-input ${selected.length > 0 ? "opacity-100" : "opacity-0 group-hover/card:opacity-100"}`} aria-label={`Select ${card.name}`} checked={selected.includes(card.id)} onChange={() => setSelected((current) => current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id])} />
-                  <button type="button" className="font-medium" onClick={() => { setOpenId(card.id); setSheet("local"); }}>{card.name}</button>
+                  <button type="button" className="font-medium" onClick={() => { setOpenId(card.id); setSheet("local"); if (agentKey) void silent<{ body: string; description: string }>("get_global_local_skill_document", { tool: agentKey, name: card.name }).then((doc) => { if (doc?.body) setRows((current) => current.map((row) => row.id === card.id ? { ...row, body: doc.body } : row)); }); }}>{card.name}</button>
                   <Badge variant="outline" className="ml-auto font-normal">
                     {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
                   </Badge>

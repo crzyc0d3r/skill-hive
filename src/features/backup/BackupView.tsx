@@ -1,13 +1,21 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   backupSetDeviceName,
+  gitBackupFetch,
+  gitBackupInit,
   gitBackupRemoveRemote,
+  gitBackupResolveConflict,
   gitBackupRestore,
+  gitBackupSanitizeRemoteUrl,
   gitBackupSetRemote,
   gitBackupStatus,
   gitBackupSync,
+  githubBackupConnect,
+  githubDeviceFlowPoll,
+  githubDeviceFlowStart,
+  silent,
   type SnapshotRow,
 } from "@/lib/ipc/actions";
 import { restoreBackupRemote, revokeBackupToken, setAsideBackup, storeBackupPat } from "@/lib/ipc/actions";
@@ -15,6 +23,17 @@ import { demoEnabled } from "@/lib/demo";
 import { backupNow, restoreSnapshot } from "@/features/backup/model";
 import { t } from "@/lib/i18n";
 import { Screen } from "@/components/chrome";
+
+interface ConflictRow {
+  skillId: string;
+  theirsCommit: string;
+}
+
+function repoNameFrom(url: string): string {
+  const trimmed = url.trim().replace(/\.git$/, "");
+  const name = trimmed.split("/").filter(Boolean).pop();
+  return name || "skill-hive-backup";
+}
 
 export function BackupView() {
   const [body, setBody] = useState("library v1");
@@ -26,6 +45,18 @@ export function BackupView() {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
+
+  useEffect(() => {
+    void silent<string>("backup_device_name").then((name) => {
+      if (typeof name === "string" && name) setDevice(name);
+    });
+    void silent<ConflictRow[]>("git_backup_pending_conflicts").then((rows) => {
+      if (Array.isArray(rows)) setConflicts(rows.map((row) => ({ skillId: row.skillId, theirsCommit: row.theirsCommit })));
+    });
+    void silent("git_backup_migrate_credentials");
+    void silent("git_backup_fetch");
+  }, []);
 
   async function run(work: () => Promise<void>) {
     setBusy(true);
@@ -62,8 +93,38 @@ export function BackupView() {
         <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { const snap = await gitBackupSync("sync"); setHistory((current) => [snap, ...current]); setNote(snap.label); })}>{t("backup.sync")}</Button>
         <Button type="button" variant="outline" size="sm" onClick={() =>
             void run(async () => {
-              if (remote.trim()) await gitBackupSetRemote(remote.trim());
-              setNote("Remote saved. GitHub device login needs an OAuth client id, which this build does not ship.");
+              const cleaned = remote.trim() ? await gitBackupSanitizeRemoteUrl(remote.trim()) : "";
+              const url = cleaned || remote.trim();
+              if (url) {
+                setRemote(url);
+                await gitBackupSetRemote(url);
+              }
+              const repoName = repoNameFrom(url);
+              if (pat.trim()) {
+                const connected = await githubBackupConnect(pat.trim(), repoName);
+                setNote(connected?.login ? `${connected.login} ${connected.url}` : "Remote saved");
+                return;
+              }
+              const start = await githubDeviceFlowStart();
+              if (!start?.userCode) {
+                setNote("Remote saved. GitHub device login needs an OAuth client id, which this build does not ship.");
+                return;
+              }
+              setNote(`${start.userCode} ${start.verificationUri}`);
+              const deadline = Date.now() + 120000;
+              const wait = Math.max(start.interval || 5, 1) * 1000;
+              while (Date.now() < deadline) {
+                await new Promise((resolve) => setTimeout(resolve, wait));
+                const poll = await githubDeviceFlowPoll(start.deviceCode, repoName);
+                if (poll?.status === "connected") {
+                  setNote(poll.result?.url ?? poll.result?.login ?? "Connected");
+                  return;
+                }
+                if (poll?.status === "denied") {
+                  setNote("GitHub denied the device login");
+                  return;
+                }
+              }
             })
           }
         >
@@ -75,8 +136,8 @@ export function BackupView() {
         <Button asChild variant="outline" size="sm">
           <a href="https://github.com/settings/applications" target="_blank" rel="noreferrer">{t("backup.deletion")}</a>
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { const status = await gitBackupStatus(); setNote(status.branch || "repository ready"); })}>{t("backup.setup")}</Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => void gitBackupStatus().then((status) => setNote(status.head || "no commits yet")).catch((err: Error) => setError(err.message))}>{t("backup.recovery")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { await gitBackupInit(); const status = await gitBackupStatus(); setNote(status.branch || "repository ready"); })}>{t("backup.setup")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void gitBackupFetch().then(() => gitBackupStatus()).then((status) => setNote(status.head || "no commits yet")).catch((err: Error) => setError(err.message))}>{t("backup.recovery")}</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => { void setAsideBackup(body); setNote("Set aside"); }}>{t("backup.setAside")}</Button>
       </div>
       <p className="mt-2 text-sm">{t("backup.public")}</p>
@@ -103,6 +164,18 @@ export function BackupView() {
       </label>
       <p className="mt-2 text-sm text-muted-foreground">{t("backup.remote")} {remote}</p>
       <p className="text-sm">{t("backup.scope")}</p>
+      {conflicts.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-sm">
+          {conflicts.map((row) => (
+            <li key={row.skillId}>
+              {row.skillId}
+              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => void run(async () => { await gitBackupResolveConflict(row.skillId, "keep_local"); setConflicts((current) => current.filter((item) => item.skillId !== row.skillId)); })}>{t("backup.keepMine")}</Button>
+              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => void run(async () => { await gitBackupResolveConflict(row.skillId, "use_remote"); setConflicts((current) => current.filter((item) => item.skillId !== row.skillId)); })}>{t("backup.useRemote")}</Button>
+              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => void run(async () => { await gitBackupResolveConflict(row.skillId, "keep_both"); setConflicts((current) => current.filter((item) => item.skillId !== row.skillId)); })}>{t("backup.keepBoth")}</Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {note ? <p role="status">{note}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       <ul className="mt-2 space-y-1 text-sm">

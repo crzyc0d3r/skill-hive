@@ -63,7 +63,14 @@ fn contract_suite_exercises_every_subcommand() {
         vec!["skills", "sync"],
         vec!["skills", "tag", "add", "--id", &id, "--name", "tools"],
         vec!["skills", "tag", "list", "--id", &id],
-        vec!["skills", "tag", "remove", "--id", &id, "--name", "tools"],
+        vec![
+            "skills", "tag", "set", "--id", &id, "--name", "tools", "--name", "kit",
+        ],
+        vec![
+            "skills", "tag", "rename", "--from", "tools", "--to", "renamed",
+        ],
+        vec!["skills", "tag", "delete", "--name", "kit", "--yes"],
+        vec!["skills", "tag", "remove", "--id", &id, "--name", "renamed"],
     ] {
         let (code, parsed) = run(state, &config, &args);
         assert_eq!(code, 0, "{args:?} {parsed}");
@@ -271,14 +278,18 @@ fn contract_suite_exercises_every_subcommand() {
     let (code, parsed) = run(state, &config, &["git", "versions"]);
     assert_eq!(code, 0, "{parsed}");
     seen.push(record(state, &parsed));
+    let snapshot = data_of(&parsed)["tags"][0]
+        .as_str()
+        .expect("snapshot tag")
+        .to_string();
     let (code, parsed) = run(state, &config, &["git", "commit", "--message", "v2"]);
     assert_eq!(code, 0, "{parsed}");
-    let (code, parsed) = run(state, &config, &["git", "restore", "--tag", "snap-1"]);
+    let (code, parsed) = run(state, &config, &["git", "restore", "--tag", &snapshot]);
     assert_eq!(code, 0, "{parsed}");
     assert!(data_of(&parsed)["safety"]
         .as_str()
         .unwrap()
-        .starts_with("safety-"));
+        .starts_with("sm-v-"));
     seen.push(record(state, &parsed));
     let (code, parsed) = run(state, &config, &["git", "init"]);
     assert_eq!(code, 0, "{parsed}");

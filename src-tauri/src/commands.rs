@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,20 +8,20 @@ use hive_core::analytics::{apply_optimized, store_verdict, write_history, Histor
 use hive_core::authoring::skill::{publish_draft, write_skill_file, Deployment};
 use hive_core::authoring::validator::{Finding, Severity};
 use hive_core::authoring::versions::VersionStore;
-use hive_core::backup::git_backup;
+use hive_core::core::git_backup;
+use hive_core::core::git_fetcher;
+use hive_core::core::installer::{self, InstallResult};
+use hive_core::core::scenario_service::{self, BatchApplyMode};
+use hive_core::core::sync_engine;
 use hive_core::db::skill_store::{
-    DiscoveredSkillRecord, ProjectRecord, ScenarioRecord, SkillStore,
+    DiscoveredSkillRecord, ProjectRecord, ScenarioRecord, SkillRecord, SkillStore,
+    SkillTargetRecord,
 };
-use hive_core::deploy::scenario_service::{self, DeployIntent, SyncOne};
-use hive_core::deploy::sync_engine::{current_os, NativeBackend, SyncMode};
+use hive_core::deploy::scenario_service as membership;
 use hive_core::deploy::tool_adapters::{all_tool_adapters, CustomToolDef, ToolCategory};
 use hive_core::deploy::tool_service::{self, CustomAdd};
 use hive_core::generation::write_files;
 use hive_core::library::central_repo;
-use hive_core::library::git_fetcher::{
-    cancel_git_preview, confirm_git_install, preview_local_repo,
-};
-use hive_core::library::installer::{install_archive, install_local};
 use hive_core::library::marketplace::{self, fetch_https};
 use hive_core::library::scanner::{self, ScannedSkill};
 use hive_core::library::skill_metadata::{read_skill_document, sanitize_skill_name};
@@ -39,13 +39,6 @@ fn db(err: impl std::fmt::Display) -> AppError {
 
 fn root() -> PathBuf {
     central_repo::skills_dir()
-}
-
-fn mode(store: &SkillStore) -> SyncMode {
-    match store.get_setting("sync_mode").ok().flatten().as_deref() {
-        Some("copy") => SyncMode::Copy,
-        _ => SyncMode::Symlink,
-    }
 }
 
 fn now() -> i64 {
@@ -269,24 +262,96 @@ fn tool_dir(store: &SkillStore, key: &str) -> Result<PathBuf, AppError> {
         .ok_or_else(|| AppError::not_found(format!("unknown agent {key}")))
 }
 
+struct HeldPreview {
+    id: String,
+    dir: PathBuf,
+    owned: bool,
+}
+
+static PREVIEWS: Mutex<Vec<HeldPreview>> = Mutex::new(Vec::new());
+
+fn persist_install(
+    store: &SkillStore,
+    installed: &InstallResult,
+    source_type: &str,
+    source_ref: Option<String>,
+) -> Result<InstalledDto, AppError> {
+    let stamp = now();
+    let id = format!("{}-{stamp:x}", installed.name);
+    store
+        .insert_skill(&SkillRecord {
+            id: id.clone(),
+            name: installed.name.clone(),
+            description: installed.description.clone(),
+            source_type: source_type.to_string(),
+            source_ref,
+            source_ref_resolved: None,
+            source_subpath: None,
+            source_branch: None,
+            source_revision: None,
+            remote_revision: None,
+            central_path: installed.central_path.to_string_lossy().to_string(),
+            content_hash: Some(installed.content_hash.clone()),
+            enabled: true,
+            created_at: stamp,
+            updated_at: stamp,
+            status: "managed".into(),
+            update_status: "current".into(),
+            last_checked_at: None,
+            last_check_error: None,
+        })
+        .map_err(db)?;
+    Ok(installed_dto(installed.name.clone(), id))
+}
+
 fn sync_skill(store: &SkillStore, skill_id: &str, tool: &str, add: bool) -> Result<(), AppError> {
-    let backend = NativeBackend;
-    scenario_service::sync_one(
-        store,
-        &SyncOne {
+    let skill = store
+        .get_skill_by_id(skill_id)
+        .map_err(db)?
+        .ok_or_else(|| AppError::not_found("Skill not found"))?;
+    let adapter = all_tool_adapters(store)
+        .into_iter()
+        .find(|adapter| adapter.key == tool)
+        .ok_or_else(|| AppError::not_found(format!("unknown agent {tool}")))?;
+    let source = PathBuf::from(&skill.central_path);
+    let target = adapter
+        .skills_dir()
+        .join(sync_engine::target_dir_name(&source, &skill.name));
+    if !add {
+        if let Some(row) = store
+            .get_targets_for_skill(skill_id)
+            .map_err(db)?
+            .into_iter()
+            .find(|row| row.tool == tool)
+        {
+            sync_engine::remove_recorded_target(Path::new(&row.target_path), &row.mode)
+                .map_err(|err| AppError::io(err.to_string()))?;
+            store.delete_target(skill_id, tool).map_err(db)?;
+        }
+        return Ok(());
+    }
+    let configured = store.get_setting("sync_mode").map_err(db)?;
+    let actual = sync_engine::sync_skill(
+        &source,
+        &target,
+        sync_engine::sync_mode_for_tool(tool, configured.as_deref()),
+        sync_engine::ReplacePolicy::NoClobber,
+    )
+    .map_err(|err| AppError::io(err.to_string()))?;
+    store
+        .insert_target(&SkillTargetRecord {
+            id: format!("target-{skill_id}-{tool}-{}", now()),
             skill_id: skill_id.to_string(),
             tool: tool.to_string(),
-            root: tool_dir(store, tool)?,
-            intent: if add {
-                DeployIntent::Add
-            } else {
-                DeployIntent::Remove
-            },
-            mode: mode(store),
-            os: current_os(),
-        },
-        &backend,
-    )
+            target_path: target.to_string_lossy().to_string(),
+            mode: actual.as_str().to_string(),
+            status: "ok".into(),
+            synced_at: Some(now()),
+            last_error: None,
+            source_hash: skill.content_hash.clone(),
+        })
+        .map_err(db)?;
+    Ok(())
 }
 
 fn mark_source(store: &SkillStore, name: &str, source_type: &str) -> Result<(), AppError> {
@@ -318,16 +383,20 @@ fn git_ok(path: &Path, args: &[&str]) -> Result<String, AppError> {
     }
 }
 
-fn ensure_identity(path: &Path) -> Result<(), AppError> {
-    if git_ok(path, &["config", "user.email"]).is_err() {
-        git_ok(path, &["config", "user.email", "hive@localhost"])?;
-        git_ok(path, &["config", "user.name", "Skill Hive"])?;
-    }
-    Ok(())
-}
-
 fn backup_repo() -> PathBuf {
     root()
+}
+
+fn ensure_backup_repo(path: &Path) -> Result<(), AppError> {
+    if path.join(".git").exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::create_dir_all(path)?;
+    git_backup::init_repo(path, &git_backup::default_device_name())
+        .map_err(|err| AppError::git(err.to_string()))
 }
 
 fn is_bare(path: &Path) -> bool {
@@ -337,54 +406,51 @@ fn is_bare(path: &Path) -> bool {
     )
 }
 
-fn clone_to(url: &Path, dest: &Path) -> Result<(), AppError> {
-    if dest.exists() {
-        std::fs::remove_dir_all(dest)?;
-    }
-    git_backup::clone_repo(url, dest).map_err(|err| AppError::git(err.to_string()))
-}
-
 pub fn preview_repository(url: &str) -> Result<GitPreviewDto, AppError> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
         return Err(AppError::invalid_input("Enter a repository URL or path"));
     }
-    let cancel = AtomicBool::new(false);
     let path = PathBuf::from(trimmed);
-    let workspace;
-    let source: &Path = if path.is_dir() {
-        if is_bare(&path) {
-            workspace = std::env::temp_dir().join(format!("skill-hive-bare-{}", now()));
-            clone_to(&path, &workspace)?;
-            &workspace
-        } else {
-            &path
-        }
+    let owned;
+    let source = if path.is_dir() && !is_bare(&path) {
+        owned = false;
+        path
     } else {
-        workspace = std::env::temp_dir().join(format!("skill-hive-clone-{}", now()));
-        let status = Command::new("git")
-            .args(["clone", "--depth", "1", trimmed])
-            .arg(&workspace)
-            .status()
-            .map_err(AppError::io)?;
-        if !status.success() {
-            return Err(AppError::git(format!("could not clone {trimmed}")));
-        }
-        &workspace
+        let cancel = Arc::new(AtomicBool::new(false));
+        owned = true;
+        git_fetcher::clone_repo_ref(trimmed, None, Some(&cancel), None)
+            .map_err(|err| AppError::classify_git_error(err.to_string()))?
     };
-    let preview = preview_local_repo(source, None, &cancel)
-        .map_err(|err| AppError::classify_git_error(err.to_string()))?;
-    Ok(GitPreviewDto {
-        id: preview.id,
-        skills: preview
-            .skills
-            .into_iter()
-            .map(|skill| PreviewSkillDto {
-                relative: skill.relative_dir,
-                name: skill.name,
-            })
-            .collect(),
-    })
+    let dirs = hive_core::library::skill_metadata::find_skill_dirs(&source, 4);
+    let id = format!("preview-{}", now());
+    let skills = dirs
+        .iter()
+        .map(|dir| {
+            let relative = dir
+                .strip_prefix(&source)
+                .unwrap_or(dir)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let name = read_skill_document(dir)
+                .map(|doc| doc.name)
+                .unwrap_or_else(|_| sanitize_skill_name(&relative));
+            PreviewSkillDto {
+                relative: if relative.is_empty() {
+                    ".".into()
+                } else {
+                    relative
+                },
+                name,
+            }
+        })
+        .collect();
+    PREVIEWS.lock().expect("previews").push(HeldPreview {
+        id: id.clone(),
+        dir: source,
+        owned,
+    });
+    Ok(GitPreviewDto { id, skills })
 }
 
 fn authoring_root(kind: &str, id: &str) -> PathBuf {
@@ -464,9 +530,14 @@ pub fn install_local_skill(
     if !source.is_dir() {
         return Err(AppError::invalid_input("Choose a skill folder"));
     }
-    let installed = install_local(store.inner(), &root(), &source)
+    let installed = installer::install_from_local(&source, None)
         .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(installed_dto(installed.record.name, installed.record.id))
+    persist_install(
+        store.inner(),
+        &installed,
+        "local",
+        Some(source.to_string_lossy().to_string()),
+    )
 }
 
 #[tauri::command]
@@ -478,9 +549,14 @@ pub fn install_archive_skill(
     if !archive.is_file() {
         return Err(AppError::invalid_input("Choose a .zip or .skill archive"));
     }
-    let installed = install_archive(store.inner(), &root(), &archive)
+    let installed = installer::install_from_local(&archive, None)
         .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(installed_dto(installed.record.name, installed.record.id))
+    persist_install(
+        store.inner(),
+        &installed,
+        "local",
+        Some(archive.to_string_lossy().to_string()),
+    )
 }
 
 #[tauri::command]
@@ -527,24 +603,48 @@ pub fn confirm_git_install_skill(
     rename: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<String>, AppError> {
-    let store = store.inner();
-    let names = confirm_git_install(
-        store,
-        &root(),
-        &preview_id,
-        &[(relative, rename.filter(|name| !name.trim().is_empty()))],
-    )
-    .map_err(|err| AppError::classify_git_error(err.to_string()))?;
-    for name in &names {
-        mark_source(store, name, "git")?;
-    }
-    Ok(names)
+    confirm_preview(store.inner(), &preview_id, &relative, rename)
+}
+
+pub fn confirm_preview(
+    store: &SkillStore,
+    preview_id: &str,
+    relative: &str,
+    rename: Option<String>,
+) -> Result<Vec<String>, AppError> {
+    let held = {
+        let guard = PREVIEWS.lock().expect("previews");
+        guard
+            .iter()
+            .find(|preview| preview.id == preview_id)
+            .map(|preview| preview.dir.clone())
+            .ok_or_else(|| AppError::not_found("git preview expired"))?
+    };
+    let relative = relative.trim().trim_start_matches("./");
+    let skill_dir = if relative.is_empty() || relative == "." {
+        held
+    } else {
+        held.join(relative)
+    };
+    let rename = rename.filter(|name| !name.trim().is_empty());
+    let installed = installer::install_from_git_dir(&skill_dir, rename.as_deref())
+        .map_err(|err| AppError::classify_git_error(err.to_string()))?;
+    let dto = persist_install(store, &installed, "git", Some(preview_id.to_string()))?;
+    mark_source(store, &dto.name, "git")?;
+    Ok(vec![dto.name])
 }
 
 #[tauri::command]
 pub fn cancel_install(preview_id: Option<String>) -> Result<bool, AppError> {
     if let Some(id) = preview_id.filter(|id| !id.is_empty()) {
-        return cancel_git_preview(&id).map_err(|err| AppError::git(err.to_string()));
+        let mut guard = PREVIEWS.lock().expect("previews");
+        if let Some(index) = guard.iter().position(|preview| preview.id == id) {
+            let preview = guard.remove(index);
+            if preview.owned {
+                git_fetcher::cleanup_temp(&preview.dir);
+            }
+            return Ok(true);
+        }
     }
     Ok(false)
 }
@@ -645,7 +745,7 @@ pub fn add_skill_to_preset(
         &home_dir().unwrap_or_else(|| PathBuf::from(".")),
     )
     .map_err(db)?;
-    scenario_service::add_membership(store.inner(), &preset_id, &skill_id, &tools).map_err(db)
+    membership::add_membership(store.inner(), &preset_id, &skill_id, &tools).map_err(db)
 }
 
 #[tauri::command]
@@ -727,14 +827,12 @@ pub fn apply_preset(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<usize, AppError> {
     let store = store.inner();
-    let mut roots = HashMap::new();
-    for adapter in all_tool_adapters(store) {
-        let selected = tool.as_ref().is_none_or(|key| key == &adapter.key);
-        if selected && (adapter.is_custom || adapter.is_installed()) {
-            roots.insert(adapter.key.clone(), adapter.skills_dir());
-        }
+    if let Some(tool) = tool.filter(|key| !key.is_empty()) {
+        let skills = store.get_skill_ids_for_scenario(&preset_id).map_err(db)?;
+        scenario_service::apply_skills_to_tools(store, &skills, &[tool], BatchApplyMode::Add)?;
+        return Ok(skills.len());
     }
-    scenario_service::apply_preset(store, &preset_id, &roots, mode(store), current_os()).map_err(db)
+    apply_preset_by_id(store, &preset_id)
 }
 
 #[tauri::command]
@@ -884,56 +982,53 @@ pub fn check_skill_update(
 
 #[tauri::command]
 pub fn git_backup_status() -> Result<BackupStatusDto, AppError> {
-    let path = backup_repo();
-    if !path.join(".git").exists() {
-        return Ok(BackupStatusDto {
-            branch: String::new(),
-            clean: true,
-            remote: None,
-            head: String::new(),
-        });
-    }
-    let status = git_backup::status(&path).map_err(|err| AppError::git(err.to_string()))?;
+    let status =
+        git_backup::get_status(&backup_repo()).map_err(|err| AppError::git(err.to_string()))?;
     Ok(BackupStatusDto {
-        branch: status.branch,
-        clean: status.clean,
-        remote: status.remote,
-        head: status.head,
+        branch: status.branch.unwrap_or_default(),
+        clean: !status.has_changes,
+        remote: status.remote_url,
+        head: status.last_commit.unwrap_or_default(),
     })
 }
 
 #[tauri::command]
-pub fn git_backup_list_versions() -> Result<Vec<SnapshotDto>, AppError> {
+pub fn git_backup_list_versions(limit: Option<u32>) -> Result<Vec<SnapshotDto>, AppError> {
     let path = backup_repo();
     if !path.join(".git").exists() {
         return Ok(Vec::new());
     }
-    let text = git_ok(&path, &["tag", "--list", "snap-*"])?;
-    let mut tags: Vec<SnapshotDto> = text
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(|tag| SnapshotDto {
-            id: tag.to_string(),
-            label: tag.to_string(),
+    let versions = git_backup::list_snapshot_versions(&path, limit.map(|value| value as usize))
+        .map_err(|err| AppError::git(err.to_string()))?;
+    Ok(versions
+        .into_iter()
+        .map(|version| SnapshotDto {
+            id: version.tag.clone(),
+            label: format!("{} {}", version.tag, version.message),
         })
-        .collect();
-    tags.reverse();
-    Ok(tags)
+        .collect())
 }
 
 #[tauri::command]
 pub fn git_backup_sync(message: Option<String>) -> Result<SnapshotDto, AppError> {
     let path = backup_repo();
-    std::fs::create_dir_all(&path)?;
-    if !path.join(".git").exists() {
-        git_backup::init_repo(&path).map_err(|err| AppError::git(err.to_string()))?;
-    }
-    ensure_identity(&path)?;
+    ensure_backup_repo(&path)?;
     let note = message.unwrap_or_else(|| "Backup".to_string());
-    git_ok(&path, &["add", "-A"])?;
-    git_ok(&path, &["commit", "--allow-empty", "-m", &note])?;
-    let tag = format!("snap-{}", now());
-    git_backup::snapshot(&path, &tag).map_err(|err| AppError::git(err.to_string()))?;
+    match git_backup::commit_all(&path, &note) {
+        Ok(()) => {}
+        Err(err) if err.to_string().contains("Nothing to commit") => {}
+        Err(err) => return Err(AppError::git(err.to_string())),
+    }
+    if git_backup::get_status(&path)
+        .ok()
+        .and_then(|status| status.remote_url)
+        .is_some()
+    {
+        let _ = git_backup::pull(&path);
+        let _ = git_backup::push(&path);
+    }
+    let tag =
+        git_backup::create_snapshot_tag(&path).map_err(|err| AppError::git(err.to_string()))?;
     Ok(SnapshotDto {
         id: tag.clone(),
         label: tag,
@@ -942,26 +1037,22 @@ pub fn git_backup_sync(message: Option<String>) -> Result<SnapshotDto, AppError>
 
 #[tauri::command]
 pub fn git_backup_restore_version(tag: String) -> Result<String, AppError> {
-    git_backup::restore_snapshot(&backup_repo(), tag.trim())
+    git_backup::restore_snapshot_version(&backup_repo(), tag.trim())
         .map_err(|err| AppError::git(err.to_string()))
 }
 
 #[tauri::command]
 pub fn git_backup_set_remote(url: String) -> Result<(), AppError> {
     let path = backup_repo();
-    if !path.join(".git").exists() {
-        std::fs::create_dir_all(&path)?;
-        git_backup::init_repo(&path).map_err(|err| AppError::git(err.to_string()))?;
-    }
-    git_backup::set_remote(&path, Path::new(url.trim()))
-        .map_err(|err| AppError::git(err.to_string()))
+    ensure_backup_repo(&path)?;
+    git_backup::set_remote(&path, url.trim()).map_err(|err| AppError::git(err.to_string()))
 }
 
 #[tauri::command]
 pub fn git_backup_remove_remote() -> Result<(), AppError> {
     let path = backup_repo();
     if path.join(".git").exists() {
-        let _ = git_ok(&path, &["remote", "remove", "origin"]);
+        git_backup::remove_remote(&path).map_err(|err| AppError::git(err.to_string()))?;
     }
     Ok(())
 }
@@ -971,10 +1062,17 @@ pub fn backup_set_device_name(
     name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
+    let store = store.inner();
+    let trimmed = name.trim();
     store
-        .inner()
-        .set_setting("backup_device_name", name.trim())
-        .map_err(db)
+        .set_setting("backup_device_name", trimmed)
+        .map_err(db)?;
+    let path = backup_repo();
+    if path.join(".git").exists() {
+        git_backup::configure_device_identity(&path, trimmed)
+            .map_err(|err| AppError::git(err.to_string()))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1078,12 +1176,13 @@ fn install_market_work(
         return Err(AppError::invalid_input("marketplace install cancelled"));
     }
     if Path::new(&raw).is_dir() {
-        let installed = install_local(store, &root(), Path::new(&raw))
+        let installed = installer::install_from_local(Path::new(&raw), None)
             .map_err(|err| AppError::io(err.to_string()))?;
+        let dto = persist_install(store, &installed, "skillssh", Some(raw.clone()))?;
         store
-            .set_skill_source_type(&installed.record.id, "skillssh")
+            .set_skill_source_type(&dto.id, "skillssh")
             .map_err(db)?;
-        return Ok(installed_dto(installed.record.name, installed.record.id));
+        return Ok(dto);
     }
     let source = raw
         .trim_start_matches("https://")
@@ -1131,13 +1230,14 @@ fn install_market_work(
         .cloned()
         .or_else(|| dirs.into_iter().next())
         .ok_or_else(|| AppError::not_found("repository has no SKILL.md"))?;
-    let installed =
-        install_local(store, &root(), &folder).map_err(|err| AppError::io(err.to_string()))?;
+    let installed = installer::install_from_git_dir(&folder, Some(name))
+        .map_err(|err| AppError::io(err.to_string()))?;
+    let dto = persist_install(store, &installed, "skillssh", Some(url.clone()))?;
     store
-        .set_skill_source_type(&installed.record.id, "skillssh")
+        .set_skill_source_type(&dto.id, "skillssh")
         .map_err(db)?;
     let _ = std::fs::remove_dir_all(dest);
-    Ok(installed_dto(installed.record.name, installed.record.id))
+    Ok(dto)
 }
 
 fn set_market_status(value: &str) {
@@ -1600,8 +1700,7 @@ pub fn git_backup_restore_remote(url: String) -> Result<String, AppError> {
     }
     let staging = std::env::temp_dir().join(format!("skill-hive-restore-{}", now()));
     let _ = std::fs::remove_dir_all(&staging);
-    git_backup::clone_repo(Path::new(url), &staging)
-        .map_err(|err| AppError::git(err.to_string()))?;
+    git_backup::clone_into(&staging, url).map_err(|err| AppError::git(err.to_string()))?;
     copy_children(&staging, &root())?;
     let _ = std::fs::remove_dir_all(&staging);
     Ok(root().to_string_lossy().to_string())
@@ -1626,13 +1725,13 @@ pub fn tray_preset_pairs(store: &SkillStore) -> Vec<(String, String)> {
 }
 
 pub fn apply_preset_by_id(store: &SkillStore, preset_id: &str) -> Result<usize, AppError> {
-    let mut roots = HashMap::new();
-    for adapter in all_tool_adapters(store) {
-        if adapter.is_custom || adapter.is_installed() {
-            roots.insert(adapter.key.clone(), adapter.skills_dir());
-        }
-    }
-    scenario_service::apply_preset(store, preset_id, &roots, mode(store), current_os()).map_err(db)
+    scenario_service::ensure_scenario_exists(store, preset_id)?;
+    let before = store
+        .get_skill_ids_for_scenario(preset_id)
+        .map_err(db)?
+        .len();
+    scenario_service::apply_scenario_to_default(store, preset_id)?;
+    Ok(before)
 }
 
 pub fn remove_preset_by_id(store: &SkillStore, preset_id: &str) -> Result<(), AppError> {
@@ -1648,7 +1747,7 @@ pub fn remove_preset_by_id(store: &SkillStore, preset_id: &str) -> Result<(), Ap
 }
 #[cfg(test)]
 mod tests {
-    use super::preview_repository;
+    use super::{confirm_preview, preview_repository};
     use std::fs;
     use std::process::Command;
 
@@ -1702,7 +1801,6 @@ mod tests {
         use hive_core::deploy::sync_engine::{current_os, NativeBackend, SyncMode};
         use hive_core::deploy::tool_adapters::{CustomToolDef, ToolCategory};
         use hive_core::deploy::tool_service::{self, CustomAdd};
-        use hive_core::library::git_fetcher::confirm_git_install;
         use hive_core::library::installer::install_local;
         use hive_core::library::scanner;
         use std::path::PathBuf;
@@ -1841,8 +1939,9 @@ mod tests {
             .expect("preview skill")
             .relative
             .clone();
-        let names = confirm_git_install(&store, &skills, &preview.id, &[(relative, None)])
-            .expect("confirm");
+        hive_core::library::central_repo::set_runtime_skills_dir_override(Some(skills.clone()));
+        let names = confirm_preview(&store, &preview.id, &relative, None).expect("confirm");
+        hive_core::library::central_repo::set_runtime_skills_dir_override(None);
         assert!(names.iter().any(|name| name == "seeded-git"));
 
         let skill_file = skills.join("seeded-git").join("SKILL.md");
@@ -1866,7 +1965,6 @@ mod tests {
         };
         use hive_core::authoring::validator::{Finding, Severity};
         use hive_core::authoring::versions::VersionStore;
-        use hive_core::backup::git_backup;
         use hive_core::db::skill_store::{ScenarioRecord, SkillStore};
         use hive_core::providers::{
             clear_git_token, clear_provider_secret, store_git_token, store_provider_secret,
@@ -2092,7 +2190,7 @@ mod tests {
             .unwrap();
         assert!(status.success());
         let staging = root.join("staging");
-        git_backup::clone_repo(&bare, &staging).unwrap();
+        hive_core::backup::git_backup::clone_repo(&bare, &staging).unwrap();
         assert_eq!(
             fs::read_to_string(staging.join("restored-marker.txt")).unwrap(),
             "restored-from-remote"

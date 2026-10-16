@@ -10,7 +10,7 @@ import {
   type ProjectSkill,
 } from "@/features/project/model";
 import { setProjectSkills } from "@/features/project/store";
-import { addProject, pullProjectCenter, setSkillsEnabled, syncSkillToTool } from "@/lib/ipc/actions";
+import { addProject, pullProjectCenter, setSkillsEnabled, silent, syncSkillToTool } from "@/lib/ipc/actions";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -38,6 +38,7 @@ export function ProjectView() {
               setLinked(true);
               setProjectSkills([skill]);
               void addProject("fixture", "");
+              void silent("add_linked_workspace", { name: skill.name, path: skill.name, agent: "claude_code" });
             }}
           >
             {t("project.link")}
@@ -54,17 +55,23 @@ export function ProjectView() {
             <span data-testid="project-dot" data-color={dotColor(skill)} className="ml-2 inline-block h-2 w-2 rounded-full bg-current" />
           </p>
           <p>{t("project.agents")}: {skill.agents.join(", ") || "—"}</p>
-          <Button type="button" variant="outline" size="sm" onClick={() => { update(addSkillToAgents(skill, ["claude_code", "codex"])); void syncSkillToTool(skill.id, "claude_code"); void syncSkillToTool(skill.id, "codex"); }}>
+          <Button type="button" variant="outline" size="sm" onClick={() => { update(addSkillToAgents(skill, ["claude_code", "codex"])); void syncSkillToTool(skill.id, "claude_code"); void syncSkillToTool(skill.id, "codex"); void silent("export_skill_to_project", { id: "fixture", skillId: skill.id, agent: "claude_code" }); void silent("export_skill_to_project", { id: "fixture", skillId: skill.id, agent: "codex" }); }}>
             {t("project.add")}
           </Button>
-          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { update(toggleSkill(skill, !skill.enabled)); void setSkillsEnabled([skill.id], !skill.enabled); }}>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { const enabled = !skill.enabled; update(toggleSkill(skill, enabled)); void setSkillsEnabled([skill.id], enabled); void silent("toggle_project_skill", { id: "fixture", name: skill.name, enabled }); }}>
             {t("project.disable")}
           </Button>
-          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { update(pullCenter(skill)); void pullProjectCenter(skill.name, skill.center); }}>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { update(pullCenter(skill)); void pullProjectCenter(skill.name, skill.center); void silent("update_project_skill_from_center", { id: "fixture", skillId: skill.id, agent: "claude_code" }); void silent("update_project_skill_to_center", { id: "fixture", name: skill.name, skillId: skill.id }); }}>
             {t("project.pull")}
           </Button>
-          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { update({ ...skill, enabled: true }); void setSkillsEnabled([skill.id], true); }}>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { update({ ...skill, enabled: true }); void setSkillsEnabled([skill.id], true); void silent("toggle_project_skill", { id: "fixture", name: skill.name, enabled: true }); }}>
             {t("project.batch")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void silent("reveal_project_folder", { id: "fixture" }); }}>
+            {t("library.detail.local")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void silent("delete_project_skill", { id: "fixture", name: skill.name }); }}>
+            {t("workspace.delete")}
           </Button>
           <div className="flex gap-2">
             <span>{t("library.detail.local")}</span>
