@@ -183,6 +183,18 @@ export function SettingsView({
             <Button type="button" variant="outline" size="sm" onClick={() => setRefreshed(true)}>{t("settings.agents.refresh")}</Button>
           </div>
           {refreshed ? <p role="status">{t("settings.agents.refreshed")}</p> : null}
+          <form
+            className="mt-3 flex flex-wrap items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onAddAgent(agentName, agentPath);
+            }}
+          >
+            <Input aria-label="Agent name" value={agentName} onChange={(event) => setAgentName(event.target.value)} className="h-8 w-56 shrink-0" />
+            <Input aria-label="Agent path" value={agentPath} onChange={(event) => setAgentPath(event.target.value)} className="h-8 w-56 shrink-0" />
+            <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</Button>
+            <Button type="submit" size="sm">{t("settings.agents.new")}</Button>
+          </form>
           <ul data-testid="agent-order" className="mt-3 space-y-2">
             {agents.map((agent) => (
               <li
@@ -218,18 +230,6 @@ export function SettingsView({
               </li>
             ))}
           </ul>
-          <form
-            className="mt-3 flex flex-wrap gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onAddAgent(agentName, agentPath);
-            }}
-          >
-            <Input aria-label="Agent name" value={agentName} onChange={(event) => setAgentName(event.target.value)} className="h-8" />
-            <Input aria-label="Agent path" value={agentPath} onChange={(event) => setAgentPath(event.target.value)} className="h-8" />
-            <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</Button>
-            <Button type="submit" size="sm">{t("settings.agents.new")}</Button>
-          </form>
         </div>
       ) : null}
       {tab === "backup" ? (
