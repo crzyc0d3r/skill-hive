@@ -7,6 +7,7 @@ import type { GitPreview } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
 import { t } from "@/lib/i18n";
 import { Screen } from "@/components/chrome";
+import { Card } from "@/components/ui/card";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
 const TABS = ["leaderboard", "local", "git", "scan"] as const;
@@ -65,9 +66,9 @@ export function InstallView({
 
   return (
     <Screen testId="install" title={t("install.title")}>
-      <div role="tablist" aria-label={t("install.title")} className="flex flex-wrap gap-2">
+      <div role="tablist" aria-label={t("install.title")} className="inline-flex max-w-full flex-wrap rounded-lg bg-muted p-0.5">
         {tabs.map((item) => (
-          <Button key={item} type="button" role="tab" aria-selected={active === item} data-testid={`tab-${item}`} variant={active === item ? "default" : "outline"} size="sm" onClick={() => setParams({ tab: item })}>
+          <Button key={item} type="button" role="tab" aria-selected={active === item} data-testid={`tab-${item}`} variant="ghost" size="sm" className={`h-7 rounded-md px-3 shadow-none ${active === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
             {item === "scan" ? t("dashboard.scan") : t(`install.tab.${item}`)}
           </Button>
         ))}
@@ -75,7 +76,7 @@ export function InstallView({
       {active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
       {active === "local" ? (
         <form
-          className="mt-4 space-y-2"
+          className="max-w-xl"
           onSubmit={(event) => {
             event.preventDefault();
             const label = folder.split(/[/\\]/).filter(Boolean).pop() ?? folder;
@@ -84,21 +85,31 @@ export function InstallView({
             }, () => setInstalled(label));
           }}
         >
-          <label className="block text-sm">
-            {t("install.local.folder")}
-            <Input aria-label={t("install.local.folder")} value={folder} onChange={(event) => setFolder(event.target.value)} className="h-8 ml-2" />
-            <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => void pickPath(true).then((path) => path && setFolder(path))}>Browse</Button>
-          </label>
-          <label className="block text-sm">
-            {t("install.local.archive")}
-            <Input aria-label={t("install.local.archive")} value={archive} onChange={(event) => setArchive(event.target.value)} className="h-8 ml-2" />
-            <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => void pickPath(false).then((path) => path && setArchive(path))}>Browse</Button>
-          </label>
-          <Button type="submit" disabled={busy} size="sm">{t("install.local.submit")}</Button>
-          <Button type="button" disabled={busy} variant="outline" size="sm" className="ml-2" onClick={() => { const label = archive.split(/[/\\]/).filter(Boolean).pop() ?? archive; void act(async () => { await onInstallArchive(archive); }, () => setInstalled(label)); }}>
-            {t("install.local.archiveSubmit")}
-          </Button>
-          {installed ? <p role="status">{t("install.git.imported")} {installed}</p> : null}
+          <Card className="gap-4 rounded-lg border-border py-4 shadow-none">
+            <div className="space-y-4 px-4">
+              <label className="block text-sm">
+                <span className="mb-1.5 block text-muted-foreground">{t("install.local.folder")}</span>
+                <span className="flex gap-2">
+                  <Input aria-label={t("install.local.folder")} value={folder} onChange={(event) => setFolder(event.target.value)} placeholder="~/.claude/skills" className="h-8" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((path) => path && setFolder(path))}>Browse</Button>
+                </span>
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1.5 block text-muted-foreground">{t("install.local.archive")}</span>
+                <span className="flex gap-2">
+                  <Input aria-label={t("install.local.archive")} value={archive} onChange={(event) => setArchive(event.target.value)} placeholder="skill.tgz" className="h-8" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(false).then((path) => path && setArchive(path))}>Browse</Button>
+                </span>
+              </label>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={busy} size="sm">{t("install.local.submit")}</Button>
+                <Button type="button" disabled={busy} variant="outline" size="sm" onClick={() => { const label = archive.split(/[/\\]/).filter(Boolean).pop() ?? archive; void act(async () => { await onInstallArchive(archive); }, () => setInstalled(label)); }}>
+                  {t("install.local.archiveSubmit")}
+                </Button>
+              </div>
+              {installed ? <p role="status">{t("install.git.imported")} {installed}</p> : null}
+            </div>
+          </Card>
         </form>
       ) : null}
       {active === "git" ? (
@@ -117,7 +128,7 @@ export function InstallView({
             });
           }}
         >
-          <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} className="h-8 w-full" />
+          <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/org/skills" className="h-8 max-w-xl" />
           <Button type="submit" size="sm">{t("install.git.preview")}</Button>
           {cancelled ? <p role="status">{t("install.git.removed")}</p> : null}
           {preview && !cancelled ? (
