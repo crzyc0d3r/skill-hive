@@ -2,6 +2,7 @@
 pub mod analytics;
 pub mod authoring;
 pub mod backup;
+pub mod core;
 pub mod db;
 pub mod deploy;
 pub mod generation;
