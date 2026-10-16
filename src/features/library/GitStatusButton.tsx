@@ -7,7 +7,7 @@ export function GitStatusButton() {
   const [status, setStatus] = useState<string | null>(null);
   return (
     <span>
-      <Button type="button" variant="outline" size="sm" onClick={() => void gitBackupStatus().then((row) => setStatus(row.clean ? row.branch || "clean" : "dirty")).catch((err: Error) => setStatus(err.message))}
+      <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void gitBackupStatus().then((row) => setStatus(row.clean ? row.branch || "clean" : "dirty")).catch((err: Error) => setStatus(err.message))}
       >
         {t("library.gitStatus")}
       </Button>
