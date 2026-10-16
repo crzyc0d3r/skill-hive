@@ -72,9 +72,9 @@ export function SettingsView({
 
   return (
     <Screen testId="settings" title="Settings">
-      <div role="tablist" className="flex flex-wrap gap-2">
+      <div role="tablist" className="inline-flex max-w-full flex-wrap rounded-lg bg-muted p-0.5">
         {TABS.map((item) => (
-          <Button key={item} type="button" role="tab" aria-selected={tab === item} variant={tab === item ? "default" : "outline"} size="sm" onClick={() => setParams({ tab: item })}>
+          <Button key={item} type="button" role="tab" aria-selected={tab === item} variant="ghost" size="sm" className={`h-7 rounded-md px-3 shadow-none ${tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
             {t(`settings.${item}`)}
           </Button>
         ))}
