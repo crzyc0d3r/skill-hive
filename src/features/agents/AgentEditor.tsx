@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { t } from "@/lib/i18n";
@@ -27,11 +28,11 @@ export function AgentEditor() {
     <section data-testid="agent-editor" className="min-w-0">
       <h1 className="font-mono text-lg font-semibold">{agent.name}</h1>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => saveAgent(agent)}>{t("editor.save")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => exportAgent(agent.id)}>{t("agents.user")}</button>
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => exportAgent(agent.id)}>{t("agents.project")}</button>
-        <button type="button" disabled className="rounded-md border border-border px-2 py-1 text-sm opacity-50">{t("editor.unverified")}</button>
-        <button type="button" aria-pressed={agent.plugin} className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => saveAgent({ ...agent, plugin: !agent.plugin })}>{t("editor.plugin")}</button>
+        <Button type="button" variant="outline" size="sm" onClick={() => saveAgent(agent)}>{t("editor.save")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => exportAgent(agent.id)}>{t("agents.user")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => exportAgent(agent.id)}>{t("agents.project")}</Button>
+        <Button type="button" disabled variant="outline" size="sm">{t("editor.unverified")}</Button>
+        <Button type="button" aria-pressed={agent.plugin} variant="outline" size="sm" onClick={() => saveAgent({ ...agent, plugin: !agent.plugin })}>{t("editor.plugin")}</Button>
       </div>
       <p data-testid="export-status">{t(`agents.${status}`)}</p>
       <label className="mt-3 block text-sm">
@@ -40,9 +41,9 @@ export function AgentEditor() {
       </label>
       <div data-testid="editor-tabs" role="tablist" className="mt-3 flex flex-wrap gap-1">
         {TABS.map((item) => (
-          <button key={item} type="button" role="tab" aria-selected={tab === item} className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setTab(item)}>
+          <Button key={item} type="button" role="tab" aria-selected={tab === item} variant={tab === item ? "default" : "outline"} size="sm" onClick={() => setTab(item)}>
             {t(item === "export" ? "editor.export" : `editor.${item}`)}
-          </button>
+          </Button>
         ))}
       </div>
       {tab === "problems" ? (

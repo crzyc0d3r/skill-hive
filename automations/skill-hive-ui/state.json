@@ -1,0 +1,173 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-16T05:39:51+00:00",
+  "finished": "2026-10-16T05:40:45+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n1_result": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "b931fb8343fb4ce47f8d5c173b2a8361a49d1a2eba4576fc6ab4f20b323570ee",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/skill-hive-ui/code/check_shots.py` → exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)"
+          ]
+        ],
+        "at": "2026-10-16T05:40:45+00:00",
+        "output_hash": "b931fb8343fb4ce47f8d5c173b2a8361a49d1a2eba4576fc6ab4f20b323570ee",
+        "log": "automations/skill-hive-ui/runs/r1/gates/n1_result.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/skill-hive-ui/code/check_shots.py` → exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)"
+            ]
+          ],
+          "at": "2026-10-16T05:40:45+00:00",
+          "output_hash": "b931fb8343fb4ce47f8d5c173b2a8361a49d1a2eba4576fc6ab4f20b323570ee",
+          "log": "automations/skill-hive-ui/runs/r1/gates/n1_result.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_result",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-16T05:40:45+00:00",
+      "finished": "2026-10-16T05:40:45+00:00",
+      "verdict": "pass",
+      "output": "automations/skill-hive-ui/out/result.md",
+      "evidence": "exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/skill-hive-ui/code/check_shots.py` → exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)",
+      "at": "2026-10-16T05:40:45+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-16T05:40:31+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash d267fe4fc3c7b391)"
+    },
+    {
+      "at": "2026-10-16T05:40:31+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-16T05:40:31+00:00",
+      "type": "baseline",
+      "msg": "1/3 pass before the run"
+    },
+    {
+      "at": "2026-10-16T05:40:45+00:00",
+      "type": "gate",
+      "msg": "n1_result attempt 1: pass"
+    },
+    {
+      "at": "2026-10-16T05:40:45+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-16T05:40:45+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash d267fe4fc3c7b391"
+      ],
+      [
+        "n1_result: output exists and can be opened",
+        "pass",
+        "automations/skill-hive-ui/out/result.md (476 bytes)"
+      ],
+      [
+        "n1_result: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-16T05:40:45+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 1 of 1 declared nodes"
+      ],
+      [
+        "acceptance 0: before and after screenshots exist for both themes and both sizes",
+        "pass",
+        "`python3 automations/skill-hive-ui/code/check_shots.py` → exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/skill-hive-ui/out/result.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-16T05:40:31+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "automations/skill-hive-ui/out/result.md absent"
+      ],
+      [
+        "acceptance 0: before and after screenshots exist for both themes and both sizes",
+        "pass",
+        "`python3 automations/skill-hive-ui/code/check_shots.py` → exit 0: shots ok (9 names x 2 themes x 2 sizes x before/after)"
+      ],
+      [
+        "note",
+        "noted",
+        "Working tree holds the UI rebuild. After shots are captured from the Vite app that the Tauri webview loads."
+      ]
+    ]
+  }
+}

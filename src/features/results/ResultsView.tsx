@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { t } from "../../lib/i18n";
 import { evidenceAnchor, FIXTURE_CELLS, FIXTURE_STEPS, moveCell, stepDuration } from "@/features/results/model";
@@ -37,16 +39,9 @@ export function ResultsView() {
         }}
       >
         {FIXTURE_CELLS.map((cell, cellIndex) => (
-          <button
-            key={cell.id}
-            type="button"
-            role="gridcell"
-            data-selected={cellIndex === index}
-            className="rounded border border-border px-2 py-2 text-left text-sm"
-            onClick={() => setIndex(cellIndex)}
-          >
+          <Button key={cell.id} type="button" role="gridcell" data-selected={cellIndex === index} variant="outline" size="sm" className="text-left" onClick={() => setIndex(cellIndex)}>
             {cell.label} {cell.passRate}
-          </button>
+          </Button>
         ))}
       </div>
       {open ? <p data-testid="heatmap-open">{open}</p> : null}
@@ -54,13 +49,9 @@ export function ResultsView() {
       <ul className="flex gap-2">
         {FIXTURE_STEPS.map((step) => (
           <li key={step.id}>
-            <button
-              type="button"
-              className="rounded border border-border px-2 py-1 text-xs"
-              onClick={() => scrollToId(`step-${step.id}`)}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => scrollToId(`step-${step.id}`)}>
               {step.tool} {stepDuration(step)}ms
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -80,25 +71,25 @@ export function ResultsView() {
       >
         <label className="text-sm">
           {t("results.evidence")}
-          <input className="ml-2 rounded border border-border bg-background px-2 py-1" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Input className="h-8 ml-2" value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
-        <button type="submit" className="rounded border border-border px-2 py-1 text-sm">
+        <Button type="submit" variant="outline" size="sm">
           {t("results.evidence")}
-        </button>
+        </Button>
       </form>
       <p data-testid="evidence-anchor">{anchor ?? t("results.noAnchor")}</p>
-      <button type="button" className="rounded border border-border px-2 py-1 text-sm" onClick={() => setBudgetOpen(true)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setBudgetOpen(true)}>
         {t("results.budget")}
-      </button>
+      </Button>
       {budgetOpen ? (
         <div role="dialog" data-testid="budget-dialog" className="rounded border border-border p-3">
           <p className="text-sm">{t("results.budget")}</p>
-          <button type="button" className="mr-2 rounded border border-border px-2 py-1 text-sm" onClick={() => { setPaused(true); setBudgetOpen(false); }}>
+          <Button type="button" variant="outline" size="sm" className="mr-2" onClick={() => { setPaused(true); setBudgetOpen(false); }}>
             {t("results.confirm")}
-          </button>
-          <button type="button" className="rounded border border-border px-2 py-1 text-sm" onClick={() => setBudgetOpen(false)}>
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setBudgetOpen(false)}>
             {t("results.cancel")}
-          </button>
+          </Button>
         </div>
       ) : null}
     </section>

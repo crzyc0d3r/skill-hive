@@ -1,4 +1,12 @@
 import "@testing-library/jest-dom/vitest";
+
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver = ResizeObserverMock;
+Element.prototype.scrollIntoView = () => {};
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { vi } from "vitest";
 

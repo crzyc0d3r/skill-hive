@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { t } from "../../lib/i18n";
 import { exportEndpoints, setEndpointSecret, useEndpoints } from "@/features/endpoints/store";
@@ -41,24 +43,14 @@ export function EndpointsView() {
       >
         <label className="text-sm">
           {t("endpoints.secret")}
-          <input
-            className="ml-2 rounded border border-border bg-background px-2 py-1"
-            type="password"
-            value={draft}
-            autoComplete="off"
-            onChange={(event) => setDraft(event.target.value)}
-          />
+          <Input className="h-8 ml-2" type="password" value={draft} autoComplete="off" onChange={(event) => setDraft(event.target.value)} />
         </label>
-        <button type="submit" className="rounded border border-border px-2 py-1 text-sm">
+        <Button type="submit" variant="outline" size="sm">
           {t("endpoints.save")}
-        </button>
-        <button
-          type="button"
-          className="rounded border border-border px-2 py-1 text-sm"
-          onClick={() => setExported(JSON.stringify(exportEndpoints()))}
-        >
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => setExported(JSON.stringify(exportEndpoints()))}>
           {t("endpoints.export")}
-        </button>
+        </Button>
       </form>
       <p className="text-sm">{t("endpoints.probe")}</p>
       {exported ? (

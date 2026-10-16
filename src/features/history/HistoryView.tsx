@@ -1,33 +1,35 @@
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { t } from "../../lib/i18n";
 import { HISTORY_ROWS } from "@/features/history/model";
 import { writeHistoryBaseline } from "@/lib/ipc/actions";
+import { Screen } from "@/components/chrome";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export function HistoryView() {
   const [saved, setSaved] = useState(false);
   return (
-    <section data-testid="history" className="space-y-3">
-      <h1 className="font-mono text-xl font-semibold">{t("history.title")}</h1>
-      <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { void writeHistoryBaseline("baseline"); setSaved(true); }}>{t("history.baseline")}</button>
+    <Screen testId="history" title={t("history.title")}>
+      <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => { void writeHistoryBaseline("baseline"); setSaved(true); }}>{t("history.baseline")}</Button>
       {saved ? <p role="status">{t("history.baseline")}</p> : null}
-      <table className="w-full text-sm">
-        <caption className="sr-only">{t("history.table")}</caption>
-        <thead>
-          <tr>
-            <th className="text-left">{t("history.title")}</th>
-            <th className="text-left">{t("history.baseline")}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableCaption className="sr-only">{t("history.table")}</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("history.title")}</TableHead>
+            <TableHead>{t("history.baseline")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {HISTORY_ROWS.map((row) => (
-            <tr key={row.version} data-testid={`history-${row.version}`}>
-              <td>{row.version}</td>
-              <td>{row.rate}</td>
-              <td>{row.best ? t("history.baseline") : row.result}</td>
-            </tr>
+            <TableRow key={row.version} data-testid={`history-${row.version}`}>
+              <TableCell className="font-mono">{row.version}</TableCell>
+              <TableCell className="tabular-nums">{row.rate}</TableCell>
+              <TableCell>{row.best ? t("history.baseline") : row.result}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </section>
+        </TableBody>
+      </Table>
+    </Screen>
   );
 }

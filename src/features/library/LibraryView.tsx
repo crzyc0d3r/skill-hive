@@ -1,12 +1,30 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { CheckIcon, GripVerticalIcon, LayoutGridIcon, ListIcon, MoreHorizontalIcon, PlusIcon, XIcon } from "lucide-react";
 import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard } from "@/features/library/model";
 import { windowRows } from "@/lib/perf";
 import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
 import { t } from "@/lib/i18n";
+import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
 import { UpdateFlow } from "@/features/library/UpdateFlow";
+import { EmptyState, Screen, SearchField } from "@/components/chrome";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+const menuItem = "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground";
+
+function agentLabel(agent: string) {
+  if (agent === "claude_code") return "Claude";
+  if (agent === "codex") return "Codex";
+  return agent;
+}
 
 export function LibraryView({
   skills,
@@ -47,6 +65,7 @@ export function LibraryView({
   const [tag, setTag] = useState<string | null>(null);
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   const [selected, setSelected] = useState<string[]>([]);
+  const [selecting, setSelecting] = useState(false);
   const [openId, setOpenId] = useState<string | null>(initialId ?? null);
   useEffect(() => {
     if (initialId) setOpenId(initialId);
@@ -69,121 +88,151 @@ export function LibraryView({
   const open = skills.find((skill) => skill.id === openId) ?? null;
   const rendered = windowRows(visible, 100);
   const members = memberIds.map((id) => skills.find((skill) => skill.id === id)?.name ?? id);
+  const showChecks = selecting || selected.length > 0;
+
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      if (next.length > 0) setSelecting(true);
+      return next;
+    });
+  }
 
   return (
-    <section data-testid="library">
-      <h1 className="font-mono text-[22px] font-semibold">{t("library.title")}</h1>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <GitStatusButton />
-        <span aria-disabled="true" className="rounded-md border border-border px-2 py-1 text-sm text-muted-foreground">{t("library.needsAttention")}</span>
-      </div>
-      <UpdateFlow />
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input
+    <Screen testId="library" title={t("library.title")}>
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchField
           aria-label={t("library.search")}
+          placeholder={t("library.search")}
           data-search
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="rounded-md border border-input bg-background px-2 py-1 text-sm"
         />
-        {(["all", "enabled", "available"] as const).map((item) => (
-          <button
-            key={item}
+        <div role="group" aria-label={t("library.title")} className="inline-flex rounded-lg bg-muted p-0.5">
+          {(["all", "enabled", "available"] as const).map((item) => (
+            <Button
+              key={item}
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-pressed={filter === item}
+              className={cn("h-7 rounded-md px-3 shadow-none", filter === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent")}
+              onClick={() => setFilter(item)}
+            >
+              {t(`library.filter.${item}`)}
+            </Button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <GitStatusButton />
+          <UpdateFlow />
+          <Button type="button" size="icon-sm" variant={layout === "grid" ? "secondary" : "ghost"} aria-label={t("library.view.grid")} title={t("library.view.grid")} onClick={() => setLayout("grid")}>
+            <LayoutGridIcon aria-hidden="true" />
+          </Button>
+          <Button type="button" size="icon-sm" variant={layout === "list" ? "secondary" : "ghost"} aria-label={t("library.view.list")} title={t("library.view.list")} onClick={() => setLayout("list")}>
+            <ListIcon aria-hidden="true" />
+          </Button>
+          <Button
             type="button"
-            aria-pressed={filter === item}
-            className="rounded-md border border-border px-2 py-1 text-sm"
-            onClick={() => setFilter(item)}
-          >
-            {t(`library.filter.${item}`)}
-          </button>
-        ))}
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setLayout(layout === "grid" ? "list" : "grid")}>
-          {layout === "grid" ? t("library.view.list") : t("library.view.grid")}
-        </button>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {sources.map((item) => (
-          <button key={item} type="button" className="rounded-full border border-border px-2 py-0.5 text-xs" onClick={() => setSource(source === item ? null : item)}>
-            {item}
-          </button>
-        ))}
-        <button type="button" className="rounded-full border border-border px-2 py-0.5 text-xs" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
-          Untagged
-        </button>
-        {tags.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className="rounded-full border border-border px-2 py-0.5 text-xs"
-            onClick={() => setTag(tag === item ? null : item)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setRename(item);
-              setRenameValue(item);
+            size="icon-sm"
+            variant={showChecks ? "secondary" : "ghost"}
+            aria-pressed={showChecks}
+            aria-label="Selection"
+            title="Selection"
+            onClick={() => {
+              if (showChecks) {
+                setSelecting(false);
+                setSelected([]);
+              } else {
+                setSelecting(true);
+              }
             }}
           >
+            <CheckIcon aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {sources.map((item) => (
+          <Button key={item} type="button" variant={source === item ? "default" : "secondary"} size="xs" className="rounded-full shadow-none" onClick={() => setSource(source === item ? null : item)}>
             {item}
-          </button>
+          </Button>
+        ))}
+        <Button type="button" variant={tag === "untagged" ? "default" : "secondary"} size="xs" className="rounded-full shadow-none" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
+          Untagged
+        </Button>
+        {tags.map((item) => (
+          <Button
+            key={item}
+            type="button"
+            variant={tag === item ? "default" : "secondary"}
+            size="xs"
+            className="rounded-full shadow-none"
+            onClick={() => setTag(tag === item ? null : item)}
+            onContextMenu={(event) => { event.preventDefault(); setRename(item); setRenameValue(item); }}
+          >
+            {item}
+          </Button>
         ))}
       </div>
       {rename ? (
         <form
-          className="mt-2 flex flex-wrap gap-2"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2"
           onSubmit={(event) => {
             event.preventDefault();
             onRenameTag(rename, renameValue);
             setRename(null);
           }}
         >
-          <input aria-label={t("library.tag.rename")} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
-          <button type="submit" className="rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground">{t("library.tag.rename")}</button>
-          <button
-            type="button"
-            className="rounded-md border border-border px-2 py-1 text-sm"
-            onClick={() => {
-              onDeleteTag(rename);
-              setRename(null);
-            }}
-          >
+          <Input aria-label={t("library.tag.rename")} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className="h-8 w-48" />
+          <Button type="submit" size="sm">{t("library.tag.rename")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { onDeleteTag(rename); setRename(null); }}>
             {t("library.tag.delete")}
-          </button>
+          </Button>
         </form>
       ) : null}
-      <ol data-testid="preset-order" className="mt-3 flex flex-wrap gap-2">
-        {memberIds.map((id) => (
-          <li
-            key={id}
-            draggable
-            data-member={id}
-            onDragStart={() => setDragId(id)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={() => {
-              if (!dragId) return;
-              onReorderMembers(moveById(memberIds, dragId, id, (item) => item));
-              setDragId(null);
-            }}
-            className="rounded-md border border-border px-2 py-1 text-xs"
-          >
-            {t("library.reorder")} {skills.find((skill) => skill.id === id)?.name ?? id}
-          </li>
-        ))}
+      <ol data-testid="preset-order" className="flex flex-wrap items-center gap-1.5">
+        {memberIds.map((id) => {
+          const name = skills.find((skill) => skill.id === id)?.name ?? id;
+          return (
+            <li
+              key={id}
+              draggable
+              data-member={id}
+              onDragStart={() => setDragId(id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (!dragId) return;
+                onReorderMembers(moveById(memberIds, dragId, id, (item) => item));
+                setDragId(null);
+              }}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-xs"
+            >
+              <button type="button" className="text-muted-foreground" title={t("library.reorder")} aria-label={t("library.reorder")}>
+                <GripVerticalIcon className="size-3" aria-hidden="true" />
+              </button>
+              <span>{name}{"\u200b"}</span>
+            </li>
+          );
+        })}
       </ol>
       <p className="sr-only">{presetName}: {members.join(", ")}</p>
       {checked ? <p role="status">{t("library.checked")} {checked}</p> : null}
       {selected.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled(selected, true)}>{t("library.batch.enable")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</button>
-          <button type="button" className="rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground" onClick={() => setSyncOpen(true)}>
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
+          <span className="font-mono text-xs text-muted-foreground">{selected.length}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, true)}>{t("library.batch.enable")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</Button>
+          <Button type="button" size="sm" onClick={() => setSyncOpen(true)}>
             {t("library.sync")}
-          </button>
+          </Button>
         </div>
       ) : null}
       {batchOpen ? (
         <form
-          className="mt-2 flex gap-2"
+          className="flex gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             if (batchTag.trim()) onBatchTag(selected, batchTag.trim());
@@ -191,13 +240,13 @@ export function LibraryView({
             setBatchTag("");
           }}
         >
-          <input aria-label={t("library.batch.tags")} value={batchTag} onChange={(event) => setBatchTag(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
-          <button type="submit" className="rounded-md border border-border px-2 py-1 text-sm">{t("library.batch.tags")}</button>
+          <Input aria-label={t("library.batch.tags")} value={batchTag} onChange={(event) => setBatchTag(event.target.value)} className="h-8" />
+          <Button type="submit" variant="outline" size="sm">{t("library.batch.tags")}</Button>
         </form>
       ) : null}
       {syncOpen ? (
         <form
-          className="mt-2 rounded-md border border-border p-3"
+          className="rounded-lg border border-border bg-card p-3"
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
@@ -208,109 +257,123 @@ export function LibraryView({
         >
           <label className="mr-3 text-sm"><input type="checkbox" name="claude_code" /> Claude Code</label>
           <label className="mr-3 text-sm"><input type="checkbox" name="codex" /> Codex</label>
-          <button type="submit" className="rounded-md border border-border px-2 py-1 text-sm">{t("library.sync")}</button>
+          <Button type="submit" size="sm">{t("library.sync")}</Button>
         </form>
       ) : null}
-      {rendered.length === 0 ? <p className="mt-4 text-sm text-muted-foreground">{t("library.empty")}</p> : null}
-      <ul data-testid="library-cards" data-layout={layout} className={layout === "grid" ? "mt-4 grid grid-cols-2 gap-3" : "mt-4 space-y-2"}>
+      {rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
+      <ul data-testid="library-cards" data-layout={layout} className={layout === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" : "space-y-2"}>
         {rendered.map((skill) => (
-          <li key={skill.id} className="rounded-lg border border-border bg-card p-3">
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                aria-label={`Select ${skill.name}`}
-                checked={selected.includes(skill.id)}
-                onChange={() =>
-                  setSelected((current) =>
-                    current.includes(skill.id) ? current.filter((id) => id !== skill.id) : [...current, skill.id],
-                  )
-                }
-              />
-              <button type="button" className="text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
-                <span className="block font-medium whitespace-normal">{skill.name}</span>
-                {skill.draft ? <span data-testid="draft-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.draft")}</span> : null}
-                {badgeFor(seed, skill.id) === "tested" ? <span data-testid="tested-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.tested")}</span> : null}
-                {badgeFor(seed, skill.id) === "regressed" ? <span data-testid="regressed-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.regressed")}</span> : null}
-                <span className="block text-sm text-muted-foreground">{skill.description}</span>
-              </button>
-            </label>
-            <label className="mt-2 flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                aria-label={`${t("library.membership")} ${skill.name}`}
-                checked={memberIds.includes(skill.id)}
-                onChange={() => onToggleMember(skill.id)}
-              />
-              {t("library.membership")}
-            </label>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {skill.tags.map((item) => (
-                <button key={item} type="button" className="text-xs" onClick={() => onRemoveTag(skill.id, item)}>
-                  {t("library.tag.remove")} {item}
+          <li key={skill.id}>
+            <Card className={cn("group/card gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "flex-row")}>
+              <div className="flex items-start gap-2.5 px-3 pt-3">
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${skill.name}`}
+                  checked={selected.includes(skill.id)}
+                  onChange={() => toggleSelected(skill.id)}
+                  className="mt-1 size-4 shrink-0 rounded border-border accent-primary"
+                />
+                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
+                  <span className="block font-medium whitespace-normal">{skill.name}</span>
+                  <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">{skill.description}</span>
                 </button>
-              ))}
-            </div>
-            <div className="mt-2 flex gap-1" data-testid={`sync-dots-${skill.id}`}>
-              {skill.agents.map((agent) => (
-                <span key={agent} data-filled="true" className="inline-block h-2 w-2 rounded-full bg-primary" title={agent} />
-              ))}
-            </div>
-            <button type="button" className="mt-2 text-xs" aria-label={t("library.menu")} onClick={() => setMenuId(menuId === skill.id ? null : skill.id)}>
-              {t("library.menu")}
-            </button>
-            {menuId === skill.id ? (
-              <div className="mt-1 flex gap-2">
-                <Link to={`/skills/${skill.id}/edit`} className="text-xs">{t("library.menu.edit")}</Link>
-                <Link to={`/skills/${skill.id}/tests`} className="text-xs" aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
-                <button type="button" className="text-xs" onClick={() => setChecked(skill.name)}>{t("library.menu.check")}</button>
-                <button type="button" className="text-xs" onClick={() => onDeleteSkills([skill.id])}>{t("library.menu.delete")}</button>
+                <DropdownMenu modal={false} open={menuId === skill.id} onOpenChange={(next) => setMenuId(next ? skill.id : null)}>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon-xs" aria-label={t("library.menu")} title={t("library.menu")} className="text-muted-foreground opacity-70 group-hover/card:opacity-100 data-[state=open]:opacity-100">
+                      <MoreHorizontalIcon aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <Link to={`/skills/${skill.id}/edit`} className={menuItem}>{t("library.menu.edit")}</Link>
+                    <Link to={`/skills/${skill.id}/tests`} className={menuItem} aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
+                    <button type="button" className={menuItem} onClick={() => setChecked(skill.name)}>{t("library.menu.check")}</button>
+                    <button type="button" className={cn(menuItem, "text-destructive")} onClick={() => onDeleteSkills([skill.id])}>{t("library.menu.delete")}</button>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            ) : null}
-            <form
-              className="mt-2 flex gap-1"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const value = tagDraft[skill.id]?.trim();
-                if (value) onAddTag(skill.id, value);
-                setTagDraft((current) => ({ ...current, [skill.id]: "" }));
-              }}
-            >
-              <input
-                aria-label={`${t("library.tag.add")} ${skill.name}`}
-                value={tagDraft[skill.id] ?? ""}
-                onChange={(event) => setTagDraft((current) => ({ ...current, [skill.id]: event.target.value }))}
-                className="w-24 rounded-md border border-input px-1 py-0.5 text-xs"
-              />
-              <button type="submit" className="text-xs">{t("library.tag.add")}</button>
-            </form>
+              <div className="mt-2 flex flex-wrap items-center gap-1 px-3">
+                {skill.draft ? <Badge data-testid="draft-badge" variant="warning">{t("library.badge.draft")}</Badge> : null}
+                {badgeFor(seed, skill.id) === "tested" ? <Badge data-testid="tested-badge" variant="success">{t("library.badge.tested")}</Badge> : null}
+                {badgeFor(seed, skill.id) === "regressed" ? <Badge data-testid="regressed-badge" variant="warning">{t("library.badge.regressed")}</Badge> : null}
+                {skill.tags.map((item) => (
+                  <Badge key={item} variant="secondary" className="group/tag gap-0.5 pr-1 font-normal">
+                    {item}
+                    <button type="button" aria-label={`${t("library.tag.remove")} ${item}`} title={`${t("library.tag.remove")} ${item}`} className="rounded-full opacity-0 group-hover/tag:opacity-100" onClick={() => onRemoveTag(skill.id, item)}>
+                      <XIcon className="size-3" aria-hidden="true" />
+                    </button>
+                  </Badge>
+                ))}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon-xs" aria-label={t("library.tag.add")} title={t("library.tag.add")} className="opacity-0 group-hover/card:opacity-100">
+                      <PlusIcon aria-hidden="true" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 p-2" align="start">
+                    <form
+                      className="flex gap-1"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const value = tagDraft[skill.id]?.trim();
+                        if (value) onAddTag(skill.id, value);
+                        setTagDraft((current) => ({ ...current, [skill.id]: "" }));
+                      }}
+                    >
+                      <Input aria-label={`${t("library.tag.add")} ${skill.name}`} value={tagDraft[skill.id] ?? ""} onChange={(event) => setTagDraft((current) => ({ ...current, [skill.id]: event.target.value }))} className="h-8" />
+                      <Button type="submit" size="sm">{t("library.tag.add")}</Button>
+                    </form>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-border px-3 py-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge variant="outline" className="font-normal">{skill.source}</Badge>
+                  <span className="relative inline-flex size-4 items-center justify-center" title={t("library.membership")}>
+                    <span
+                      aria-hidden="true"
+                      className={cn("size-2 rounded-full", memberIds.includes(skill.id) ? "bg-primary shadow-[0_0_0_3px_var(--muted)]" : "bg-muted-foreground/30")}
+                    />
+                    <Checkbox
+                      aria-label={`${t("library.membership")} ${skill.name}`}
+                      checked={memberIds.includes(skill.id)}
+                      onCheckedChange={() => onToggleMember(skill.id)}
+                      className="absolute inset-0 opacity-0 focus-visible:opacity-100"
+                    />
+                  </span>
+                  {memberIds.includes(skill.id) ? <span className="truncate text-xs text-muted-foreground">{presetName}</span> : null}
+                </div>
+                <div className="flex gap-1" data-testid={`sync-dots-${skill.id}`}>
+                  {skill.agents.map((agent) => (
+                    <span key={agent} data-filled="true" title={agent} className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                      {agentLabel(agent)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </Card>
           </li>
         ))}
       </ul>
       {open ? (
-        <aside data-testid="detail-panel" className="mt-4 rounded-lg border border-border p-3">
-          <div className="flex flex-wrap gap-2">
+        <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
+          <div className="inline-flex rounded-lg bg-muted p-0.5">
             {(["local", "diff", "source", "edit"] as const).map((item) => (
-              <button key={item} type="button" aria-pressed={tab === item} className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setTab(item)}>
+              <Button key={item} type="button" aria-pressed={tab === item} variant="ghost" size="sm" className={cn("h-7", tab === item && "bg-background shadow-sm")} onClick={() => setTab(item)}>
                 {t(`library.detail.${item}`)}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {["claude_code", "codex"].map((agent) => (
-              <button
-                key={agent}
-                type="button"
-                aria-pressed={open.agents.includes(agent)}
-                className="rounded-md border border-border px-2 py-1 text-xs"
-                onClick={() => onToggleAgent(open.id, agent)}
-              >
+              <Button key={agent} type="button" aria-pressed={open.agents.includes(agent)} variant={open.agents.includes(agent) ? "secondary" : "outline"} size="sm" onClick={() => onToggleAgent(open.id, agent)}>
                 {agent}
-              </button>
+              </Button>
             ))}
           </div>
           {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
-          {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap text-sm">{open.body}</pre> : null}
-          {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap text-sm">{open.sourceBody}</pre> : null}
+          {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.body}</pre> : null}
+          {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.sourceBody}</pre> : null}
           {tab === "diff" ? (
             <>
               <ul data-testid="diff-view" className="mt-2 font-mono text-sm">
@@ -332,9 +395,9 @@ export function LibraryView({
               </ul>
             </>
           ) : null}
-          <p className="mt-3 text-sm">{t("library.detail.projects")}</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("library.detail.projects")}</p>
         </aside>
       ) : null}
-    </section>
+    </Screen>
   );
 }

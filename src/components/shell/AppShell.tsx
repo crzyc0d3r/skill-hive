@@ -1,8 +1,50 @@
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  ArchiveIcon,
+  BotIcon,
+  DownloadIcon,
+  GripVerticalIcon,
+  HexagonIcon,
+  LayoutDashboardIcon,
+  LibraryIcon,
+  PencilIcon,
+  PlusIcon,
+  SettingsIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 import { NAV_ITEMS } from "../../app/routes";
 import { BASE_LISTING_KEY, SKILLS_KEY } from "../../lib/events/files";
 import { listBaseEntries } from "../../lib/ipc/settings";
@@ -20,6 +62,15 @@ import { CloseGuardDialog } from "./CloseGuardDialog";
 import { HelpDialog } from "./HelpDialog";
 import { Kbd } from "../Kbd";
 import { StatusBanner } from "../StatusBanner";
+
+const NAV_ICONS: Record<string, typeof LayoutDashboardIcon> = {
+  "/": LayoutDashboardIcon,
+  "/my-skills": LibraryIcon,
+  "/agents": BotIcon,
+  "/install": DownloadIcon,
+  "/backup": ArchiveIcon,
+  "/settings": SettingsIcon,
+};
 
 const ACTIONS = [
   { id: "settings", label: "Open Settings", href: "/settings" },
@@ -214,133 +265,187 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   });
 
   const title = NAV_ITEMS.find((item) => item.path === location.pathname)?.nav ?? "Skill Hive";
+  const primaryNav = NAV_ITEMS.filter((item) => item.path !== "/settings");
+  const grouped = ["Skills", "Presets", "Actions"]
+    .map((group) => ({ group, items: matches.filter((item) => item.group === group) }))
+    .filter((group) => group.items.length > 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="flex h-full min-h-0 flex-col bg-background font-sans text-foreground">
       {platform === "mac" ? (
         <div data-testid="drag-strip" data-tauri-drag-region className="h-7 shrink-0 bg-sidebar" />
       ) : null}
       <StatusBanner message={banner} onRetry={() => setReloadKey((value) => value + 1)} />
-      <div className="flex min-h-0 flex-1">
-        <aside
+      <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)} className="h-full min-h-0 flex-1">
+        <Sidebar
+          collapsible="none"
           data-testid="sidebar"
           data-collapsed={collapsed ? "true" : "false"}
-          className="flex shrink-0 flex-col border-r border-border bg-sidebar"
-          style={{ width: collapsed ? "56px" : "240px" }}
+          className="h-full shrink-0 border-r border-sidebar-border bg-sidebar"
+          style={{ width: collapsed ? 56 : 240 }}
         >
-          <div className="flex h-11 items-center px-3 font-mono text-sm font-medium">
-            {collapsed ? "SH" : "Skill Hive"}
-          </div>
-          <nav aria-label="Primary" className="flex flex-1 flex-col gap-1 overflow-auto px-2">
-            {NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                title={item.nav}
-                className={({ isActive }) =>
-                  `flex h-8 items-center rounded-md px-2 text-sm ${
-                    isActive ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-                  }`
-                }
-              >
-                {collapsed ? item.nav?.slice(0, 1) : item.nav}
-              </NavLink>
-            ))}
-            <div className="mt-3 px-2 text-xs text-muted-foreground">{t("workspace.title")}</div>
-            <NavLink to="/global-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
-              {collapsed ? "G" : t("workspace.allAgents")}
-            </NavLink>
-            {(agents.data ?? []).filter((agent) => agent.installed && agent.enabled).map((agent) => (
-              <NavLink key={agent.key} to={`/global-workspace/${agent.key}`} className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
-                {collapsed ? agent.name.slice(0, 1) : agent.name}
-              </NavLink>
-            ))}
-            <div className="mt-3 px-2 text-xs text-muted-foreground">Presets</div>
-            {shownPresets.map((preset) => (
-              <div
-                key={preset.id}
-                draggable
-                data-preset={preset.id}
-                onDragStart={() => setDragPreset(preset.id)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => {
-                  if (!dragPreset) return;
-                  const next = moveById(shownPresets, dragPreset, preset.id, (item) => item.id);
-                  setPresetRows(next);
-                  void reorderPresets(next.map((item) => item.id));
-                  setDragPreset(null);
-                }}
-                className="flex items-center gap-1"
-              >
-                <NavLink to="/global-workspace" className="flex h-8 min-w-0 flex-1 items-center rounded-md px-2 text-sm hover:bg-accent">
-                  {collapsed ? preset.name.slice(0, 1) : preset.name}
-                </NavLink>
-                {collapsed ? null : (
-                  <>
-                    <button type="button" className="text-xs" aria-label={`${t("preset.edit")} ${preset.name}`} onClick={() => { setEditingPreset(preset.id); setPresetName(preset.name); }}>{t("preset.edit")}</button>
-                    <button type="button" className="text-xs" aria-label={`${t("preset.delete")} ${preset.name}`} onClick={() => { setPresetRows(shownPresets.filter((item) => item.id !== preset.id)); void deletePreset(preset.id); }}>{t("preset.delete")}</button>
-                  </>
-                )}
-              </div>
-            ))}
-            {editingPreset ? (
-              <form
-                className="flex gap-1 px-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setPresetRows(shownPresets.map((preset) => preset.id === editingPreset ? { ...preset, name: presetName } : preset));
-                  void updatePreset(editingPreset, presetName);
-                  setEditingPreset(null);
-                }}
-              >
-                <input aria-label={t("preset.edit")} value={presetName} onChange={(event) => setPresetName(event.target.value)} className="w-full rounded-md border border-input px-1 py-0.5 text-xs" />
-                <button type="submit" className="text-xs">{t("preset.save")}</button>
-              </form>
-            ) : null}
-            <button
-              type="button"
-              className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent"
-              onClick={() => {
-                const name = presetName.trim() || "Preset";
-                void createPreset(name).then((id) => {
-                  setPresetRows([...shownPresets, { id, name, skillIds: [], synced: 0 }]);
-                  void rebuildTrayMenu();
-                });
-              }}
-            >
-              {collapsed ? "+" : t("preset.new")}
-            </button>
-            <div className="mt-3 px-2 text-xs text-muted-foreground">{t("sidebar.projects")}</div>
-            <NavLink to="/project/fixture" className="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-accent">
-              <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block h-2 w-2 rounded-full bg-current" />
-              {collapsed ? "P" : t("project.title")}
-            </NavLink>
-            {lobsterRows.length === 0 ? null : (
-              <>
-                <div className="mt-3 px-2 text-xs text-muted-foreground">{t("lobster.title")}</div>
-                <NavLink to="/lobster-workspace" className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
-                  {collapsed ? "L" : t("lobster.all")}
-                </NavLink>
-                {lobsterRows.map((agent) => (
-                  <NavLink key={agent.key} to={`/lobster-workspace/${agent.key}`} className="flex h-8 items-center rounded-md px-2 text-sm hover:bg-accent">
-                    {collapsed ? agent.name.slice(0, 1) : agent.name}
-                  </NavLink>
+          <SidebarHeader className="h-11 justify-center border-b border-sidebar-border px-3">
+            <div className="flex items-center gap-2 font-mono text-sm font-semibold tracking-tight">
+              <HexagonIcon className="size-4 shrink-0" aria-hidden="true" />
+              {collapsed ? <span className="sr-only">Skill Hive</span> : <span>Skill Hive</span>}
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarMenu>
+                {primaryNav.map((item) => {
+                  const Icon = NAV_ICONS[item.path] ?? HexagonIcon;
+                  return (
+                    <SidebarMenuItem key={item.path}>
+                      <SidebarMenuButton asChild isActive={location.pathname === item.path} tooltip={item.nav}>
+                        <NavLink to={item.path} title={item.nav}>
+                          <Icon aria-hidden="true" />
+                          {collapsed ? <span className="sr-only">{item.nav}</span> : <span>{item.nav}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+            <SidebarGroup>
+              <SidebarGroupLabel>{t("workspace.title")}</SidebarGroupLabel>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.pathname === "/global-workspace"}>
+                    <NavLink to="/global-workspace">{collapsed ? "G" : t("workspace.allAgents")}</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                {(agents.data ?? []).filter((agent) => agent.installed && agent.enabled).map((agent) => (
+                  <SidebarMenuItem key={agent.key}>
+                    <SidebarMenuButton asChild isActive={location.pathname === `/global-workspace/${agent.key}`}>
+                      <NavLink to={`/global-workspace/${agent.key}`}>{collapsed ? agent.name.slice(0, 1) : `${agent.name}\u200b`}</NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 ))}
-              </>
+              </SidebarMenu>
+            </SidebarGroup>
+            <SidebarGroup>
+              <SidebarGroupLabel>Presets</SidebarGroupLabel>
+              <SidebarMenu>
+                {shownPresets.map((preset) => (
+                  <SidebarMenuItem key={preset.id}>
+                    <div
+                      draggable
+                      data-preset={preset.id}
+                      onDragStart={() => setDragPreset(preset.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => {
+                        if (!dragPreset) return;
+                        const next = moveById(shownPresets, dragPreset, preset.id, (item) => item.id);
+                        setPresetRows(next);
+                        void reorderPresets(next.map((item) => item.id));
+                        setDragPreset(null);
+                      }}
+                      className="group/preset relative flex items-center"
+                    >
+                      <SidebarMenuButton asChild className="flex-1">
+                        <NavLink to="/global-workspace">
+                          {collapsed ? preset.name.slice(0, 1) : preset.name}
+                          {collapsed || preset.skillIds.length === 0 ? null : <span aria-hidden="true" className="ml-auto text-xs text-muted-foreground tabular-nums group-hover/preset:invisible">{preset.skillIds.length}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                      {collapsed ? null : (
+                        <div className="absolute right-1 flex items-center rounded-md bg-sidebar opacity-0 transition-opacity group-hover/preset:opacity-100">
+                          <Button type="button" size="icon-xs" variant="ghost" title={t("library.reorder")} aria-label={`${t("library.reorder")} ${preset.name}`}>
+                            <GripVerticalIcon aria-hidden="true" />
+                          </Button>
+                          <Button type="button" size="icon-xs" variant="ghost" title={t("preset.edit")} aria-label={`${t("preset.edit")} ${preset.name}`} onClick={() => { setEditingPreset(preset.id); setPresetName(preset.name); }}>
+                            <PencilIcon aria-hidden="true" />
+                            <span className="sr-only">{t("preset.edit")}</span>
+                          </Button>
+                          <Button type="button" size="icon-xs" variant="ghost" title={t("preset.delete")} aria-label={`${t("preset.delete")} ${preset.name}`} onClick={() => { setPresetRows(shownPresets.filter((item) => item.id !== preset.id)); void deletePreset(preset.id); }}>
+                            <Trash2Icon aria-hidden="true" />
+                            <span className="sr-only">{t("preset.delete")}</span>
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+              {editingPreset ? (
+                <form
+                  className="flex gap-1 px-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setPresetRows(shownPresets.map((preset) => preset.id === editingPreset ? { ...preset, name: presetName } : preset));
+                    void updatePreset(editingPreset, presetName);
+                    setEditingPreset(null);
+                  }}
+                >
+                  <Input aria-label={t("preset.edit")} value={presetName} onChange={(event) => setPresetName(event.target.value)} className="h-8 text-xs" />
+                  <Button type="submit" size="xs" variant="secondary">{t("preset.save")}</Button>
+                </form>
+              ) : null}
+              <Button type="button" variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => { const name = presetName.trim() || "Preset"; void createPreset(name).then((id) => { setPresetRows([...shownPresets, { id, name, skillIds: [], synced: 0 }]); void rebuildTrayMenu(); }); }}>
+                <PlusIcon aria-hidden="true" />
+                {collapsed ? <span className="sr-only">{t("preset.new")}</span> : t("preset.new")}
+              </Button>
+            </SidebarGroup>
+            <SidebarGroup>
+              <SidebarGroupLabel>{t("sidebar.projects")}</SidebarGroupLabel>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink to="/project/fixture" className="flex items-center gap-2">
+                      <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block size-2 rounded-full bg-info" />
+                      {collapsed ? "P" : t("project.title")}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+            {lobsterRows.length === 0 ? null : (
+              <SidebarGroup>
+                <SidebarGroupLabel>{t("lobster.title")}</SidebarGroupLabel>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <NavLink to="/lobster-workspace">{collapsed ? "L" : t("lobster.all")}</NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {lobsterRows.map((agent) => (
+                    <SidebarMenuItem key={agent.key}>
+                      <SidebarMenuButton asChild>
+                        <NavLink to={`/lobster-workspace/${agent.key}`}>{collapsed ? agent.name.slice(0, 1) : agent.name}</NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
             )}
-          </nav>
-        </aside>
-        <div className="flex min-w-0 flex-1 flex-col">
+          </SidebarContent>
+          <SidebarFooter className="border-t border-sidebar-border">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.pathname.startsWith("/settings")}>
+                  <NavLink to="/settings">
+                    <SettingsIcon aria-hidden="true" />
+                    {collapsed ? <span className="sr-only">Settings</span> : <span>Settings</span>}
+                    {showUpdate && !collapsed ? <span className="ml-auto size-2 rounded-full bg-warning" aria-hidden="true" /> : null}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
           <header
             data-testid="header"
-            className="sticky top-0 z-10 flex h-11 items-center justify-between border-b border-border bg-background px-4"
+            className="sticky top-0 z-10 flex h-11 items-center justify-between gap-3 border-b border-border bg-background px-6"
           >
-            <div data-testid="breadcrumb" className="text-sm text-muted-foreground">
-              {title}
+            <div className="min-w-0">
+              <div data-testid="breadcrumb" className="truncate font-mono text-[18px] font-medium leading-7 tracking-tight">{title}</div>
             </div>
-            <div data-testid="toolbar" className="flex items-center gap-2 text-xs text-muted-foreground">
-              <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setHelpOpen(true)}>{t("help.title")}</button>
-              <button type="button" data-testid="request-close" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setCloseOpen(true)}>{t("close.dialog")}</button>
+            <div data-testid="toolbar" className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => setHelpOpen(true)}>{t("help.title")}</Button>
+              <Button type="button" size="sm" variant="outline" data-testid="request-close" onClick={() => setCloseOpen(true)}>{t("close.dialog")}</Button>
               <Kbd>Mod+K</Kbd>
             </div>
           </header>
@@ -349,51 +454,51 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             className="min-h-0 flex-1 overflow-auto px-6 py-4"
             style={{ scrollPaddingTop: "44px" }}
           >
-            <Outlet
-              context={{
-                listing: listing.data ?? [],
-                skills: skills.data ?? [],
-                presets: shownPresets,
-                setPresets: (next: PresetRow[]) => setPresetRows(next),
-                agents: ((agents.data ?? []) as AgentRow[]).filter((agent) => agent.installed && agent.enabled),
-                theme,
-                setTheme: (choice: ThemeChoice) => {
-                  setTheme(choice);
-                  applyTheme(choice);
-                  void setSettings("theme", choice);
-                },
-              }}
-            />
+            <div className="mx-auto w-full max-w-[1280px]">
+              <Outlet
+                context={{
+                  listing: listing.data ?? [],
+                  skills: skills.data ?? [],
+                  presets: shownPresets,
+                  setPresets: (next: PresetRow[]) => setPresetRows(next),
+                  agents: ((agents.data ?? []) as AgentRow[]).filter((agent) => agent.installed && agent.enabled),
+                  theme,
+                  setTheme: (choice: ThemeChoice) => {
+                    setTheme(choice);
+                    applyTheme(choice);
+                    void setSettings("theme", choice);
+                  },
+                }}
+              />
+            </div>
           </main>
         </div>
-      </div>
+      </SidebarProvider>
       <footer
         role="status"
         data-testid="status-bar"
-        className="flex h-6 items-center justify-between border-t border-border bg-sidebar px-3 text-xs text-muted-foreground"
+        className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-border bg-sidebar px-3 text-xs text-muted-foreground"
       >
-        <span>{authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : "Ready"}</span>
+        <span className="flex items-center gap-2">
+          <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+          {authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : "Ready"}
+        </span>
         <Link to="/runs/run-fixture" data-testid="run-chip" className="rounded px-1 hover:bg-accent">{t("run.chip")}</Link>
-        <span>Skill Hive 1.0.0</span>
+        <span className="font-mono tabular-nums">Skill Hive 1.0.0</span>
       </footer>
-      {paletteOpen ? (
-        <div
-          data-testid="command-palette"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Command palette"
-          className="fixed inset-0 z-[60] flex items-start justify-center bg-[rgb(15_23_42/0.4)] pt-24"
-          onMouseDown={() => setPaletteOpen(false)}
-        >
-          <div
-            className="w-[32rem] max-w-[90vw] rounded-lg border border-border bg-popover p-3 shadow-md"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <input
+      <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>
+        <DialogContent data-testid="command-palette" aria-label="Command palette" className="top-[18%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg" showCloseButton={false}>
+          <DialogHeader className="sr-only">
+            <DialogTitle>Command palette</DialogTitle>
+            <DialogDescription>Jump to a skill, agent, or action.</DialogDescription>
+          </DialogHeader>
+          <Command shouldFilter={false} label="Command search">
+            <CommandInput
               autoFocus
               aria-label="Command search"
+              placeholder="Jump to skill, agent, run, action…"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onValueChange={setQuery}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && matches[0]) {
                   event.preventDefault();
@@ -401,70 +506,64 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   runAction(matches[0].href, navigate);
                 }
               }}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
-            <ul className="mt-2">
-              {matches.length === 0 ? (
-                <li className="px-2 py-3 text-sm text-muted-foreground">{t("palette.empty", { query })}</li>
-              ) : (
-                matches.map((action) => (
-                  <li key={`${action.group}-${action.id}`}>
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
-                      onClick={() => {
+            <CommandList>
+              {matches.length === 0 ? <CommandEmpty>{t("palette.empty", { query })}</CommandEmpty> : null}
+              {grouped.map((group) => (
+                <CommandGroup key={group.group} heading={group.group}>
+                  {group.items.map((action) => (
+                    <CommandItem
+                      key={`${action.group}-${action.id}`}
+                      value={`${action.group}-${action.id}`}
+                      onSelect={() => {
                         setPaletteOpen(false);
                         runAction(action.href, navigate);
                       }}
                     >
                       <span>{action.label}</span>
                       <Kbd>Enter</Kbd>
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-      {shortcutsOpen ? (
-        <div role="dialog" aria-label={t("shortcuts.title")} className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
-          <div className="rounded-lg border border-border bg-popover p-4">
-            <h2 className="font-medium">{t("shortcuts.title")}</h2>
-            <ul className="mt-2 space-y-1 text-sm">
-              {shortcutRows.map((item) => (
-                <li key={item.id} className="flex items-center gap-2">
-                  <span>Mod+{item.id}</span>
-                  <input
-                    aria-label={`Shortcut ${item.id}`}
-                    value={item.href}
-                    onChange={(event) => setShortcutRows((current) => current.map((row) => row.id === item.id ? { ...row, href: event.target.value } : row))}
-                    className="rounded-md border border-input px-1 py-0.5"
-                  />
-                </li>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
               ))}
-              <li>Mod+F</li>
-              <li>Mod+/</li>
-            </ul>
-            <button
-              type="button"
-              className="mt-3 rounded-md border border-border px-2 py-1 text-sm"
-              onClick={() => {
-                void setSettings("shortcuts", JSON.stringify(shortcutRows));
-              }}
-            >
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent aria-label={t("shortcuts.title")} className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t("shortcuts.title")}</DialogTitle>
+            <DialogDescription>Remap the numbered jumps. Every shortcut keeps a modifier.</DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-2 text-sm">
+            {shortcutRows.map((item) => (
+              <li key={item.id} className="flex items-center gap-2">
+                <Kbd>{`Mod+${item.id}`}</Kbd>
+                <Input aria-label={`Shortcut ${item.id}`} value={item.href} onChange={(event) => setShortcutRows((current) => current.map((row) => row.id === item.id ? { ...row, href: event.target.value } : row))} className="h-8" />
+              </li>
+            ))}
+            <li className="text-muted-foreground">Mod+F</li>
+            <li className="text-muted-foreground">Mod+/</li>
+          </ul>
+          <div className="flex justify-end gap-2">
+            <Button type="button" size="sm" onClick={() => { void setSettings("shortcuts", JSON.stringify(shortcutRows)); }}>
               {t("shortcuts.save")}
-            </button>
-            <button type="button" className="mt-3 ml-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => setShortcutsOpen(false)}>
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setShortcutsOpen(false)}>
               Close
-            </button>
+            </Button>
           </div>
-        </div>
-      ) : null}
-      {authoring.picker ? (
-        <div role="dialog" aria-label={t("editor.template.title")} className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(15_23_42/0.4)]">
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(authoring.picker)} onOpenChange={(open) => { if (!open) closePicker(); }}>
+        <DialogContent aria-label={t("editor.template.title")} className="sm:max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t("editor.template.title")}</DialogTitle>
+            <DialogDescription>Start from a template. The name becomes the directory.</DialogDescription>
+          </DialogHeader>
           <form
-            className="w-80 rounded-lg border border-border bg-popover p-4"
+            className="space-y-3"
             onSubmit={(event) => {
               event.preventDefault();
               if (authoring.picker === "skill") {
@@ -476,24 +575,25 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
               }
             }}
           >
-            <h2 className="font-medium">{t("editor.template.title")}</h2>
-            <div className="mt-2 flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
               {SKILL_TEMPLATES.map((item) => (
-                <button key={item.id} type="button" aria-pressed={templateId === item.id} className="rounded-md border border-border px-2 py-1 text-left text-sm" onClick={() => setTemplateId(item.id)}>
+                <Button key={item.id} type="button" variant={templateId === item.id ? "default" : "outline"} size="sm" aria-pressed={templateId === item.id} className="justify-start" onClick={() => setTemplateId(item.id)}>
                   {t(item.labelKey)}
-                </button>
+                </Button>
               ))}
             </div>
-            <input aria-label={t("editor.template.name")} value={templateName} onChange={(event) => setTemplateName(event.target.value)} className="mt-2 w-full rounded-md border border-input px-2 py-1 text-sm" />
-            <button type="submit" className="mt-2 rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground">{t("editor.template.create")}</button>
-            <button type="button" className="mt-2 ml-2 rounded-md border border-border px-2 py-1 text-sm" onClick={() => closePicker()}>{t("agents.cancel")}</button>
+            <Input aria-label={t("editor.template.name")} value={templateName} onChange={(event) => setTemplateName(event.target.value)} className="h-8" />
+            <div className="flex justify-end gap-2">
+              <Button type="submit" size="sm">{t("editor.template.create")}</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => closePicker()}>{t("agents.cancel")}</Button>
+            </div>
           </form>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
       {showUpdate || restartNow ? (
-        <div role="status" data-testid="update-toast" className="fixed bottom-8 right-3 z-50 rounded-md border border-border bg-popover px-3 py-2 text-sm">
+        <div role="status" data-testid="update-toast" className="fixed right-3 bottom-8 z-[70] rounded-lg border border-border bg-popover px-3 py-2 text-sm shadow-lg">
           {restartNow ? (
-            <button type="button" onClick={() => setRestartNow(true)}>{t("settings.about.restart")}</button>
+            <Button type="button" size="sm" onClick={() => setRestartNow(true)}>{t("settings.about.restart")}</Button>
           ) : (
             t("startup.toast")
           )}
@@ -509,7 +609,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           onClose={() => setCloseOpen(false)}
         />
       ) : null}
-      <Toaster />
+      <Toaster position="bottom-right" />
     </div>
   );
 }

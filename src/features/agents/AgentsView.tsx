@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { EmptyState, Screen } from "@/components/chrome";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { t } from "@/lib/i18n";
-import { agentBudget, importAgent, useAuthoring } from "@/lib/authoring/store";
+import { demoEnabled } from "@/lib/demo";
+import { agentBudget, ensureAgent, importAgent, useAuthoring } from "@/lib/authoring/store";
 
 export function AgentsView() {
   const authoring = useAuthoring();
@@ -9,29 +15,35 @@ export function AgentsView() {
   const [collision, setCollision] = useState(false);
   const agents = Object.values(authoring.agents);
   const budget = agentBudget();
+  useEffect(() => {
+    if (demoEnabled() && agents.length === 0) ensureAgent("reviewer");
+  }, [agents.length]);
 
   return (
-    <section data-testid="agents">
-      <h1 className="font-mono text-[22px] font-semibold">{t("agents.title")}</h1>
-      <p data-testid="description-budget" data-amber={budget.amber ? "true" : "false"} className={budget.amber ? "text-warning-text" : "text-muted-foreground"}>
-        {t("agents.budget")} {budget.tokens}
-      </p>
+    <Screen
+      testId="agents"
+      title={t("agents.title")}
+      lede={<span data-testid="description-budget" data-amber={budget.amber ? "true" : "false"} className={budget.amber ? "text-warning-text" : undefined}>{t("agents.budget")} {budget.tokens}</span>}
+    >
       <form
-        className="mt-3 flex gap-2"
+        className="flex max-w-xl flex-wrap items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           if (agents.some((agent) => agent.name === importName)) setCollision(true);
           else importAgent(importName, "replace");
         }}
       >
-        <input aria-label={t("agents.import")} value={importName} onChange={(event) => setImportName(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
-        <button type="submit" className="rounded-md border border-border px-2 py-1 text-sm">{t("agents.import")}</button>
+        <Input aria-label={t("agents.import")} value={importName} onChange={(event) => setImportName(event.target.value)} className="h-8 w-56" />
+        <Button type="submit" size="sm">{t("agents.import")}</Button>
       </form>
-      <ul className="mt-4 space-y-2">
+      {agents.length === 0 ? <EmptyState title={t("agents.title")} /> : null}
+      <ul className="grid gap-2 sm:grid-cols-2">
         {agents.map((agent) => (
-          <li key={agent.id} className="rounded-md border border-border p-3">
-            <Link to={`/agents/${agent.id}/edit`}>{agent.name}</Link>
-            <span className="ml-2 rounded-full border border-border px-2 text-xs">{t("library.badge.draft")}</span>
+          <li key={agent.id}>
+            <Card className="flex-row items-center justify-between rounded-lg border-border px-3 py-3 shadow-none">
+              <Link to={`/agents/${agent.id}/edit`} className="text-sm font-medium">{agent.name}</Link>
+              <Badge variant="secondary">{t("library.badge.draft")}</Badge>
+            </Card>
           </li>
         ))}
       </ul>
@@ -43,6 +55,6 @@ export function AgentsView() {
           <button type="button" className="text-sm" onClick={() => setCollision(false)}>{t("agents.cancel")}</button>
         </div>
       ) : null}
-    </section>
+    </Screen>
   );
 }

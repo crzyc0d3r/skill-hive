@@ -64,6 +64,7 @@ describe("library", () => {
     });
     await user.click(screen.getByRole("button", { name: "Delete tag" }));
     expect(screen.queryByRole("button", { name: "research" })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Card menu" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.queryByText("research-notes")).not.toBeInTheDocument();
   });
