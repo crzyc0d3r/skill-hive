@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { InboxIcon } from "lucide-react";
+import { InboxIcon, SearchIcon } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -35,13 +35,16 @@ export function Screen({
   );
 }
 
-export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+export function Stat({ label, value, hint, icon }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode }) {
   return (
     <Card className="gap-1 rounded-lg border-border bg-card py-3 shadow-none">
-      <div className="px-3">
-        <div className="text-xs font-medium text-muted-foreground">{label}</div>
-        <div className="font-mono text-[28px] font-semibold leading-9 tracking-tight tabular-nums">{value}</div>
-        {hint ? <div className="text-xs text-muted-foreground">{hint}</div> : null}
+      <div className="flex items-start justify-between gap-3 px-3">
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-muted-foreground">{label}</div>
+          <div className="font-mono text-[28px] font-semibold leading-9 tracking-tight tabular-nums">{value}</div>
+          {hint ? <div className="text-xs text-muted-foreground">{hint}</div> : null}
+        </div>
+        {icon ? <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">{icon}</div> : null}
       </div>
     </Card>
   );
@@ -79,7 +82,12 @@ export function EmptyState({ title, action }: { title: string; action?: ReactNod
 }
 
 export function SearchField(props: React.ComponentProps<typeof Input>) {
-  return <Input {...props} className={cn("h-8 w-56 max-w-full bg-background text-[13px]", props.className)} />;
+  return (
+    <div className="relative w-56 max-w-full">
+      <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+      <Input {...props} className={cn("h-8 bg-background pl-8 text-[13px]", props.className)} />
+    </div>
+  );
 }
 
 export function TextField(props: React.ComponentProps<typeof Input>) {

@@ -4,10 +4,14 @@ import {
   ArchiveIcon,
   BotIcon,
   DownloadIcon,
+  GripVerticalIcon,
   HexagonIcon,
   LayoutDashboardIcon,
   LibraryIcon,
+  PencilIcon,
+  PlusIcon,
   SettingsIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -338,16 +342,28 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                         void reorderPresets(next.map((item) => item.id));
                         setDragPreset(null);
                       }}
-                      className="flex items-center gap-1"
+                      className="group/preset relative flex items-center"
                     >
                       <SidebarMenuButton asChild className="flex-1">
-                        <NavLink to="/global-workspace">{collapsed ? preset.name.slice(0, 1) : preset.name}</NavLink>
+                        <NavLink to="/global-workspace">
+                          {collapsed ? preset.name.slice(0, 1) : preset.name}
+                          {collapsed || preset.skillIds.length === 0 ? null : <span aria-hidden="true" className="ml-auto text-xs text-muted-foreground tabular-nums group-hover/preset:invisible">{preset.skillIds.length}</span>}
+                        </NavLink>
                       </SidebarMenuButton>
                       {collapsed ? null : (
-                        <>
-                          <Button type="button" size="xs" variant="ghost" aria-label={`${t("preset.edit")} ${preset.name}`} onClick={() => { setEditingPreset(preset.id); setPresetName(preset.name); }}>{t("preset.edit")}</Button>
-                          <Button type="button" size="xs" variant="ghost" aria-label={`${t("preset.delete")} ${preset.name}`} onClick={() => { setPresetRows(shownPresets.filter((item) => item.id !== preset.id)); void deletePreset(preset.id); }}>{t("preset.delete")}</Button>
-                        </>
+                        <div className="absolute right-1 flex items-center rounded-md bg-sidebar opacity-0 transition-opacity group-hover/preset:opacity-100">
+                          <Button type="button" size="icon-xs" variant="ghost" title={t("library.reorder")} aria-label={`${t("library.reorder")} ${preset.name}`}>
+                            <GripVerticalIcon aria-hidden="true" />
+                          </Button>
+                          <Button type="button" size="icon-xs" variant="ghost" title={t("preset.edit")} aria-label={`${t("preset.edit")} ${preset.name}`} onClick={() => { setEditingPreset(preset.id); setPresetName(preset.name); }}>
+                            <PencilIcon aria-hidden="true" />
+                            <span className="sr-only">{t("preset.edit")}</span>
+                          </Button>
+                          <Button type="button" size="icon-xs" variant="ghost" title={t("preset.delete")} aria-label={`${t("preset.delete")} ${preset.name}`} onClick={() => { setPresetRows(shownPresets.filter((item) => item.id !== preset.id)); void deletePreset(preset.id); }}>
+                            <Trash2Icon aria-hidden="true" />
+                            <span className="sr-only">{t("preset.delete")}</span>
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </SidebarMenuItem>
@@ -367,8 +383,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   <Button type="submit" size="xs" variant="secondary">{t("preset.save")}</Button>
                 </form>
               ) : null}
-              <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => { const name = presetName.trim() || "Preset"; void createPreset(name).then((id) => { setPresetRows([...shownPresets, { id, name, skillIds: [], synced: 0 }]); void rebuildTrayMenu(); }); }}>
-                {collapsed ? "+" : t("preset.new")}
+              <Button type="button" variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => { const name = presetName.trim() || "Preset"; void createPreset(name).then((id) => { setPresetRows([...shownPresets, { id, name, skillIds: [], synced: 0 }]); void rebuildTrayMenu(); }); }}>
+                <PlusIcon aria-hidden="true" />
+                {collapsed ? <span className="sr-only">{t("preset.new")}</span> : t("preset.new")}
               </Button>
             </SidebarGroup>
             <SidebarGroup>
