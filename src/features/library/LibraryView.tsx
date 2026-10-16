@@ -266,11 +266,12 @@ export function LibraryView({
           <li key={skill.id}>
             <Card className={cn("group/card gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "flex-row")}>
               <div className="flex items-start gap-2.5 px-3 pt-3">
-                <Checkbox
+                <input
+                  type="checkbox"
                   aria-label={`Select ${skill.name}`}
                   checked={selected.includes(skill.id)}
-                  onCheckedChange={() => toggleSelected(skill.id)}
-                  className={cn("mt-0.5", showChecks ? "opacity-100" : "opacity-0 group-hover/card:opacity-100")}
+                  onChange={() => toggleSelected(skill.id)}
+                  className="mt-1 size-4 shrink-0 rounded border-border accent-primary"
                 />
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                   <span className="block font-medium whitespace-normal">{skill.name}</span>
