@@ -51,11 +51,6 @@ export function BackupView() {
     void silent<string>("backup_device_name").then((name) => {
       if (typeof name === "string" && name) setDevice(name);
     });
-    void silent<SnapshotRow[]>("git_backup_list_versions", { limit: 50 }).then((versions) => {
-      if (Array.isArray(versions) && versions.length) {
-        setHistory((current) => (current.length ? current : versions));
-      }
-    });
     void silent<ConflictRow[]>("git_backup_pending_conflicts").then((rows) => {
       if (Array.isArray(rows)) setConflicts(rows.map((row) => ({ skillId: row.skillId, theirsCommit: row.theirsCommit })));
     });

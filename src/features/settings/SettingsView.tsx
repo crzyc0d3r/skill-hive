@@ -286,7 +286,7 @@ export function SettingsView({
             Diagnostics path
             <Input aria-label="Diagnostics path" value={diagnosticsPath} onChange={(event) => setDiagnosticsPath(event.target.value)} className="h-8 ml-2" />
           </label>
-          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void exportDiagnostics(diagnosticsPath).then(() => setExported(true)); void silent("export_logs_zip", { path: diagnosticsPath }); }}>{t("settings.about.export")}</Button>
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { const logs = diagnosticsPath ? `${diagnosticsPath}.logs.zip` : ""; void silent("export_logs_zip", { path: logs }); void exportDiagnostics(diagnosticsPath).then(() => setExported(true)); }}>{t("settings.about.export")}</Button>
           {exported ? <p role="status">{t("settings.about.exported")}</p> : null}
           {restartArmed ? <p role="status"><button type="button">{t("settings.about.restart")}</button></p> : null}
           <h2 className="mt-4 text-sm font-medium">{t("settings.about.ack")}</h2>

@@ -37,9 +37,7 @@ export function ProjectView() {
           <Button type="button" data-testid="link-project" size="sm" onClick={() => {
               setLinked(true);
               setProjectSkills([skill]);
-              void addProject("fixture", "").then((id) => {
-                if (typeof id === "string") void silent("reveal_project_folder", { id });
-              });
+              void addProject("fixture", "");
               void silent("add_linked_workspace", { name: skill.name, path: skill.name, agent: "claude_code" });
             }}
           >
