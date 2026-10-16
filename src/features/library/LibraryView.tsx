@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard } from "@/features/library/model";
@@ -7,7 +9,9 @@ import { useGenerate } from "@/features/generate/store";
 import { t } from "@/lib/i18n";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
 import { UpdateFlow } from "@/features/library/UpdateFlow";
-
+import { EmptyState, Screen, SearchField } from "@/components/chrome";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 export function LibraryView({
   skills,
   initialId,
@@ -71,59 +75,43 @@ export function LibraryView({
   const members = memberIds.map((id) => skills.find((skill) => skill.id === id)?.name ?? id);
 
   return (
-    <section data-testid="library">
-      <h1 className="font-mono text-[22px] font-semibold">{t("library.title")}</h1>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+    <Screen testId="library" title={t("library.title")}>
+      <div className="flex flex-wrap items-center gap-2">
         <GitStatusButton />
-        <span aria-disabled="true" className="rounded-md border border-border px-2 py-1 text-sm text-muted-foreground">{t("library.needsAttention")}</span>
+        <Button type="button" size="sm" variant="outline" disabled>{t("library.needsAttention")}</Button>
       </div>
       <UpdateFlow />
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchField
           aria-label={t("library.search")}
           data-search
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="rounded-md border border-input bg-background px-2 py-1 text-sm"
         />
-        {(["all", "enabled", "available"] as const).map((item) => (
-          <button
-            key={item}
-            type="button"
-            aria-pressed={filter === item}
-            className="rounded-md border border-border px-2 py-1 text-sm"
-            onClick={() => setFilter(item)}
-          >
-            {t(`library.filter.${item}`)}
-          </button>
-        ))}
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setLayout(layout === "grid" ? "list" : "grid")}>
+        <div role="group" aria-label={t("library.title")} className="flex gap-1">
+          {(["all", "enabled", "available"] as const).map((item) => (
+            <Button key={item} type="button" size="sm" variant={filter === item ? "default" : "outline"} aria-pressed={filter === item} onClick={() => setFilter(item)}>
+              {t(`library.filter.${item}`)}
+            </Button>
+          ))}
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={() => setLayout(layout === "grid" ? "list" : "grid")}>
           {layout === "grid" ? t("library.view.list") : t("library.view.grid")}
-        </button>
+        </Button>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         {sources.map((item) => (
-          <button key={item} type="button" className="rounded-full border border-border px-2 py-0.5 text-xs" onClick={() => setSource(source === item ? null : item)}>
+          <Button key={item} type="button" variant="outline" size="sm" onClick={() => setSource(source === item ? null : item)}>
             {item}
-          </button>
+          </Button>
         ))}
-        <button type="button" className="rounded-full border border-border px-2 py-0.5 text-xs" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
+        <Button type="button" variant="outline" size="sm" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
           Untagged
-        </button>
+        </Button>
         {tags.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className="rounded-full border border-border px-2 py-0.5 text-xs"
-            onClick={() => setTag(tag === item ? null : item)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setRename(item);
-              setRenameValue(item);
-            }}
-          >
+          <Button key={item} type="button" variant="outline" size="sm" onClick={() => setTag(tag === item ? null : item)} onContextMenu={(event) => { event.preventDefault(); setRename(item); setRenameValue(item); }}>
             {item}
-          </button>
+          </Button>
         ))}
       </div>
       {rename ? (
@@ -135,18 +123,11 @@ export function LibraryView({
             setRename(null);
           }}
         >
-          <input aria-label={t("library.tag.rename")} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
-          <button type="submit" className="rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground">{t("library.tag.rename")}</button>
-          <button
-            type="button"
-            className="rounded-md border border-border px-2 py-1 text-sm"
-            onClick={() => {
-              onDeleteTag(rename);
-              setRename(null);
-            }}
-          >
+          <Input aria-label={t("library.tag.rename")} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className="h-8" />
+          <Button type="submit" size="sm">{t("library.tag.rename")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { onDeleteTag(rename); setRename(null); }}>
             {t("library.tag.delete")}
-          </button>
+          </Button>
         </form>
       ) : null}
       <ol data-testid="preset-order" className="mt-3 flex flex-wrap gap-2">
@@ -172,13 +153,13 @@ export function LibraryView({
       {checked ? <p role="status">{t("library.checked")} {checked}</p> : null}
       {selected.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled(selected, true)}>{t("library.batch.enable")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</button>
-          <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</button>
-          <button type="button" className="rounded-md bg-primary px-2 py-1 text-sm text-primary-foreground" onClick={() => setSyncOpen(true)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, true)}>{t("library.batch.enable")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</Button>
+          <Button type="button" size="sm" onClick={() => setSyncOpen(true)}>
             {t("library.sync")}
-          </button>
+          </Button>
         </div>
       ) : null}
       {batchOpen ? (
@@ -191,8 +172,8 @@ export function LibraryView({
             setBatchTag("");
           }}
         >
-          <input aria-label={t("library.batch.tags")} value={batchTag} onChange={(event) => setBatchTag(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
-          <button type="submit" className="rounded-md border border-border px-2 py-1 text-sm">{t("library.batch.tags")}</button>
+          <Input aria-label={t("library.batch.tags")} value={batchTag} onChange={(event) => setBatchTag(event.target.value)} className="h-8" />
+          <Button type="submit" variant="outline" size="sm">{t("library.batch.tags")}</Button>
         </form>
       ) : null}
       {syncOpen ? (
@@ -208,39 +189,27 @@ export function LibraryView({
         >
           <label className="mr-3 text-sm"><input type="checkbox" name="claude_code" /> Claude Code</label>
           <label className="mr-3 text-sm"><input type="checkbox" name="codex" /> Codex</label>
-          <button type="submit" className="rounded-md border border-border px-2 py-1 text-sm">{t("library.sync")}</button>
+          <Button type="submit" variant="outline" size="sm">{t("library.sync")}</Button>
         </form>
       ) : null}
-      {rendered.length === 0 ? <p className="mt-4 text-sm text-muted-foreground">{t("library.empty")}</p> : null}
-      <ul data-testid="library-cards" data-layout={layout} className={layout === "grid" ? "mt-4 grid grid-cols-2 gap-3" : "mt-4 space-y-2"}>
+      {rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
+      <ul data-testid="library-cards" data-layout={layout} className={layout === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" : "space-y-2"}>
         {rendered.map((skill) => (
-          <li key={skill.id} className="rounded-lg border border-border bg-card p-3">
+          <li key={skill.id}>
+            <Card className="gap-2 rounded-lg border-border bg-card py-3 shadow-none">
+            <div className="px-3">
             <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                aria-label={`Select ${skill.name}`}
-                checked={selected.includes(skill.id)}
-                onChange={() =>
-                  setSelected((current) =>
-                    current.includes(skill.id) ? current.filter((id) => id !== skill.id) : [...current, skill.id],
-                  )
-                }
-              />
+              <input type="checkbox" aria-label={`Select ${skill.name}`} checked={selected.includes(skill.id)} onChange={() => setSelected((current) => current.includes(skill.id) ? current.filter((id) => id !== skill.id) : [...current, skill.id], ) } />
               <button type="button" className="text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                 <span className="block font-medium whitespace-normal">{skill.name}</span>
-                {skill.draft ? <span data-testid="draft-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.draft")}</span> : null}
-                {badgeFor(seed, skill.id) === "tested" ? <span data-testid="tested-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.tested")}</span> : null}
-                {badgeFor(seed, skill.id) === "regressed" ? <span data-testid="regressed-badge" className="rounded-full border border-border px-1 text-xs">{t("library.badge.regressed")}</span> : null}
+                {skill.draft ? <Badge data-testid="draft-badge" variant="warning">{t("library.badge.draft")}</Badge> : null}
+                {badgeFor(seed, skill.id) === "tested" ? <Badge data-testid="tested-badge" variant="success">{t("library.badge.tested")}</Badge> : null}
+                {badgeFor(seed, skill.id) === "regressed" ? <Badge data-testid="regressed-badge" variant="warning">{t("library.badge.regressed")}</Badge> : null}
                 <span className="block text-sm text-muted-foreground">{skill.description}</span>
               </button>
             </label>
             <label className="mt-2 flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                aria-label={`${t("library.membership")} ${skill.name}`}
-                checked={memberIds.includes(skill.id)}
-                onChange={() => onToggleMember(skill.id)}
-              />
+              <input type="checkbox" aria-label={`${t("library.membership")} ${skill.name}`} checked={memberIds.includes(skill.id)} onChange={() => onToggleMember(skill.id)} />
               {t("library.membership")}
             </label>
             <div className="mt-2 flex flex-wrap gap-1">
@@ -275,14 +244,11 @@ export function LibraryView({
                 setTagDraft((current) => ({ ...current, [skill.id]: "" }));
               }}
             >
-              <input
-                aria-label={`${t("library.tag.add")} ${skill.name}`}
-                value={tagDraft[skill.id] ?? ""}
-                onChange={(event) => setTagDraft((current) => ({ ...current, [skill.id]: event.target.value }))}
-                className="w-24 rounded-md border border-input px-1 py-0.5 text-xs"
-              />
+              <Input aria-label={`${t("library.tag.add")} ${skill.name}`} value={tagDraft[skill.id] ?? ""} onChange={(event) => setTagDraft((current) => ({ ...current, [skill.id]: event.target.value }))} className="h-8 w-24" />
               <button type="submit" className="text-xs">{t("library.tag.add")}</button>
             </form>
+            </div>
+            </Card>
           </li>
         ))}
       </ul>
@@ -290,22 +256,16 @@ export function LibraryView({
         <aside data-testid="detail-panel" className="mt-4 rounded-lg border border-border p-3">
           <div className="flex flex-wrap gap-2">
             {(["local", "diff", "source", "edit"] as const).map((item) => (
-              <button key={item} type="button" aria-pressed={tab === item} className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setTab(item)}>
+              <Button key={item} type="button" aria-pressed={tab === item} variant="outline" size="sm" onClick={() => setTab(item)}>
                 {t(`library.detail.${item}`)}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {["claude_code", "codex"].map((agent) => (
-              <button
-                key={agent}
-                type="button"
-                aria-pressed={open.agents.includes(agent)}
-                className="rounded-md border border-border px-2 py-1 text-xs"
-                onClick={() => onToggleAgent(open.id, agent)}
-              >
+              <Button key={agent} type="button" aria-pressed={open.agents.includes(agent)} variant="outline" size="sm" onClick={() => onToggleAgent(open.id, agent)}>
                 {agent}
-              </button>
+              </Button>
             ))}
           </div>
           {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
@@ -335,6 +295,6 @@ export function LibraryView({
           <p className="mt-3 text-sm">{t("library.detail.projects")}</p>
         </aside>
       ) : null}
-    </section>
+    </Screen>
   );
 }
