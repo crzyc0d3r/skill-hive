@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { filterMarket, MARKET_FIXTURE, type MarketSkill } from "@/features/install/market";
@@ -32,69 +34,33 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
   if (!reachable) return <p className="mt-4 text-sm text-muted-foreground">{t("install.leaderboard.empty")}</p>;
   return (
     <div className="mt-4 space-y-2" data-testid="marketplace">
-      <input aria-label={t("install.search")} value={query} onChange={(event) => setQuery(event.target.value)} className="rounded-md border border-input px-2 py-1 text-sm" />
+      <Input aria-label={t("install.search")} value={query} onChange={(event) => setQuery(event.target.value)} className="h-8" />
       {leaderboard.isError ? <p role="alert">{leaderboard.error instanceof Error ? leaderboard.error.message : "Marketplace unavailable"}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
         {owners.map((item) => (
-          <button key={item} type="button" aria-pressed={owner === item} className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => setOwner(owner === item ? null : item)}>
+          <Button key={item} type="button" aria-pressed={owner === item} variant="outline" size="sm" onClick={() => setOwner(owner === item ? null : item)}>
             {t("install.owner")} {item}
-          </button>
+          </Button>
         ))}
       </div>
       <ul className="space-y-1 text-sm">
         {rows.map((skill) => (
           <li key={`${skill.owner}/${skill.name}`} className="flex items-center gap-2">
             <span>{skill.owner}/{skill.name}</span>
-            <button
-              type="button"
-              className="rounded-md bg-primary px-2 py-1 text-primary-foreground"
-              onClick={() => {
-                setPending(skill.name);
-                if (demoEnabled()) {
-                  setInstalled(skill.name);
-                  return;
-                }
-                const sourceUrl = "source" in skill && typeof skill.source === "string" ? skill.source : `${skill.owner}/${skill.name}`;
-                void (async () => {
-                  try {
-                    await beginMarketInstall(sourceUrl, skill.name);
-                    const deadline = Date.now() + 120000;
-                    while (Date.now() < deadline) {
-                      const status = (await marketInstallResult()) ?? "";
-                      if (status === "running" || status === "") {
-                        await new Promise((resolve) => setTimeout(resolve, 200));
-                        continue;
-                      }
-                      if (status.startsWith("installed:")) {
-                        setInstalled(skill.name);
-                        return;
-                      }
-                      setError(status.replace(/^error:/, ""));
-                      setPending(null);
-                      return;
-                    }
-                    setError("marketplace install timed out");
-                    setPending(null);
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : "marketplace install failed");
-                    setPending(null);
-                  }
-                })();
-              }}
-            >
+            <Button type="button" size="sm" onClick={() => { setPending(skill.name); if (demoEnabled()) { setInstalled(skill.name); return; } const sourceUrl = "source" in skill && typeof skill.source === "string" ? skill.source : `${skill.owner}/${skill.name}`; void (async () => { try { await beginMarketInstall(sourceUrl, skill.name); const deadline = Date.now() + 120000; while (Date.now() < deadline) { const status = (await marketInstallResult()) ?? ""; if (status === "running" || status === "") { await new Promise((resolve) => setTimeout(resolve, 200)); continue; } if (status.startsWith("installed:")) { setInstalled(skill.name); return; } setError(status.replace(/^error:/, "")); setPending(null); return; } setError("marketplace install timed out"); setPending(null); } catch (err) { setError(err instanceof Error ? err.message : "marketplace install failed"); setPending(null); } })(); }}>
               {t("install.install")}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
       {pending ? (
-        <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => { setPending(null); setInstalled(null); void cancelMarketInstall(); }}>
+        <Button type="button" variant="outline" size="sm" onClick={() => { setPending(null); setInstalled(null); void cancelMarketInstall(); }}>
           {t("install.cancelInstall")}
-        </button>
+        </Button>
       ) : null}
       {installed ? <p role="status">{t("install.installed")} {installed}</p> : null}
-      <button type="button" className="rounded-md border border-border px-2 py-1 text-sm" onClick={() => void leaderboard.refetch()}>{t("install.loadMore")}</button>
+      <Button type="button" variant="outline" size="sm" onClick={() => void leaderboard.refetch()}>{t("install.loadMore")}</Button>
     </div>
   );
 }

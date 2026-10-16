@@ -1,9 +1,12 @@
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
 import type { GitPreview } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
 import { t } from "@/lib/i18n";
+import { Screen } from "@/components/chrome";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
 const TABS = ["leaderboard", "local", "git", "scan"] as const;
@@ -61,21 +64,12 @@ export function InstallView({
   const active = useMemo(() => (tabs.includes(tab) ? tab : "local"), [tab, tabs]);
 
   return (
-    <section data-testid="install">
-      <h1 className="font-mono text-[22px] font-semibold">{t("install.title")}</h1>
-      <div role="tablist" aria-label={t("install.title")} className="mt-3 flex gap-2">
+    <Screen testId="install" title={t("install.title")}>
+      <div role="tablist" aria-label={t("install.title")} className="flex flex-wrap gap-2">
         {tabs.map((item) => (
-          <button
-            key={item}
-            type="button"
-            role="tab"
-            aria-selected={active === item}
-            data-testid={`tab-${item}`}
-            className="rounded-md border border-border px-2 py-1 text-sm"
-            onClick={() => setParams({ tab: item })}
-          >
+          <Button key={item} type="button" role="tab" aria-selected={active === item} data-testid={`tab-${item}`} variant={active === item ? "default" : "outline"} size="sm" onClick={() => setParams({ tab: item })}>
             {item === "scan" ? t("dashboard.scan") : t(`install.tab.${item}`)}
-          </button>
+          </Button>
         ))}
       </div>
       {active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
@@ -92,28 +86,18 @@ export function InstallView({
         >
           <label className="block text-sm">
             {t("install.local.folder")}
-            <input aria-label={t("install.local.folder")} value={folder} onChange={(event) => setFolder(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
-            <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => void pickPath(true).then((path) => path && setFolder(path))}>Browse</button>
+            <Input aria-label={t("install.local.folder")} value={folder} onChange={(event) => setFolder(event.target.value)} className="h-8 ml-2" />
+            <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => void pickPath(true).then((path) => path && setFolder(path))}>Browse</Button>
           </label>
           <label className="block text-sm">
             {t("install.local.archive")}
-            <input aria-label={t("install.local.archive")} value={archive} onChange={(event) => setArchive(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
-            <button type="button" className="ml-2 rounded-md border border-border px-2 py-1" onClick={() => void pickPath(false).then((path) => path && setArchive(path))}>Browse</button>
+            <Input aria-label={t("install.local.archive")} value={archive} onChange={(event) => setArchive(event.target.value)} className="h-8 ml-2" />
+            <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => void pickPath(false).then((path) => path && setArchive(path))}>Browse</Button>
           </label>
-          <button type="submit" disabled={busy} className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground">{t("install.local.submit")}</button>
-          <button
-            type="button"
-            disabled={busy}
-            className="ml-2 rounded-md border border-border px-3 py-1 text-sm"
-            onClick={() => {
-              const label = archive.split(/[/\\]/).filter(Boolean).pop() ?? archive;
-              void act(async () => {
-                await onInstallArchive(archive);
-              }, () => setInstalled(label));
-            }}
-          >
+          <Button type="submit" disabled={busy} size="sm">{t("install.local.submit")}</Button>
+          <Button type="button" disabled={busy} variant="outline" size="sm" className="ml-2" onClick={() => { const label = archive.split(/[/\\]/).filter(Boolean).pop() ?? archive; void act(async () => { await onInstallArchive(archive); }, () => setInstalled(label)); }}>
             {t("install.local.archiveSubmit")}
-          </button>
+          </Button>
           {installed ? <p role="status">{t("install.git.imported")} {installed}</p> : null}
         </form>
       ) : null}
@@ -133,38 +117,22 @@ export function InstallView({
             });
           }}
         >
-          <input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} className="w-full rounded-md border border-input px-2 py-1 text-sm" />
-          <button type="submit" className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground">{t("install.git.preview")}</button>
+          <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} className="h-8 w-full" />
+          <Button type="submit" size="sm">{t("install.git.preview")}</Button>
           {cancelled ? <p role="status">{t("install.git.removed")}</p> : null}
           {preview && !cancelled ? (
             <div data-testid="git-preview" className="rounded-md border border-border p-3">
               <label className="text-sm">
                 Rename
-                <input aria-label="Rename skill" value={rename} onChange={(event) => setRename(event.target.value)} className="ml-2 rounded-md border border-input px-2 py-1" />
+                <Input aria-label="Rename skill" value={rename} onChange={(event) => setRename(event.target.value)} className="h-8 ml-2" />
               </label>
               <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-border px-2 py-1 text-sm"
-                  onClick={() => {
-                    const label = rename || "skill";
-                    void act(async () => {
-                      await onImportGit(url, rename, previewId, relative);
-                    }, () => setImported(label));
-                  }}
-                >
+                <Button type="button" variant="outline" size="sm" onClick={() => { const label = rename || "skill"; void act(async () => { await onImportGit(url, rename, previewId, relative); }, () => setImported(label)); }}>
                   {t("install.git.import")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-border px-2 py-1 text-sm"
-                  onClick={() => {
-                    setCancelled(true);
-                    void onCancel(previewId);
-                  }}
-                >
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => { setCancelled(true); void onCancel(previewId); }}>
                   {t("install.git.cancel")}
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}
@@ -178,34 +146,21 @@ export function InstallView({
               return (
                 <li key={`${row.tool}-${row.name}`} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                   <span>{row.tool}</span>
-                  <input
-                    aria-label={`${t("install.scan.rename")} ${row.name}`}
-                    value={name}
-                    onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))}
-                    className="rounded-md border border-input px-2 py-1"
-                  />
-                  <button
-                    type="button"
-                    className="rounded-md border border-border px-2 py-1"
-                    onClick={() => {
-                      void act(async () => {
-                        await onImportOne(row, name);
-                      }, () => setImported(name));
-                    }}
-                  >
+                  <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} className="h-8" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
                     {t("install.scan.one")} {row.name}
-                  </button>
+                  </Button>
                 </li>
               );
             })}
           </ul>
-          <button type="button" disabled={busy} className="mt-2 rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground" onClick={() => void act(() => Promise.resolve(onImportAll(scanned.map((row) => row.name))))}>
+          <Button type="button" disabled={busy} variant="default" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanned.map((row) => row.name))))}>
             {t("install.scan.all")}
-          </button>
+          </Button>
         </div>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
       {imported ? <p>{t("install.git.imported")} {imported}</p> : null}
-    </section>
+    </Screen>
   );
 }
