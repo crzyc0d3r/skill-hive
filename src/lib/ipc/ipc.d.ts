@@ -80,7 +80,6 @@ export interface IpcCommands {
   export_diagnostics: { args: { path: string }; result: string };
   git_backup_restore_remote: { args: { url: string }; result: string };
   skip_first_run_restore: { args: Record<string, never>; result: boolean };
-
   get_global_local_skills: { args: { tool: string }; result: { name: string; path: string; skillId: string | null; status: string }[] };
   get_global_local_skill_document: { args: { tool: string; name: string }; result: { name: string; description: string; body: string; path: string } };
   import_global_local_skill_to_center: { args: { tool: string; name: string }; result: string };
@@ -158,4 +157,3 @@ export interface IpcCommands {
   get_tool_order_cmd: { args: Record<string, never>; result: string[] };
   reset_custom_tool_project_path: { args: { key: string }; result: null };
 }
-
