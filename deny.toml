@@ -2,6 +2,11 @@
 version = 2
 yanked = "warn"
 unmaintained = "none"
+ignore = [
+  { id = "RUSTSEC-2026-0367", reason = "zip 2.4.2 is a direct dependency and zip 4.6.1 comes from tauri-plugin-updater. Neither can move to zip 9 yet. Skill Hive does not call ZipArchive::extract, and the installer keeps only permission bits 0o777." },
+  { id = "RUSTSEC-2026-0368", reason = "Same zip pins. Archive install refuses symlink entries and paths that leave the destination." },
+  { id = "RUSTSEC-2026-0369", reason = "Same zip pins. Permission bits copied from an archive are masked to 0o777." },
+]
 
 [licenses]
 version = 2
