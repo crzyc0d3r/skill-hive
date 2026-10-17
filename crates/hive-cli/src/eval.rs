@@ -13,17 +13,33 @@ use crate::Fail;
 
 pub fn test_save_suite(skill: &Path) -> Result<Value, Fail> {
     fs::create_dir_all(skill.join("evals")).map_err(|err| Fail::other(err.to_string()))?;
-    fs::write(
-        skill.join("SKILL.md"),
-        "---\nname: fixture-skill\n---\nHIVE_SKILL_MARKER_9f3a\n",
-    )
-    .map_err(|err| Fail::other(err.to_string()))?;
+    let name = skill
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("skill");
+    let document = skill.join("SKILL.md");
+    if !document.is_file() {
+        fs::write(
+            &document,
+            format!("---\nname: {name}\ndescription: Exercise {name}.\n---\n"),
+        )
+        .map_err(|err| Fail::other(err.to_string()))?;
+    }
+    let body = fs::read_to_string(&document).unwrap_or_default();
+    let prompt = body
+        .lines()
+        .find_map(|line| line.strip_prefix("description:"))
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .unwrap_or(name)
+        .to_string();
     let suite = Suite {
-        skill_name: "fixture-skill".into(),
+        skill_name: name.into(),
         evals: vec![SuiteCase {
             id: 1,
-            prompt: "Write the fixture answer.".into(),
-            expected_output: "PINECONE".into(),
+            prompt: prompt.clone(),
+            expected_output: prompt.clone(),
             files: Vec::new(),
             expectations: vec!["answer file exists".into()],
         }],
@@ -37,7 +53,25 @@ pub fn test_save_suite(skill: &Path) -> Result<Value, Fail> {
         }],
     };
     save_suite(skill, &suite).map_err(|err| Fail::other(err.to_string()))?;
-    Ok(json!({"command": "test.save-suite", "skill": "fixture-skill"}))
+    register_suite(name, skill)?;
+    Ok(json!({"command": "test.save-suite", "skill": name}))
+}
+
+fn register_suite(name: &str, skill: &Path) -> Result<(), Fail> {
+    let root = central_repo::base_dir().join("test-runs");
+    fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
+    let index = root.join("suites.json");
+    let mut rows: Vec<Value> = fs::read_to_string(&index)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    rows.retain(|row| row.get("name").and_then(|value| value.as_str()) != Some(name));
+    rows.push(json!({"name": name, "path": skill.display().to_string()}));
+    fs::write(
+        &index,
+        serde_json::to_string(&rows).unwrap_or_else(|_| "[]".into()),
+    )
+    .map_err(|err| Fail::other(err.to_string()))
 }
 pub fn test_run(skill: &Path) -> Result<Value, Fail> {
     let root = central_repo::base_dir().join("test-runs");
@@ -61,9 +95,14 @@ pub fn test_run(skill: &Path) -> Result<Value, Fail> {
     };
     let report = run_plan(&spec, &ScriptedProvider::new("offline"))
         .map_err(|err| Fail::other(err.to_string()))?;
+    let passed = report
+        .cells
+        .iter()
+        .filter(|cell| cell.status == "passed" || cell.status == "executed")
+        .count();
     fs::write(
         root.join("last.json"),
-        json!({"run_id": report.run_id, "status": report.status}).to_string(),
+        json!({"run_id": report.run_id, "status": report.status, "cells": report.cells.len(), "passed": passed}).to_string(),
     )
     .map_err(|err| Fail::other(err.to_string()))?;
     Ok(json!({"command": "test.run", "status": report.status, "run_id": report.run_id}))
@@ -76,7 +115,26 @@ pub fn test_show() -> Result<Value, Fail> {
 }
 
 pub fn test_suites() -> Result<Value, Fail> {
-    Ok(json!({"command": "test.suites", "suites": ["fixture-skill"]}))
+    let index = central_repo::base_dir()
+        .join("test-runs")
+        .join("suites.json");
+    let rows: Vec<Value> = fs::read_to_string(&index)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let suites: Vec<String> = rows
+        .iter()
+        .filter_map(|row| {
+            let name = row.get("name")?.as_str()?;
+            let path = row.get("path")?.as_str()?;
+            Path::new(path)
+                .join("evals")
+                .join("evals.json")
+                .is_file()
+                .then(|| name.to_string())
+        })
+        .collect();
+    Ok(json!({"command": "test.suites", "suites": suites}))
 }
 pub fn test_status() -> Result<Value, Fail> {
     let path = central_repo::base_dir().join("test-runs").join("last.json");
@@ -92,36 +150,71 @@ pub fn test_status() -> Result<Value, Fail> {
 }
 pub fn test_results() -> Result<Value, Fail> {
     let path = central_repo::base_dir().join("test-runs").join("last.json");
-    let raw = fs::read_to_string(&path).unwrap_or_else(|_| "{\"run_id\":\"\"}".into());
-    let parsed: Value = serde_json::from_str(&raw).unwrap_or(json!({"run_id": ""}));
+    let raw = fs::read_to_string(&path).unwrap_or_else(|_| "{\"run_id\":\"\",\"cells\":0}".into());
+    let parsed: Value = serde_json::from_str(&raw).unwrap_or(json!({"run_id": "", "cells": 0}));
     Ok(json!({
         "command": "test.results",
         "run_id": parsed["run_id"].as_str().unwrap_or(""),
-        "cells": 2
+        "cells": parsed["cells"].as_u64().unwrap_or(0)
     }))
 }
 pub fn test_export() -> Result<Value, Fail> {
     let root = central_repo::base_dir().join("exports").join("latest");
+    let last_path = central_repo::base_dir().join("test-runs").join("last.json");
+    let last: Value = fs::read_to_string(&last_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or(json!({}));
+    let cells = last
+        .get("cells")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let passed = last
+        .get("passed")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let rate = if cells == 0 {
+        0.0
+    } else {
+        passed as f64 / cells as f64
+    };
+    let run_id = last
+        .get("run_id")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let index = central_repo::base_dir()
+        .join("test-runs")
+        .join("suites.json");
+    let suites: Vec<Value> = fs::read_to_string(&index)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let skill_name = suites
+        .last()
+        .and_then(|row| row.get("name"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("skill")
+        .to_string();
     let slice = ExportSlice {
-        skill_name: "fixture-skill".into(),
-        model: "fixture-model".into(),
+        skill_name: skill_name.clone(),
+        model: run_id.into(),
         cells: vec![ExportCell {
             eval_id: 1,
-            eval_name: "eval-1".into(),
+            eval_name: skill_name,
             configuration: "with_skill".into(),
             expectations: vec![hive_core::analytics::ExpectationExport {
                 text: "answer file exists".into(),
-                passed: true,
-                evidence: String::new(),
+                passed: rate > 0.0,
+                evidence: format!("{passed}/{cells}"),
             }],
             checks: vec![hive_core::analytics::CheckExport {
                 id: "file".into(),
-                passed: true,
+                passed: rate > 0.0,
                 stderr: String::new(),
             }],
-            pass_rate: 1.0,
-            endpoint_id: "endpoint-secret-id".into(),
-            display_name: "Fixture model".into(),
+            pass_rate: rate,
+            endpoint_id: "recorded-run".into(),
+            display_name: run_id.into(),
             secret: String::new(),
         }],
     };

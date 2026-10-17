@@ -852,12 +852,29 @@ fn skills(ctx: &Ctx, command: &SkillsCmd) -> Result<Value, Fail> {
             Ok(json!({"command": "skills.undeploy", "path": path_str(path)}))
         }
         SkillsCmd::Status => {
-            let count = ctx
+            let skills = ctx
                 .store
                 .get_all_skills()
-                .map_err(|err| Fail::other(err.to_string()))?
-                .len() as i64;
-            Ok(json!({"command": "skills.status", "count": count}))
+                .map_err(|err| Fail::other(err.to_string()))?;
+            let targets = ctx
+                .store
+                .get_all_targets()
+                .map_err(|err| Fail::other(err.to_string()))?;
+            let enabled = skills.iter().filter(|skill| skill.enabled).count() as i64;
+            let deployments: Vec<Value> = skills
+                .iter()
+                .map(|skill| {
+                    let agents: Vec<String> = targets
+                        .iter()
+                        .filter(|target| target.skill_id == skill.id)
+                        .map(|target| target.tool.clone())
+                        .collect();
+                    json!({"id": skill.id, "name": skill.name, "enabled": skill.enabled, "agents": agents})
+                })
+                .collect();
+            Ok(
+                json!({"command": "skills.status", "count": skills.len() as i64, "enabled": enabled, "deployed": targets.len() as i64, "skills": deployments}),
+            )
         }
         SkillsCmd::Sync => {
             let targets = ctx
@@ -895,11 +912,23 @@ fn skills(ctx: &Ctx, command: &SkillsCmd) -> Result<Value, Fail> {
                 .store
                 .get_all_skills()
                 .map_err(|err| Fail::other(err.to_string()))?;
-            let skills: Vec<Value> = rows
+            let mut skills: Vec<Value> = rows
                 .iter()
-                .filter(|row| row.name.to_lowercase().contains(&needle))
-                .map(|row| json!({"id": row.id, "name": row.name}))
+                .filter(|row| {
+                    row.name.to_lowercase().contains(&needle)
+                        || row
+                            .description
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&needle)
+                })
+                .map(|row| json!({"id": row.id, "name": row.name, "source": "library"}))
                 .collect();
+            let remote = hive_core::library::marketplace::search_remote(query).unwrap_or_default();
+            for skill in remote {
+                skills.push(json!({"id": format!("{}/{}", skill.owner, skill.name), "name": skill.name, "source": skill.source}));
+            }
             Ok(json!({"command": "skills.search", "skills": skills}))
         }
         SkillsCmd::SetSource { id, source } => {
@@ -909,10 +938,35 @@ fn skills(ctx: &Ctx, command: &SkillsCmd) -> Result<Value, Fail> {
             Ok(json!({"command": "skills.set-source", "source": source}))
         }
         SkillsCmd::Adopt { id, path } => {
+            if path.is_dir() {
+                let scanned = hive_core::library::scanner::scan_roots(
+                    &ctx.store,
+                    &[("adopt", path.as_path())],
+                )
+                .map_err(|err| Fail::other(err.to_string()))?;
+                let imported =
+                    hive_core::library::scanner::import_all(&ctx.store, &ctx.skills, &scanned)
+                        .map_err(|err| Fail::other(err.to_string()))?;
+                return Ok(json!({"command": "skills.adopt", "id": id, "imported": imported}));
+            }
             let skill = require_skill(&ctx.store, id)?;
             let body = fs::read_to_string(path).map_err(|err| Fail::other(err.to_string()))?;
             let dest = Path::new(&skill.central_path).join("SKILL.md");
-            fs::write(dest, body).map_err(|err| Fail::other(err.to_string()))?;
+            fs::write(&dest, &body).map_err(|err| Fail::other(err.to_string()))?;
+            let hash =
+                hive_core::library::content_hash::hash_skill_dir(Path::new(&skill.central_path))
+                    .ok();
+            ctx.store
+                .update_skill_after_install(
+                    &skill.id,
+                    &skill.name,
+                    skill.description.as_deref(),
+                    skill.source_revision.as_deref(),
+                    skill.remote_revision.as_deref(),
+                    hash.as_deref(),
+                    "current",
+                )
+                .map_err(|err| Fail::other(err.to_string()))?;
             Ok(json!({"command": "skills.adopt", "id": id}))
         }
         SkillsCmd::Tag { command } => tags(&ctx.store, command),

@@ -22,12 +22,18 @@ pub enum CloseChoice {
 pub fn build_tray_menu_from_data(
     skill_count: usize,
     update_count: usize,
+    agent_count: usize,
     presets: &[(&str, &str)],
 ) -> TrayEntry {
     let mut children = vec![
         TrayEntry {
+            id: "app-name".into(),
+            label: "Skill Hive".into(),
+            children: Vec::new(),
+        },
+        TrayEntry {
             id: "status".into(),
-            label: format!("{skill_count} skills"),
+            label: format!("{skill_count} skills, {agent_count} agents"),
             children: Vec::new(),
         },
         TrayEntry {
@@ -40,7 +46,7 @@ pub fn build_tray_menu_from_data(
             children: Vec::new(),
         },
     ];
-    let preset_children = presets
+    let mut preset_children: Vec<TrayEntry> = presets
         .iter()
         .map(|(id, name)| TrayEntry {
             id: (*id).to_string(),
@@ -59,6 +65,23 @@ pub fn build_tray_menu_from_data(
             ],
         })
         .collect();
+    if agent_count == 0 {
+        preset_children.insert(
+            0,
+            TrayEntry {
+                id: "presets-no-agents".into(),
+                label: "No coding agents connected".into(),
+                children: Vec::new(),
+            },
+        );
+    }
+    if presets.is_empty() {
+        preset_children.push(TrayEntry {
+            id: "presets-empty".into(),
+            label: "No presets with skills".into(),
+            children: Vec::new(),
+        });
+    }
     children.push(TrayEntry {
         id: "presets".into(),
         label: "Presets".into(),
@@ -110,7 +133,7 @@ mod tests {
 
     #[test]
     fn tray_menu_lists_status_presets_and_quit() {
-        let menu = build_tray_menu_from_data(3, 1, &[("research", "Research")]);
+        let menu = build_tray_menu_from_data(3, 1, 2, &[("research", "Research")]);
         let labels: Vec<_> = menu
             .children
             .iter()
@@ -119,7 +142,8 @@ mod tests {
         assert_eq!(
             labels,
             vec![
-                "3 skills",
+                "Skill Hive",
+                "3 skills, 2 agents",
                 "1 skill updates",
                 "Presets",
                 "Open",
@@ -127,6 +151,21 @@ mod tests {
                 "Open Skills Folder",
                 "Quit"
             ]
+        );
+        let empty = build_tray_menu_from_data(0, 0, 0, &[]);
+        let presets = empty
+            .children
+            .iter()
+            .find(|item| item.id == "presets")
+            .unwrap();
+        let empty_labels: Vec<_> = presets
+            .children
+            .iter()
+            .map(|item| item.label.as_str())
+            .collect();
+        assert_eq!(
+            empty_labels,
+            vec!["No coding agents connected", "No presets with skills"]
         );
         let presets = menu
             .children

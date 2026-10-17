@@ -24,7 +24,7 @@ pub fn providers_add(id: &str, name: &str, kind: &str) -> Result<Value, Fail> {
         kind: parse_kind(kind),
         flavor: None,
         base_url: None,
-        default_model: Some("fixture-model".into()),
+        default_model: Some(default_model_for(kind).into()),
         auth_mode: "keyring".into(),
         auth_env_var: None,
         cli_program: None,
@@ -79,16 +79,43 @@ fn kind_name(kind: ProviderKind) -> &'static str {
     }
 }
 
-pub fn providers_test(id: &str) -> Result<Value, Fail> {
+fn default_model_for(kind: &str) -> &'static str {
+    match kind {
+        "openai" | "openai_compat" => "gpt-4o-mini",
+        "cli" | "local_cli" => "local-cli",
+        _ => "claude-sonnet-4",
+    }
+}
+
+fn require_provider(id: &str) -> Result<hive_core::providers::ProviderConfig, Fail> {
     if id.is_empty() {
         return Err(Fail::other("provider id is required"));
     }
-    Ok(json!({"command": "providers.test", "id": id, "ok": true}))
+    list_named_providers(&central_repo::db_path())
+        .map_err(Fail::other)?
+        .into_iter()
+        .find(|row| row.id == id)
+        .ok_or_else(|| Fail::other(format!("unknown provider {id}")))
+}
+
+pub fn providers_test(id: &str) -> Result<Value, Fail> {
+    let config = require_provider(id)?;
+    let report = probe_offline(&config);
+    Ok(
+        json!({"command": "providers.test", "id": id, "ok": report.ok, "stages": report.stages.len()}),
+    )
 }
 pub fn providers_models(id: &str) -> Result<Value, Fail> {
+    let config = require_provider(id)?;
+    let mut models: Vec<String> = config.default_model.into_iter().collect();
+    if models.is_empty() {
+        return Err(Fail::other(format!("provider {id} has no models")));
+    }
+    models.sort();
+    models.dedup();
     Ok(json!({
         "command": "providers.models",
         "id": id,
-        "models": ["fixture-model"]
+        "models": models
     }))
 }

@@ -58,6 +58,8 @@ const known = {
   set_central_repo_path: { args: "{ path: string }", result: "string" },
   check_all_skill_updates: { args: "Record<string, never>", result: "number" },
   check_skill_update: { args: "{ skillId: string }", result: "string" },
+  apply_available_skill_updates: { args: "Record<string, never>", result: "number" },
+  install_manage_skills: { args: "Record<string, never>", result: "{ id: string; name: string }" },
   git_backup_status: { args: "Record<string, never>", result: "{ branch: string; clean: boolean; remote: string | null; head: string }" },
   git_backup_list_versions: { args: "{ limit: number | null }", result: "{ id: string; label: string }[]" },
   git_backup_sync: { args: "{ message: string | null }", result: "{ id: string; label: string }" },

@@ -3,8 +3,43 @@
 //! Signature checks use `minisign-verify`, the same verifier Tauri's updater
 //! plugin uses for the signature stored in `latest.json`.
 
+use std::time::Duration;
+
 use minisign_verify::{PublicKey, Signature};
 use serde_json::Value;
+
+/// Compare the installed version with a release tag.
+/// `offline:<version>` means no tag was available to compare.
+pub fn classify_release(local: &str, remote_tag: Option<&str>) -> String {
+    let local = local.trim().trim_start_matches('v');
+    match remote_tag.map(str::trim).filter(|tag| !tag.is_empty()) {
+        None => format!("offline:{local}"),
+        Some(tag) => {
+            let remote = tag.trim_start_matches('v');
+            if remote == local {
+                "current".into()
+            } else {
+                format!("available:{remote}")
+            }
+        }
+    }
+}
+
+/// Read `tag_name` from a GitHub-style latest-release document.
+pub fn fetch_latest_release_tag(url: &str) -> Result<String, String> {
+    let response = ureq::get(url)
+        .timeout(Duration::from_secs(2))
+        .set("user-agent", "skill-hive")
+        .call()
+        .map_err(|err| err.to_string())?;
+    let body = response.into_string().map_err(|err| err.to_string())?;
+    let value: Value = serde_json::from_str(&body).map_err(|err| err.to_string())?;
+    value
+        .get("tag_name")
+        .and_then(|tag| tag.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| "release has no tag_name".into())
+}
 
 pub fn update_install_blocker(active_runs: u32) -> Option<&'static str> {
     if active_runs > 0 {
@@ -52,7 +87,8 @@ pub fn verify_updater_signature(
 #[cfg(test)]
 mod tests {
     use super::{
-        latest_platform_signature, update_install_blocker, updater_proxy, verify_updater_signature,
+        classify_release, latest_platform_signature, update_install_blocker, updater_proxy,
+        verify_updater_signature,
     };
     use minisign::{sign, KeyPair};
     use std::io::Cursor;
@@ -127,5 +163,13 @@ mod tests {
             "a tampered latest.json signature is rejected"
         );
         assert!(verify_updater_signature(&public_key, &extracted, b"other-bytes").is_err());
+    }
+
+    #[test]
+    fn a_release_tag_is_current_only_when_it_matches_the_installed_version() {
+        assert_eq!(classify_release("1.2.0", None), "offline:1.2.0");
+        assert_eq!(classify_release("1.2.0", Some("v1.2.0")), "current");
+        assert_eq!(classify_release("1.2.0", Some("v1.3.0")), "available:1.3.0");
+        assert_eq!(classify_release("1.2.0", Some("  ")), "offline:1.2.0");
     }
 }

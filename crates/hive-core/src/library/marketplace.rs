@@ -211,6 +211,35 @@ pub fn http_get(url: &str) -> Result<String> {
     Ok(body.to_string())
 }
 
+/// Search skills.sh and parse the JSON list. A short timeout keeps the CLI responsive offline.
+pub fn search_remote(query: &str) -> Result<Vec<MarketSkill>> {
+    let url = format!(
+        "https://skills.sh/api/search?q={}&limit=24",
+        encode_query(query.trim())
+    );
+    let response = ureq::get(&url)
+        .timeout(Duration::from_secs(3))
+        .set("user-agent", "skill-hive")
+        .call()
+        .with_context(|| format!("GET {url}"))?;
+    let body = response
+        .into_string()
+        .with_context(|| format!("read {url}"))?;
+    parse_search(&body)
+}
+
+fn encode_query(input: &str) -> String {
+    let mut out = String::new();
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => out.push(byte as char),
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
 /// HTTPS GET used by the skills.sh leaderboard and search commands.
 pub fn fetch_https(url: &str) -> Result<String> {
     let response = ureq::get(url)

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArchiveIcon,
@@ -52,7 +52,7 @@ import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, t } from "../../lib/i18n";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
-import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, updatePreset } from "@/lib/ipc/actions";
+import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, silent, updatePreset } from "@/lib/ipc/actions";
 import { moveById } from "@/features/library/model";
 import { lobsterAgents } from "@/features/lobster/model";
 import { useProjectDot } from "@/features/project/store";
@@ -110,10 +110,17 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const lobsterRows = lobsterAgents(
     (typeof localStorage !== "undefined" ? localStorage.getItem("skill-hive-home") ?? "" : "").split(",").filter(Boolean),
   );
-  const showUpdate = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-app-update") === "1";
+  const storedUpdate = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-app-update") === "1";
+  const [showUpdate, setShowUpdate] = useState(storedUpdate);
+  const queryClient = useQueryClient();
   const [restartNow, setRestartNow] = useState(
     () => typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-restart-now") === "1",
   );
+  useEffect(() => {
+    void silent<string>("check_app_update").then((value) => {
+      if (typeof value === "string" && value.startsWith("available")) setShowUpdate(true);
+    });
+  }, []);
   useEffect(() => {
     const onRestart = () => setRestartNow(localStorage.getItem("skill-hive-restart-now") === "1");
     window.addEventListener("skill-hive-restart", onRestart);
@@ -214,6 +221,10 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       } else if (key === "n") {
         event.preventDefault();
         openPicker("skill");
+      } else if (key === "r") {
+        event.preventDefault();
+        setReloadKey((value) => value + 1);
+        void queryClient.invalidateQueries();
       } else if (key === "g" && event.shiftKey) {
         event.preventDefault();
         navigate("/generate/agent");
@@ -230,7 +241,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, shortcutRows]);
+  }, [navigate, queryClient, shortcutRows]);
 
   const skills = useQuery({ queryKey: SKILLS_KEY, queryFn: listSkills });
   const presets = useQuery({ queryKey: ["presets"], queryFn: listPresets });
