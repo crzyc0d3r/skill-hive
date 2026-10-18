@@ -140,7 +140,7 @@ export function WorkspaceView({
             }).length;
             const fill = presetFill(synced, total);
             return (
-              <Button key={preset.id} type="button" data-fill={fill} variant="outline" size="sm" onClick={() => {
+              <Button key={preset.id} type="button" data-fill={fill} aria-pressed={applied === preset.id} variant="outline" size="sm" onClick={() => {
                 const tool = agents[0]?.key ?? "claude_code";
                 setCoverageSkills((current) => current.map((skill) => {
                   if (!preset.skillIds.includes(skill.id) || skill.agents.includes(tool)) return skill;
