@@ -112,6 +112,7 @@ async function call(method, urlPath, body) {
     method,
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(45000),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`${method} ${urlPath} ${response.status} ${text}`);
@@ -263,7 +264,14 @@ try {
     throw new Error(`${selector} not found\n${last}\nurl ${url.value}\nsource ${slice}`);
   }
 
+  async function dismissToasts() {
+    await call("POST", `${prefix}/execute/sync`, {
+      script: "document.querySelectorAll('[data-sonner-toast]').forEach((node) => node.remove()); return true;",
+      args: [],
+    }).catch(() => {});
+  }
   async function click(selector) {
+    await dismissToasts();
     const id = await find(selector);
     await call("POST", `${prefix}/element/${id}/click`, {});
   }
@@ -316,6 +324,7 @@ try {
     return execFileSync(pythonBin(), ["-c", script], { encoding: "utf8" }).trim();
   }
   async function clickText(text, last = false) {
+    await dismissToasts();
     const quoted = JSON.stringify(text);
     const expression = last ? `(//button[normalize-space()=${quoted}])[last()]` : `//button[normalize-space()=${quoted}]`;
     const id = await find(expression, "xpath");
