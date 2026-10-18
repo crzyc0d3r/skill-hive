@@ -364,6 +364,29 @@ fn versions_dedup_pin_restore_and_history_schema() {
         .find(|item| item["is_current_best"] == true)
         .unwrap();
     assert_eq!(history["current_best"], best["version"]);
+    let runs = tmp.path().join("demo-workspace").join("runs");
+    fs::create_dir_all(&runs).unwrap();
+    fs::write(runs.join("run-1.json"), r#"{"pass_rate":0.40}"#).unwrap();
+    fs::write(runs.join("run-2.json"), r#"{"pass_rate":0.80}"#).unwrap();
+    let store = VersionStore::open(&dir);
+    store.pin(&first.id, "run-1").unwrap();
+    store.pin(&second.id, "run-2").unwrap();
+    let history = export_history_json(&dir, &tmp.path().join("history.json")).unwrap();
+    let iterations = history["iterations"].as_array().unwrap();
+    let first_row = iterations
+        .iter()
+        .find(|item| item["version"] == "v0")
+        .unwrap();
+    let second_row = iterations
+        .iter()
+        .find(|item| item["expectation_pass_rate"] == 0.80)
+        .unwrap();
+    assert_eq!(first_row["expectation_pass_rate"], 0.40);
+    assert_eq!(first_row["grading_result"], "baseline");
+    assert_eq!(second_row["grading_result"], "won");
+    assert!(fs::read_to_string(tmp.path().join("history.json"))
+        .unwrap()
+        .contains("0.8"));
 }
 
 #[test]

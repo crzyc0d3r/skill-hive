@@ -238,16 +238,35 @@ impl VersionStore {
             .current_best
             .clone()
             .or_else(|| visible.first().map(|version| version.id.clone()));
+        let measured: Vec<Option<f64>> = visible
+            .iter()
+            .map(|version| {
+                version
+                    .pinned_runs
+                    .iter()
+                    .find_map(|run_id| read_run_pass_rate(&self.workspace, run_id))
+            })
+            .collect();
         let iterations: Vec<serde_json::Value> = visible
             .iter()
             .enumerate()
             .map(|(index, version)| {
                 let label = format!("v{index}");
-                let grading = if index == 0 { "baseline" } else { "tie" };
+                let rate = measured[index];
+                let grading = if index == 0 || rate.is_none() {
+                    "baseline"
+                } else {
+                    match (rate, measured[..index].iter().rev().find_map(|rate| *rate)) {
+                        (Some(rate), Some(previous)) if rate > previous => "won",
+                        (Some(rate), Some(previous)) if rate < previous => "lost",
+                        (Some(_), Some(_)) => "tie",
+                        _ => "baseline",
+                    }
+                };
                 serde_json::json!({
                     "version": label,
                     "parent": version.parent_id.as_deref().and_then(|id| label_of(id).or_else(|| if index > 0 { Some(format!("v{}", index - 1)) } else { None })),
-                    "expectation_pass_rate": null,
+                    "expectation_pass_rate": rate,
                     "grading_result": grading,
                     "is_current_best": current.as_deref() == Some(version.id.as_str()),
                 })
@@ -364,6 +383,20 @@ pub fn hide_version(subject_dir: &Path, id: &str) -> Result<(), AppError> {
 
 pub fn export_history_json(subject_dir: &Path, out: &Path) -> Result<serde_json::Value, AppError> {
     VersionStore::open(subject_dir).export_history(out)
+}
+
+fn read_run_pass_rate(workspace: &Path, run_id: &str) -> Option<f64> {
+    let path = workspace.join("runs").join(format!("{run_id}.json"));
+    let value: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
+    value
+        .get("expectation_pass_rate")
+        .and_then(|rate| rate.as_f64())
+        .or_else(|| value.get("pass_rate").and_then(|rate| rate.as_f64()))
+        .or_else(|| {
+            value
+                .pointer("/summary/pass_rate")
+                .and_then(|rate| rate.as_f64())
+        })
 }
 
 pub fn set_current_best(subject_dir: &Path, id: &str) -> Result<(), AppError> {

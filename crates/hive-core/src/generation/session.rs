@@ -11,6 +11,10 @@ use serde_json::{json, Value};
 use crate::authoring::versions::{VersionSource, VersionStore};
 use crate::authoring::{validate_agent, validate_skill, Profile, Severity};
 use crate::db::migrations::run_migrations;
+use crate::providers::{
+    CancellationToken, ChatProvider, ChatRequest, ContentBlock, Message, RequestMetadata,
+    ThinkingMode, VecSink,
+};
 
 use super::envelope::{parse_envelope, write_files, EnvelopeError, RequiredFile};
 use super::safety::{scan_scripts, SafetyFlag};
@@ -118,6 +122,49 @@ impl GenerationSession {
             cancelled: false,
             saved: false,
         })
+    }
+
+    pub fn interview(&mut self, provider: &dyn ChatProvider, answers: &str) -> Result<(), String> {
+        let prompt = render(Template::P1, &self.vars(""));
+        self.sent.push(("P1".into(), prompt.clone()));
+        self.endpoint_payloads.push(prompt.clone());
+        let request = ChatRequest {
+            model: "fixture-model".into(),
+            system: None,
+            messages: vec![Message {
+                role: "user".into(),
+                content: vec![ContentBlock::Text(prompt)],
+            }],
+            tools: Vec::new(),
+            max_tokens: 400,
+            effort: None,
+            thinking: ThinkingMode::Off,
+            stream: false,
+            metadata: RequestMetadata {
+                purpose: "interview".into(),
+                ref_id: Some(self.id.clone()),
+                provider_id: None,
+            },
+        };
+        let mut sink = VecSink::default();
+        let cancel = CancellationToken::new();
+        let response = provider
+            .complete(&request, &mut sink, &cancel)
+            .map_err(|err| err.message)?;
+        let parsed: Value = serde_json::from_str(&response.text).unwrap_or(json!({}));
+        let questions = parsed.get("questions").cloned().unwrap_or(json!([]));
+        fs::create_dir_all(&self.staging).map_err(|err| err.to_string())?;
+        let body = json!({
+            "questions": questions,
+            "answers": answers,
+            "provider_text": response.text,
+        });
+        fs::write(
+            self.staging.join("interview.json"),
+            serde_json::to_string_pretty(&body).map_err(|err| err.to_string())?,
+        )
+        .map_err(|err| err.to_string())?;
+        Ok(())
     }
 
     pub fn run_review(&mut self, draft_reply: &str) -> Result<(), SessionError> {

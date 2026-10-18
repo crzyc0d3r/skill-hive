@@ -140,9 +140,30 @@ pub fn set_last_test(
     latency_ms: u64,
     error: Option<&str>,
 ) -> rusqlite::Result<()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or(0);
+    set_last_test_at(conn, id, now, ok, latency_ms, error)
+}
+
+pub fn set_last_test_at(
+    conn: &Connection,
+    id: &str,
+    at: i64,
+    ok: bool,
+    latency_ms: u64,
+    error: Option<&str>,
+) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE provider_configs SET last_test_at = 0, last_test_ok = ?2, last_test_latency_ms = ?3, last_test_error = ?4 WHERE id = ?1",
-        (id, i64::from(ok), i64::try_from(latency_ms).unwrap_or(0), error),
+        "UPDATE provider_configs SET last_test_at = ?2, last_test_ok = ?3, last_test_latency_ms = ?4, last_test_error = ?5 WHERE id = ?1",
+        (
+            id,
+            at,
+            i64::from(ok),
+            i64::try_from(latency_ms).unwrap_or(0),
+            error,
+        ),
     )?;
     Ok(())
 }

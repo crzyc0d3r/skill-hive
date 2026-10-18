@@ -185,6 +185,27 @@ pub fn agree_with_python(
     Ok((agree, rust.len()))
 }
 
+pub fn spawn_trigger_queries(program: &Path, queries: &[String], root: &Path) -> Result<usize> {
+    fs::create_dir_all(root)?;
+    for (index, query) in queries.iter().enumerate() {
+        let dir = root.join(format!("query-{index}"));
+        fs::create_dir_all(&dir)?;
+        let output = std::process::Command::new(program)
+            .arg("-p")
+            .arg(query)
+            .current_dir(&dir)
+            .output()
+            .map_err(|err| anyhow!(err))?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "trigger query {index} exited {}",
+                output.status.code().unwrap_or(-1)
+            ));
+        }
+    }
+    Ok(queries.len())
+}
+
 pub fn load_queries(path: &Path) -> Result<Vec<TriggerQuery>> {
     let value: Value = serde_json::from_str(&fs::read_to_string(path)?)?;
     let rows = value

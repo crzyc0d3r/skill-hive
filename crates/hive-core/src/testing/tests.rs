@@ -1,6 +1,7 @@
 //! Engine acceptance tests. Replay and the local HTTP fixture never call a vendor API.
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -287,16 +288,22 @@ fn fixture_run_writes_the_skill_creator_layout_live_and_replay() {
     )
     .unwrap();
     assert!(!plain.contains("HIVE_SKILL_MARKER_9f3a"));
-    let skills = root.path().join("record").join("sandboxes");
-    let empty = fs::read_dir(skills).unwrap().find_map(|entry| {
-        let sandbox = entry.ok()?.path().join(".claude").join("skills");
-        if sandbox.is_dir() && fs::read_dir(&sandbox).ok()?.next().is_none() {
-            Some(true)
-        } else {
-            None
-        }
-    });
-    assert!(empty.is_some());
+    let listings = files_under(&root.path().join("record").join("iteration-1"))
+        .into_iter()
+        .filter(|(path, _)| path.ends_with("sandbox-listing.txt"))
+        .map(|(_, body)| body)
+        .collect::<Vec<_>>();
+    assert!(
+        listings.iter().any(|body| body.trim().is_empty()),
+        "without_skill skills dir was not empty: {listings:?}"
+    );
+    let sandboxes = root.path().join("record").join("sandboxes");
+    assert!(
+        fs::read_dir(&sandboxes)
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(true),
+        "sandbox directories were kept after the cells"
+    );
     assert!(root
         .path()
         .join("record")
@@ -647,6 +654,278 @@ fn sse_text(text: &str) -> String {
         "data: {{\"type\":\"message_start\",\"message\":{{\"id\":\"m\",\"usage\":{{\"input_tokens\":4}}}}}}\n\ndata: {{\"type\":\"content_block_delta\",\"delta\":{{\"type\":\"text_delta\",\"text\":{}}}}}\n\ndata: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"end_turn\"}},\"usage\":{{\"output_tokens\":2}}}}\n\ndata: {{\"type\":\"message_stop\"}}\n\n",
         serde_json::to_string(text).unwrap()
     )
+}
+
+struct SandboxReader {
+    workspace: PathBuf,
+    marker: PathBuf,
+}
+
+impl ChatProvider for SandboxReader {
+    fn id(&self) -> &str {
+        "sandbox-reader"
+    }
+    fn kind_name(&self) -> &'static str {
+        "sandbox-reader"
+    }
+    fn capabilities(&self) -> crate::providers::Capabilities {
+        crate::providers::Capabilities {
+            tools: false,
+            streaming: false,
+            system_prompt: true,
+        }
+    }
+    fn complete(
+        &self,
+        request: &ChatRequest,
+        sink: &mut dyn StreamSink,
+        _: &CancellationToken,
+    ) -> Result<ChatResponse, ProviderError> {
+        if request.metadata.purpose != "grader" {
+            if let Ok(entries) = fs::read_dir(self.workspace.join("sandboxes")) {
+                for entry in entries.flatten() {
+                    let root = entry.path();
+                    let case = fs::read_to_string(root.join("case-note.txt")).unwrap_or_default();
+                    let old = fs::read_to_string(
+                        root.join(".claude")
+                            .join("skills")
+                            .join("fixture-skill")
+                            .join("OLD.txt"),
+                    )
+                    .unwrap_or_default();
+                    let fixture = fs::read_to_string(root.join("fixture.dat")).unwrap_or_default();
+                    let mut file = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&self.marker)
+                        .unwrap();
+                    let _ = writeln!(
+                        file,
+                        "PATH:{}\nCASE:{case}OLD:{old}FIXTURE:{fixture}",
+                        root.display()
+                    );
+                }
+            }
+        }
+        let text = if request.metadata.purpose == "grader" {
+            r#"{"expectations":[{"text":"The answer file contains PINECONE","passed":true,"evidence":"marker"}],"claims":[{"claim":"claim-from-provider","type":"process","verified":true,"evidence":"step 2"}],"eval_feedback":{"suggestions":[{"assertion":"The answer file contains PINECONE","reason":"eval-feedback-from-provider"}],"overall":"eval-feedback-from-provider"}}"#.to_string()
+        } else {
+            "done".into()
+        };
+        sink.on_event(&StreamEvent::TextDelta(text.clone()));
+        Ok(ChatResponse {
+            id: "reader".into(),
+            stop: StopReason::EndTurn,
+            text,
+            tool_uses: Vec::new(),
+            usage: Usage {
+                input_tokens: 3,
+                output_tokens: 1,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+            },
+            incomplete_tool: false,
+        })
+    }
+    fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(Vec::new())
+    }
+    fn count_tokens(&self, _: &ChatRequest) -> Result<Option<u64>, ProviderError> {
+        Ok(None)
+    }
+}
+
+#[test]
+fn clock_argument_stamps_timing_and_progress_events() {
+    let root = tempfile::tempdir().unwrap();
+    write_skill(&root.path().join("skill"));
+    let mut spec = plan(root.path(), RunMode::Live);
+    spec.repetitions = 1;
+    let clock = EngineClock::at(1_700_000_111);
+    let report = run_plan_with_clock(&spec, &ScriptedProvider::new("clock"), &clock).unwrap();
+    let timing: Value =
+        serde_json::from_str(&fs::read_to_string(report.cells[0].dir.join("timing.json")).unwrap())
+            .unwrap();
+    assert_eq!(timing["executor_start"], clock.start_stamp());
+    assert_eq!(timing["executor_end"], clock.end_stamp());
+    let started = report
+        .progress
+        .iter()
+        .position(|event| event == "started")
+        .unwrap();
+    let cell = report
+        .progress
+        .iter()
+        .position(|event| event == "cell")
+        .unwrap();
+    let finished = report
+        .progress
+        .iter()
+        .position(|event| event == "finished")
+        .unwrap();
+    assert!(started < cell && cell < finished);
+}
+
+#[test]
+fn sandbox_copies_case_files_old_skill_and_deletes_the_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let skill = root.path().join("skill");
+    write_skill(&skill);
+    let mut custom = suite();
+    custom.evals[0].files = vec!["case-note.txt".into()];
+    save_suite(&skill, &custom).unwrap();
+    fs::write(
+        skill.join("evals").join("files").join("case-note.txt"),
+        "CASE-NOTE-TOKEN\n",
+    )
+    .unwrap();
+    fs::create_dir_all(skill.join("skill-snapshot")).unwrap();
+    fs::write(
+        skill.join("skill-snapshot").join("OLD.txt"),
+        "OLD-SKILL-TOKEN\n",
+    )
+    .unwrap();
+    let set = skill.join("fixtures").join("default");
+    fs::create_dir_all(&set).unwrap();
+    fs::write(set.join("alpha.txt"), "FIXTURE-ALPHA\n").unwrap();
+    fs::write(set.join("beta.txt"), "FIXTURE-BETA\n").unwrap();
+    let mut spec = plan(root.path(), RunMode::Live);
+    spec.repetitions = 1;
+    spec.workspace = root.path().join("sandbox-ws");
+    spec.db_path = root.path().join("sandbox.db");
+    let marker = root.path().join("marker.txt");
+    let reader = SandboxReader {
+        workspace: spec.workspace.clone(),
+        marker: marker.clone(),
+    };
+    let report = run_plan(&spec, &reader).unwrap();
+    assert_eq!(report.status, "done");
+    let seen = fs::read_to_string(&marker).unwrap();
+    assert!(seen.contains("CASE-NOTE-TOKEN"), "{seen}");
+    assert!(seen.contains("OLD-SKILL-TOKEN"), "{seen}");
+    let chosen = select_fixture_file(&set, spec.seed).unwrap();
+    let fixture = fs::read_to_string(&chosen).unwrap();
+    assert!(seen.contains(fixture.trim()), "{seen}");
+    for line in seen.lines() {
+        if let Some(path) = line.strip_prefix("PATH:") {
+            assert!(!Path::new(path).exists(), "{path}");
+        }
+    }
+    let sandboxes = spec.workspace.join("sandboxes");
+    assert!(fs::read_dir(&sandboxes)
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(true));
+}
+
+#[test]
+fn step_metrics_come_from_three_steps_and_one_error() {
+    let root = tempfile::tempdir().unwrap();
+    let transcript = "\
+{\"kind\":\"user\",\"is_error\":false,\"payload\":\"one\"}\n\
+{\"kind\":\"tool_use\",\"is_error\":false,\"payload\":\"two\"}\n\
+{\"kind\":\"error\",\"is_error\":true,\"payload\":\"three\"}\n\
+{\"kind\":\"usage\",\"is_error\":false,\"payload\":\"skip\"}\n";
+    persist_step_metrics(root.path(), transcript).unwrap();
+    let metrics: Value =
+        serde_json::from_str(&fs::read_to_string(root.path().join("metrics.json")).unwrap())
+            .unwrap();
+    assert_eq!(metrics["total_steps"], 3);
+    assert_eq!(metrics["errors_encountered"], 1);
+}
+
+#[test]
+fn grader_prompt_uses_eight_steps_and_fills_claims() {
+    let root = tempfile::tempdir().unwrap();
+    write_skill(&root.path().join("skill"));
+    let mut spec = plan(root.path(), RunMode::Live);
+    spec.repetitions = 1;
+    let scripted = ScriptedProvider::new("grade");
+    let report = run_plan(&spec, &scripted).unwrap();
+    let prompts = scripted.prompts.lock().unwrap().clone();
+    for phrase in [
+        "Read the transcript completely",
+        "Examine every output file",
+        "burden of proof is on the expectation",
+        "No partial credit",
+        "Extract implicit claims",
+        "Summarize the executor notes",
+        "Critique the evals",
+        "Write grading.json",
+        "Fold in metrics.json and timing.json",
+    ] {
+        assert!(
+            prompts.iter().any(|prompt| prompt.contains(phrase)),
+            "{phrase}"
+        );
+    }
+    let grading = fs::read_to_string(report.cells[0].dir.join("grading.json")).unwrap();
+    assert!(grading.contains("claim-from-provider"), "{grading}");
+    assert!(grading.contains("eval-feedback-from-provider"), "{grading}");
+}
+
+#[test]
+fn fixture_choice_depends_on_the_seed() {
+    let root = tempfile::tempdir().unwrap();
+    let set = root.path().join("fixtures");
+    fs::create_dir_all(&set).unwrap();
+    fs::write(set.join("alpha.txt"), "alpha-bytes").unwrap();
+    fs::write(set.join("beta.txt"), "beta-bytes").unwrap();
+    let first = materialize_fixture(&set, 0, &root.path().join("out-0")).unwrap();
+    let second = materialize_fixture(&set, 1, &root.path().join("out-1")).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(
+        fs::read(root.path().join("out-0")).unwrap(),
+        fs::read(&first).unwrap()
+    );
+    assert_eq!(
+        fs::read(root.path().join("out-1")).unwrap(),
+        fs::read(&second).unwrap()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn trigger_queries_spawn_once_each_and_versions_are_compared() {
+    let root = tempfile::tempdir().unwrap();
+    let bin = root.path().join("claude-fake");
+    fs::write(
+        &bin,
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$PWD/invocation.txt\"\nexit 0\n",
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&bin).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&bin, permissions).unwrap();
+    }
+    let queries = vec![
+        "query alpha".into(),
+        "query beta".into(),
+        "query gamma".into(),
+    ];
+    let work = root.path().join("triggers");
+    let count = spawn_trigger_queries(&bin, &queries, &work).unwrap();
+    assert_eq!(count, 3);
+    for (index, query) in queries.iter().enumerate() {
+        let invocation =
+            fs::read_to_string(work.join(format!("query-{index}")).join("invocation.txt")).unwrap();
+        assert!(invocation.contains("-p"), "{invocation}");
+        assert!(invocation.contains(query), "{invocation}");
+    }
+    let left = root.path().join("skill-left");
+    let right = root.path().join("skill-right");
+    fs::create_dir_all(&left).unwrap();
+    fs::create_dir_all(&right).unwrap();
+    fs::write(left.join("SKILL.md"), "LEFT-SKILL-BODY\n").unwrap();
+    fs::write(right.join("SKILL.md"), "RIGHT-SKILL-BODY\n").unwrap();
+    let out = root.path().join("comparison.json");
+    run_version_comparison(&left, &right, &out).unwrap();
+    let body = fs::read_to_string(&out).unwrap();
+    assert!(body.contains("version_versus_version"));
+    assert!(body.contains("LEFT-SKILL-BODY"));
+    assert!(body.contains("RIGHT-SKILL-BODY"));
 }
 
 fn sse_tool(content: &str) -> String {

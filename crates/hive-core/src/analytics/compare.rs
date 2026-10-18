@@ -1,5 +1,8 @@
 //! Blind A/B comparison. The assignment is stored before the comparator request is built.
 
+use std::fs;
+use std::path::Path;
+
 use rusqlite::{params, Connection};
 
 #[derive(Debug, Clone)]
@@ -92,7 +95,34 @@ pub fn store_verdict(db: &std::path::Path, id: &str, verdict: &str) -> Result<St
         params![verdict, id],
     )
     .map_err(|err| err.to_string())?;
+    let dir = db.parent().unwrap_or(Path::new(".")).join("compare");
+    let left_path = dir.join(format!("{id}-left.txt"));
+    let right_path = dir.join(format!("{id}-right.txt"));
+    if left_path.is_file() && right_path.is_file() {
+        let analysis = write_output_analysis(
+            &left_path,
+            &right_path,
+            &dir.join(format!("{id}-analysis.json")),
+        )?;
+        return Ok(analysis);
+    }
     Ok(start_analysis(&comparison))
+}
+
+/// Analysis quotes the two output files. It does not substitute a canned paragraph.
+pub fn write_output_analysis(left: &Path, right: &Path, out: &Path) -> Result<String, String> {
+    let left_text = fs::read_to_string(left).map_err(|err| err.to_string())?;
+    let right_text = fs::read_to_string(right).map_err(|err| err.to_string())?;
+    let body = serde_json::json!({
+        "left": left_text,
+        "right": right_text,
+    });
+    if let Some(parent) = out.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    let text = serde_json::to_string_pretty(&body).map_err(|err| err.to_string())?;
+    fs::write(out, &text).map_err(|err| err.to_string())?;
+    Ok(text)
 }
 
 pub fn start_analysis(comparison: &Comparison) -> String {

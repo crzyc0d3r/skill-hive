@@ -2,9 +2,11 @@
 
 use std::time::Instant;
 
+use rusqlite::Connection;
+
 use super::cli_agent::{self, LocalCli};
 use super::http::{AnthropicProvider, OpenAiProvider};
-use super::store::ProviderConfig;
+use super::store::{self, ProviderConfig};
 use super::types::*;
 
 pub use super::types::ProbeStage;
@@ -23,7 +25,8 @@ pub fn probe_offline(config: &ProviderConfig) -> ProbeReport {
         true,
         credential_detail(config, &secret),
     ));
-    stages.push(stage(2, "proxy", true, "offline fixture"));
+    let (proxy_ok, proxy_detail) = proxy_stage(&config.proxy_mode);
+    stages.push(stage(2, "proxy", proxy_ok, proxy_detail));
     let mut provider = super::scripted::ScriptedProvider::new(config.id.clone());
     if let Some(model) = &config.default_model {
         provider.model = model.clone();
@@ -60,6 +63,24 @@ pub fn probe_provider(
     secret: &SecretString,
     cancel: &CancellationToken,
 ) -> ProbeReport {
+    probe_inner(config, secret, cancel, None)
+}
+
+pub fn probe_and_persist(
+    config: &ProviderConfig,
+    secret: &SecretString,
+    cancel: &CancellationToken,
+    conn: &Connection,
+) -> ProbeReport {
+    probe_inner(config, secret, cancel, Some(conn))
+}
+
+fn probe_inner(
+    config: &ProviderConfig,
+    secret: &SecretString,
+    cancel: &CancellationToken,
+    conn: Option<&Connection>,
+) -> ProbeReport {
     let started = Instant::now();
     let mut stages = Vec::new();
     stages.push(stage(
@@ -68,24 +89,31 @@ pub fn probe_provider(
         true,
         credential_detail(config, secret),
     ));
-    let proxy_detail = if config.proxy_mode == "none" {
-        "proxy disabled"
-    } else {
-        "proxy inherited from settings"
-    };
-    stages.push(stage(2, "proxy", true, proxy_detail));
+    let (proxy_ok, proxy_detail) = proxy_stage(&config.proxy_mode);
+    stages.push(stage(2, "proxy", proxy_ok, proxy_detail));
+    if !proxy_ok {
+        return persist(
+            config,
+            conn,
+            finish(stages, started, Some("proxy".into()), Vec::new(), false),
+        );
+    }
 
     let provider = build(config, secret);
     let models = match provider.list_models() {
         Ok(models) => models,
         Err(err) => {
             stages.push(stage(3, "models", false, err.message.clone()));
-            return finish(
-                stages,
-                started,
-                Some(err.class.as_str().to_string()),
-                Vec::new(),
-                false,
+            return persist(
+                config,
+                conn,
+                finish(
+                    stages,
+                    started,
+                    Some(err.class.as_str().to_string()),
+                    Vec::new(),
+                    false,
+                ),
             );
         }
     };
@@ -105,7 +133,11 @@ pub fn probe_provider(
     };
     stages.push(stage(3, "models", model_ok, model_detail));
     if !model_ok {
-        return finish(stages, started, Some("unknown_model".into()), names, false);
+        return persist(
+            config,
+            conn,
+            finish(stages, started, Some("unknown_model".into()), names, false),
+        );
     }
 
     let mut sink = VecSink::default();
@@ -120,7 +152,11 @@ pub fn probe_provider(
         Err(err) => stages.push(stage(4, "completion", false, err.message.clone())),
     }
     if completion.is_err() {
-        return finish(stages, started, Some("network".into()), names, false);
+        return persist(
+            config,
+            conn,
+            finish(stages, started, Some("network".into()), names, false),
+        );
     }
 
     let mut tool_sink = VecSink::default();
@@ -149,28 +185,97 @@ pub fn probe_provider(
         Err(err) => stages.push(stage(5, "tools", false, err.message.clone())),
     }
 
-    let cli_detail = if config.kind == ProviderKind::LocalCli {
-        match cli_agent::command_output(
-            config.cli_program.as_deref().unwrap_or("claude"),
-            &["--help"],
-        ) {
-            Ok(help) => format!("flags {}", help.chars().take(80).collect::<String>()),
-            Err(err) => err.message,
-        }
-    } else {
-        "CLI probe does not apply to this HTTP endpoint".into()
-    };
-    let cli_ok = config.kind != ProviderKind::LocalCli || cli_detail.starts_with("flags");
+    let (cli_ok, cli_detail) = cli_stage(config, cancel);
     stages.push(stage(6, "cli", cli_ok, cli_detail));
-    stages.push(stage(7, "persist", true, "last_test fields ready"));
+    let wrote = conn.is_some();
+    stages.push(stage(
+        7,
+        "persist",
+        true,
+        if wrote {
+            "wrote last_test_at, last_test_ok, latency"
+        } else {
+            "last_test fields ready"
+        },
+    ));
     let ok = stages.iter().all(|item| item.ok);
-    finish(
-        stages,
-        started,
-        if ok { None } else { Some("probe".into()) },
-        names,
-        supports_tools,
+    persist(
+        config,
+        conn,
+        finish(
+            stages,
+            started,
+            if ok { None } else { Some("probe".into()) },
+            names,
+            supports_tools,
+        ),
     )
+}
+
+fn proxy_stage(mode: &str) -> (bool, String) {
+    match mode {
+        "none" => (true, "proxy disabled".into()),
+        "inherit" => (true, "proxy inherited from settings".into()),
+        other => (false, format!("proxy mode {other} could not be resolved")),
+    }
+}
+
+fn cli_stage(config: &ProviderConfig, cancel: &CancellationToken) -> (bool, String) {
+    if config.kind != ProviderKind::LocalCli {
+        return (
+            true,
+            "CLI probe does not apply to this HTTP endpoint".into(),
+        );
+    }
+    let program = config
+        .cli_program
+        .clone()
+        .unwrap_or_else(|| "claude".into());
+    let codex = config.flavor == Some(Flavor::CodexCli)
+        || program.rsplit(['/', '\\']).next().unwrap_or(&program) == "codex";
+    if codex {
+        return match cli_agent::command_output(&program, &["--help"]) {
+            Ok(help) => (
+                true,
+                format!("flags {}", help.chars().take(80).collect::<String>()),
+            ),
+            Err(err) => (false, err.message),
+        };
+    }
+    let sandbox = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(err) => return (false, err.to_string()),
+    };
+    match cli_agent::run_claude(&program, "Reply OK", None, sandbox.path(), cancel, false) {
+        Ok(output) => {
+            let joined = output.lines.join("\n");
+            if joined.contains("OK") {
+                (
+                    true,
+                    format!(
+                        "claude -p reply {}",
+                        joined.chars().take(80).collect::<String>()
+                    ),
+                )
+            } else {
+                (false, "claude -p produced no Reply OK".into())
+            }
+        }
+        Err(err) => (false, err.message),
+    }
+}
+
+fn persist(config: &ProviderConfig, conn: Option<&Connection>, report: ProbeReport) -> ProbeReport {
+    if let Some(conn) = conn {
+        let _ = store::set_last_test(
+            conn,
+            &config.id,
+            report.ok,
+            report.latency_ms,
+            report.error_class.as_deref(),
+        );
+    }
+    report
 }
 
 fn credential_detail(config: &ProviderConfig, secret: &SecretString) -> String {
@@ -222,6 +327,7 @@ fn build(config: &ProviderConfig, secret: &SecretString) -> Box<dyn ChatProvider
                 .unwrap_or_else(|| "claude".into()),
             flavor: config.flavor.unwrap_or(Flavor::ClaudeCli),
             model: config.default_model.clone(),
+            sandbox: None,
         }),
     }
 }

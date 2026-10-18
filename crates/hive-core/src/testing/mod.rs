@@ -8,12 +8,16 @@ mod trigger;
 
 pub use aggregate::{aggregate_benchmark, delta_string, Stat};
 pub use checks::{run_check, CheckResult, DeterministicCheck};
-pub use engine::{resume_run, run_plan, CellReport, Plan, RunReport};
+pub use engine::{
+    materialize_fixture, persist_step_metrics, resume_run, run_plan, run_plan_with_clock,
+    run_version_comparison, select_fixture_file, CellReport, EngineClock, Plan, RunReport,
+};
 pub use suite::{
     fix_skill_name, load_suite, save_suite, CheckSpec, Expectation, Suite, SuiteCase, TriggerRow,
 };
 pub use trigger::{
-    agree_with_python, cleanup_command_file, judge_stream, run_trigger_set, TriggerQuery,
+    agree_with_python, cleanup_command_file, judge_stream, run_trigger_set, spawn_trigger_queries,
+    TriggerQuery,
 };
 
 #[cfg(test)]

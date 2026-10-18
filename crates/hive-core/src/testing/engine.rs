@@ -69,6 +69,42 @@ struct CellSpec {
     expectations: Vec<String>,
 }
 
+#[derive(Clone, Debug)]
+pub struct EngineClock {
+    pub start_unix: i64,
+    pub step_secs: i64,
+}
+
+impl EngineClock {
+    pub fn from_seed(seed: u64) -> Self {
+        Self {
+            start_unix: 1_736_000_000 + i64::try_from(seed % 10_000).unwrap_or(0),
+            step_secs: 1,
+        }
+    }
+
+    pub fn at(start_unix: i64) -> Self {
+        Self {
+            start_unix,
+            step_secs: 1,
+        }
+    }
+
+    pub fn start_stamp(&self) -> String {
+        rfc3339(self.start_unix)
+    }
+
+    pub fn end_stamp(&self) -> String {
+        rfc3339(self.start_unix.saturating_add(self.step_secs))
+    }
+}
+
+fn rfc3339(secs: i64) -> String {
+    chrono::DateTime::from_timestamp(secs, 0)
+        .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+        .unwrap_or_else(|| "1970-01-01T00:00:00Z".into())
+}
+
 struct Clock {
     origin: i64,
     tick: AtomicU64,
@@ -88,12 +124,20 @@ impl Clock {
 }
 
 pub fn run_plan(plan: &Plan, provider: &dyn ChatProvider) -> Result<RunReport> {
+    run_plan_with_clock(plan, provider, &EngineClock::from_seed(plan.seed))
+}
+
+pub fn run_plan_with_clock(
+    plan: &Plan,
+    provider: &dyn ChatProvider,
+    clock: &EngineClock,
+) -> Result<RunReport> {
     let suite = load_suite(&plan.skill_dir)?;
     let conn = open_db(&plan.db_path)?;
     ensure_skill(&conn, &suite.skill_name, &plan.skill_dir)?;
     let run_id = format!("run-{:016x}", plan.seed);
     persist_suite(&conn, &suite, &run_id, plan)?;
-    let mut cells = expand(&suite, plan.repetitions);
+    let mut cells = expand(&suite, plan.repetitions, &plan.skill_dir);
     order_cells(&mut cells, plan.seed);
     let alias = collision_alias(&suite.skill_name, &run_id, plan.personal_skills.as_deref());
     let mut report = RunReport {
@@ -109,7 +153,16 @@ pub fn run_plan(plan: &Plan, provider: &dyn ChatProvider) -> Result<RunReport> {
         plan.workspace.join("prepare.json"),
         json!({"alias": alias, "seed": plan.seed}).to_string(),
     )?;
-    execute_cells(plan, provider, &conn, &suite, &cells, &mut report, false)?;
+    execute_cells(
+        plan,
+        provider,
+        &conn,
+        &suite,
+        &cells,
+        &mut report,
+        false,
+        clock,
+    )?;
     Ok(report)
 }
 
@@ -117,7 +170,7 @@ pub fn resume_run(plan: &Plan, provider: &dyn ChatProvider) -> Result<RunReport>
     let suite = load_suite(&plan.skill_dir)?;
     let conn = open_db(&plan.db_path)?;
     let run_id = format!("run-{:016x}", plan.seed);
-    let mut cells = expand(&suite, plan.repetitions);
+    let mut cells = expand(&suite, plan.repetitions, &plan.skill_dir);
     order_cells(&mut cells, plan.seed);
     let done = completed_ids(&conn, &run_id)?;
     cells.retain(|cell| !done.contains(&cell_id(&run_id, cell)));
@@ -133,7 +186,16 @@ pub fn resume_run(plan: &Plan, provider: &dyn ChatProvider) -> Result<RunReport>
     let mut resumed = plan.clone();
     resumed.crash_after = None;
     resumed.cancel_after = None;
-    execute_cells(&resumed, provider, &conn, &suite, &cells, &mut report, true)?;
+    execute_cells(
+        &resumed,
+        provider,
+        &conn,
+        &suite,
+        &cells,
+        &mut report,
+        true,
+        &EngineClock::from_seed(plan.seed),
+    )?;
     Ok(report)
 }
 
@@ -145,8 +207,10 @@ fn execute_cells(
     cells: &[CellSpec],
     report: &mut RunReport,
     resuming: bool,
+    timing: &EngineClock,
 ) -> Result<()> {
     let clock = Clock::new(plan.seed);
+    report.progress.push("started".into());
     let mut spent = if resuming {
         spent_usd(conn, &report.run_id)?
     } else {
@@ -204,7 +268,11 @@ fn execute_cells(
             &cell.configuration,
             report.alias.as_deref(),
         )?;
-        let outcome = execute_cell(plan, provider, cell, &sandbox, &dir, &clock, suite)?;
+        copy_case_inputs(plan, suite, cell, &sandbox, &dir)?;
+        report.progress.push("cell".into());
+        let outcome = execute_cell(plan, provider, cell, &sandbox, &dir, &clock, suite, timing)?;
+        fs::write(dir.join("sandbox-listing.txt"), skills_listing(&sandbox))?;
+        fs::remove_dir_all(&sandbox)?;
         let cost = plan.usd_per_cell.unwrap_or(outcome.cost);
         spent += cost;
         let over_budget = plan.budget_usd.is_some_and(|limit| spent >= limit);
@@ -280,6 +348,7 @@ fn execute_cells(
     aggregate_benchmark(&iteration, &suite.skill_name, &plan.model)?;
     report.status = "done".into();
     report.progress.push("done".into());
+    report.progress.push("finished".into());
     set_run_status(conn, &report.run_id, "done")?;
     Ok(())
 }
@@ -297,6 +366,7 @@ fn execute_cell(
     dir: &Path,
     clock: &Clock,
     suite: &Suite,
+    timing_clock: &EngineClock,
 ) -> Result<CellOutcome> {
     let skilled = cell.configuration == "with_skill";
     let marker = fs::read_to_string(plan.skill_dir.join("SKILL.md")).unwrap_or_default();
@@ -415,14 +485,16 @@ fn execute_cell(
         .iter()
         .map(|name| tool_counts.get(*name).and_then(Value::as_u64).unwrap_or(0))
         .sum();
+    let transcript_body = fs::read_to_string(dir.join("transcript.jsonl")).unwrap_or_default();
+    let (total_steps, errors_encountered) = count_steps(&transcript_body);
     let metrics = json!({
         "tool_calls": {"Read": count_of(&tool_counts, "Read"), "Write": count_of(&tool_counts, "Write"), "Bash": count_of(&tool_counts, "Bash"), "Edit": count_of(&tool_counts, "Edit"), "Glob": count_of(&tool_counts, "Glob"), "Grep": count_of(&tool_counts, "Grep")},
         "total_tool_calls": total_tools,
-        "total_steps": 2,
+        "total_steps": total_steps,
         "files_created": created,
-        "errors_encountered": 0,
+        "errors_encountered": errors_encountered,
         "output_chars": fs::read_to_string(dir.join("outputs").join("answer.txt")).map(|text| text.len()).unwrap_or(0),
-        "transcript_chars": fs::read_to_string(dir.join("transcript.jsonl")).map(|text| text.len()).unwrap_or(0)
+        "transcript_chars": transcript_body.len()
     });
     fs::write(
         dir.join("outputs").join("metrics.json"),
@@ -433,8 +505,8 @@ fn execute_cell(
         "total_tokens": usage.total(),
         "duration_ms": duration_ms,
         "total_duration_seconds": (duration_ms as f64) / 1000.0,
-        "executor_start": "2026-01-15T10:30:00Z",
-        "executor_end": "2026-01-15T10:30:01Z",
+        "executor_start": timing_clock.start_stamp(),
+        "executor_end": timing_clock.end_stamp(),
         "executor_duration_seconds": (duration_ms as f64) / 1000.0
     });
     fs::write(
@@ -485,6 +557,8 @@ fn grade_cell(input: &GradeInput<'_>) -> Result<(Value, f64)> {
     } = *input;
     let mut expectations = Vec::new();
     let mut check_rows = Vec::new();
+    let mut claims = Vec::new();
+    let mut eval_feedback = json!({"suggestions": [], "overall": ""});
     let tool_total = json!({"total": metrics.get("total_tool_calls").cloned().unwrap_or(json!(0))});
     for (index, text) in cell.expectations.iter().enumerate() {
         if let Some(check) = suite.checks.iter().find(|check| &check.expectation == text) {
@@ -494,7 +568,7 @@ fn grade_cell(input: &GradeInput<'_>) -> Result<(Value, f64)> {
                 .push(json!({"text": text, "passed": result.passed, "evidence": result.stdout}));
             let _ = index;
         } else {
-            let prompt = format!("GRADE\nexpectation: {text}\ntranscript:\n{transcript}");
+            let prompt = grader_prompt(text, &cell.prompt, transcript, dir);
             let request = ChatRequest {
                 model: plan.model.clone(),
                 system: Some("You are a grader. Reply with JSON.".into()),
@@ -530,6 +604,24 @@ fn grade_cell(input: &GradeInput<'_>) -> Result<(Value, f64)> {
                     json!({"text": text, "passed": false, "evidence": "grader reply was not JSON"}),
                 );
             expectations.push(json!({"text": row.get("text").and_then(Value::as_str).unwrap_or(text), "passed": row.get("passed").and_then(Value::as_bool).unwrap_or(false), "evidence": row.get("evidence").and_then(Value::as_str).unwrap_or("")}));
+            if let Some(rows) = parsed.get("claims").and_then(Value::as_array) {
+                claims.extend(rows.iter().cloned());
+            }
+            if let Some(feedback) = parsed.get("eval_feedback") {
+                let suggestions = feedback
+                    .get("suggestions")
+                    .and_then(Value::as_array)
+                    .map(|rows| !rows.is_empty())
+                    .unwrap_or(false);
+                let overall = feedback
+                    .get("overall")
+                    .and_then(Value::as_str)
+                    .map(|text| !text.is_empty())
+                    .unwrap_or(false);
+                if suggestions || overall {
+                    eval_feedback = feedback.clone();
+                }
+            }
         }
     }
     fs::write(
@@ -547,9 +639,9 @@ fn grade_cell(input: &GradeInput<'_>) -> Result<(Value, f64)> {
         "summary": {"passed": passed, "failed": total - passed, "total": total, "pass_rate": pass_rate},
         "execution_metrics": metrics,
         "timing": {"executor_duration_seconds": timing.get("executor_duration_seconds").and_then(Value::as_f64).unwrap_or(0.0), "grader_duration_seconds": 0.0, "total_duration_seconds": timing.get("total_duration_seconds").and_then(Value::as_f64).unwrap_or(0.0)},
-        "claims": [],
+        "claims": claims,
         "user_notes_summary": {"uncertainties": [], "needs_review": [], "workarounds": []},
-        "eval_feedback": {"suggestions": [], "overall": ""}
+        "eval_feedback": eval_feedback
     });
     Ok((grading, pass_rate))
 }
@@ -663,6 +755,171 @@ fn inside(sandbox: &Path, relative: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 
+pub fn count_steps(transcript: &str) -> (u64, u64) {
+    let mut steps = 0_u64;
+    let mut errors = 0_u64;
+    for line in transcript.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let kind = value.get("kind").and_then(Value::as_str).unwrap_or("");
+        if kind == "usage" {
+            continue;
+        }
+        steps += 1;
+        if value
+            .get("is_error")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            errors += 1;
+        }
+    }
+    (steps, errors)
+}
+
+pub fn persist_step_metrics(dir: &Path, transcript: &str) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    let (total_steps, errors_encountered) = count_steps(transcript);
+    fs::write(
+        dir.join("metrics.json"),
+        serde_json::to_string_pretty(&json!({
+            "total_steps": total_steps,
+            "errors_encountered": errors_encountered
+        }))?,
+    )?;
+    Ok(())
+}
+
+fn grader_prompt(expectation: &str, task: &str, transcript: &str, dir: &Path) -> String {
+    let notes = fs::read_to_string(dir.join("outputs").join("user_notes.md")).unwrap_or_default();
+    let mut prompt = String::from(
+        "You are the grader for one test run. GRADE each expectation against the transcript \
+and the output files, and critique the expectations themselves. A passing grade on a weak \
+expectation is worse than useless, because it creates false confidence.\n\
+\n\
+Inputs\n\
+- Eval prompt: ",
+    );
+    prompt.push_str(task);
+    prompt.push_str("\n- Expectation: ");
+    prompt.push_str(expectation);
+    prompt.push_str("\n- Transcript:\n<<<\n");
+    prompt.push_str(transcript);
+    prompt.push_str("\n>>>\n- Executor notes:\n");
+    prompt.push_str(&notes);
+    prompt.push_str(
+        "\n\nProcess\n\
+1. Read the transcript completely. Note the task, the steps taken, the final result and any errors.\n\
+2. Examine every output file relevant to an expectation. Do not trust the transcript's description of a file over the file's own contents.\n\
+3. For each expectation, search for evidence and decide PASS or FAIL. PASS needs clear, citable evidence. FAIL when there is no evidence. When uncertain, the burden of proof is on the expectation. No partial credit.\n\
+4. Extract implicit claims the executor made about its own output (factual, process and quality claims) and verify each one against the outputs and transcript.\n\
+5. Summarize the executor notes: uncertainties, items needing review, workarounds.\n\
+6. Critique the evals: an expectation that passed but would also pass for a clearly wrong output; an important outcome no expectation covers; an expectation that cannot be verified.\n\
+7. Write grading.json as a sibling of the outputs directory.\n\
+8. Fold in metrics.json and timing.json. The app fills execution_metrics and timing; do not invent those numbers.\n\
+\n\
+Return JSON only with expectations, claims, and eval_feedback.\n",
+    );
+    prompt
+}
+
+pub fn select_fixture_file(set_dir: &Path, seed: u64) -> Option<PathBuf> {
+    let mut files = Vec::new();
+    let Ok(entries) = fs::read_dir(set_dir) else {
+        return None;
+    };
+    for entry in entries.flatten() {
+        if entry.path().is_file() {
+            files.push(entry.path());
+        }
+    }
+    files.sort();
+    if files.is_empty() {
+        return None;
+    }
+    let index = usize::try_from(seed).unwrap_or(0) % files.len();
+    files.get(index).cloned()
+}
+
+pub fn materialize_fixture(set_dir: &Path, seed: u64, dest: &Path) -> Result<PathBuf> {
+    let chosen =
+        select_fixture_file(set_dir, seed).ok_or_else(|| anyhow!("fixture set is empty"))?;
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(&chosen, dest)?;
+    Ok(chosen)
+}
+
+pub fn run_version_comparison(left: &Path, right: &Path, out: &Path) -> Result<Value> {
+    let left_skill = fs::read_to_string(left.join("SKILL.md")).unwrap_or_default();
+    let right_skill = fs::read_to_string(right.join("SKILL.md")).unwrap_or_default();
+    let body = json!({
+        "kind": "version_versus_version",
+        "left": {"dir": left.file_name().and_then(|name| name.to_str()).unwrap_or(""), "skill": left_skill},
+        "right": {"dir": right.file_name().and_then(|name| name.to_str()).unwrap_or(""), "skill": right_skill}
+    });
+    if let Some(parent) = out.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(out, serde_json::to_string_pretty(&body)?)?;
+    Ok(body)
+}
+
+fn copy_case_inputs(
+    plan: &Plan,
+    suite: &Suite,
+    cell: &CellSpec,
+    sandbox: &Path,
+    dir: &Path,
+) -> Result<()> {
+    if let Some(case) = suite.evals.iter().find(|case| case.id == cell.eval_id) {
+        for file in &case.files {
+            let source = plan.skill_dir.join("evals").join("files").join(file);
+            if source.is_file() {
+                let dest = sandbox.join(file);
+                if let Some(parent) = dest.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::copy(source, dest)?;
+            }
+        }
+    }
+    if let Some(set) = fixture_set(&plan.skill_dir) {
+        if let Some(chosen) = select_fixture_file(&set, plan.seed) {
+            fs::copy(&chosen, sandbox.join("fixture.dat"))?;
+            if let Some(name) = chosen.file_name() {
+                fs::write(
+                    dir.join("chosen-fixture.txt"),
+                    name.to_string_lossy().as_bytes(),
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn fixture_set(skill_dir: &Path) -> Option<PathBuf> {
+    let root = skill_dir.join("fixtures");
+    let mut sets = fs::read_dir(root)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    sets.sort();
+    sets.into_iter().next()
+}
+
+fn skills_listing(sandbox: &Path) -> String {
+    list_files(&sandbox.join(".claude").join("skills")).join("\n")
+}
+
 fn inject_skill(
     skill: &Path,
     sandbox: &Path,
@@ -676,6 +933,10 @@ fn inject_skill(
         return Ok(());
     }
     let folder = alias.unwrap_or(name);
+    if configuration == "old_skill" {
+        copy_dir(&skill.join("skill-snapshot"), &skills.join(folder))?;
+        return Ok(());
+    }
     copy_dir(skill, &skills.join(folder))?;
     Ok(())
 }
@@ -841,16 +1102,20 @@ fn write_pending_grade(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn expand(suite: &Suite, repetitions: u32) -> Vec<CellSpec> {
+fn expand(suite: &Suite, repetitions: u32, skill_dir: &Path) -> Vec<CellSpec> {
+    let mut configurations = vec!["with_skill", "without_skill"];
+    if skill_dir.join("skill-snapshot").is_dir() {
+        configurations.push("old_skill");
+    }
     let mut cells = Vec::new();
     for case in &suite.evals {
         for run_number in 1..=repetitions {
-            for configuration in ["with_skill", "without_skill"] {
+            for configuration in &configurations {
                 cells.push(CellSpec {
                     eval_id: case.id,
                     name: format!("eval-{}", case.id),
                     prompt: case.prompt.clone(),
-                    configuration: configuration.into(),
+                    configuration: (*configuration).to_string(),
                     run_number,
                     expectations: case.expectations.clone(),
                 });
@@ -864,10 +1129,10 @@ fn order_cells(cells: &mut [CellSpec], seed: u64) {
     cells.sort_by_key(|cell| {
         seed ^ (cell.eval_id as u64).wrapping_mul(0x9E37_79B9)
             ^ u64::from(cell.run_number) << 8
-            ^ if cell.configuration == "with_skill" {
-                1
-            } else {
-                2
+            ^ match cell.configuration.as_str() {
+                "with_skill" => 1,
+                "old_skill" => 3,
+                _ => 2,
             }
     });
 }
