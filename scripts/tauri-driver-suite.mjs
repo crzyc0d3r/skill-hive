@@ -29,10 +29,16 @@ const driverWire = net.createServer((socket) => {
     const head = buf.subarray(0, split).toString("utf8");
     const length = Number(head.match(/content-length:\s*(\d+)/i)?.[1] ?? 0);
     if (buf.length < split + 4 + length) return;
+    const body = buf.subarray(split + 4, split + 4 + length).toString("utf8");
+    let text = "driver-draft";
+    if (body.includes("HIVE_INTERVIEW")) text = '{"questions":["Who is the reader?","Which files matter?"]}';
+    else if (body.includes("HIVE_REWRITE")) text = '{"description":"authoring-goal narrowed","changes":["narrowed"]}';
+    else if (body.includes("HIVE_BLIND")) text = '{"winner":"A"}';
+    else if (body.includes("HIVE_ANALYST")) text = '{"notes":[{"text":"The expectation passes in both configurations."}]}';
     const payload = [
       'data: {"type":"message_start","message":{"id":"m","usage":{"input_tokens":1}}}',
       "",
-      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"driver-draft"}}',
+      `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":${JSON.stringify(text)}}}`,
       "",
       'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}',
       "",
@@ -174,21 +180,36 @@ promoteDevToolsPort.scans = 0;
 
 let session;
 const promoter = process.platform === "win32" ? setInterval(promoteDevToolsPort, 200) : null;
-try {
-  const created = await call("POST", "/session", {
-    capabilities: {
-      alwaysMatch: {
-        browserName: "wry",
-        "tauri:options": {
-          application: path.resolve(application),
-          webviewOptions: {
-            userDataFolder: webviewProfile,
-            additionalBrowserArguments: ["--remote-debugging-port=9222", "--remote-allow-origins=*"],
-          },
+const sessionBody = {
+  capabilities: {
+    alwaysMatch: {
+      browserName: "wry",
+      "tauri:options": {
+        application: path.resolve(application),
+        webviewOptions: {
+          userDataFolder: webviewProfile,
+          additionalBrowserArguments: ["--remote-debugging-port=9222", "--remote-allow-origins=*"],
         },
       },
     },
-  });
+  },
+};
+async function openSession() {
+  let last;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await call("POST", "/session", sessionBody);
+    } catch (err) {
+      last = err;
+      const message = String(err?.message ?? err);
+      if (!message.includes("session not created") && !message.includes("EOF while parsing")) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  throw last;
+}
+try {
+  const created = await openSession();
   session = created.value?.sessionId ?? created.sessionId;
   if (!session) throw new Error(`no session id in ${JSON.stringify(created)}`);
   let prefix = `/session/${session}`;
@@ -355,20 +376,8 @@ try {
   }
   async function restart() {
     await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE" }).catch(() => {});
-    const created = await call("POST", "/session", {
-      capabilities: {
-        alwaysMatch: {
-          browserName: "wry",
-          "tauri:options": {
-            application: path.resolve(application),
-            webviewOptions: {
-              userDataFolder: webviewProfile,
-              additionalBrowserArguments: ["--remote-debugging-port=9222", "--remote-allow-origins=*"],
-            },
-          },
-        },
-      },
-    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const created = await openSession();
     session = created.value?.sessionId ?? created.sessionId;
     prefix = `/session/${session}`;
     await find("[data-testid=sidebar]");
