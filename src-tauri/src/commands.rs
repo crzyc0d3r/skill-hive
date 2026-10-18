@@ -284,7 +284,8 @@ fn scan(store: &SkillStore) -> Result<Vec<ScannedSkill>, AppError> {
         .iter()
         .map(|(key, path)| (key.as_str(), path.as_path()))
         .collect();
-    let found = scanner::scan_roots(store, &refs).map_err(|err| AppError::io(err.to_string()))?;
+    let found = scanner::scan_roots_with_central(store, &refs, Some(&central_repo::skills_dir()))
+        .map_err(|err| AppError::io(err.to_string()))?;
     store.clear_discovered().map_err(db)?;
     for skill in &found {
         store
@@ -1234,6 +1235,20 @@ pub fn apply_available_in(store: &SkillStore) -> Result<u32, AppError> {
             continue;
         };
         if !source.join("SKILL.md").is_file() && !source.is_dir() {
+            continue;
+        }
+        let held =
+            hive_core::core::removals::removed_paths(Path::new(&skill.central_path), &source)
+                .map_err(|err| AppError::io(err.to_string()))?;
+        if !held.is_empty() {
+            store
+                .update_skill_check_state(
+                    &skill.id,
+                    None,
+                    "pending_removals",
+                    Some(&held.join("\n")),
+                )
+                .map_err(db)?;
             continue;
         }
         copy_source_tree(&source, Path::new(&skill.central_path))?;
@@ -2775,6 +2790,32 @@ mod tests {
         assert!(fs::read_to_string(central.join("SKILL.md"))
             .unwrap()
             .contains("later"));
+        fs::write(central.join("keep.txt"), "mine\n").unwrap();
+        fs::write(
+            source.join("SKILL.md"),
+            "---\nname: notes\n---\nremoved-file\n",
+        )
+        .unwrap();
+        store.set_skill_checked_at("notes", 1).unwrap();
+        assert_eq!(
+            super::maybe_run_auto_update(&store, 20_000 + 86_400_000 * 2).unwrap(),
+            1
+        );
+        assert_eq!(
+            fs::read_to_string(central.join("keep.txt")).unwrap(),
+            "mine\n"
+        );
+        assert!(!fs::read_to_string(central.join("SKILL.md"))
+            .unwrap()
+            .contains("removed-file"));
+        assert_eq!(
+            store
+                .get_skill_by_id("notes")
+                .unwrap()
+                .unwrap()
+                .update_status,
+            "pending_removals"
+        );
 
         let (repo, subpath) =
             super::normalize_install_source("https://skills.sh/acme/widgets/helper");

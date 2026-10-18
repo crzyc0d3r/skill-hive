@@ -71,25 +71,35 @@ fn build_menu(
             tools.len()
         })
         .unwrap_or(0);
-    let model = build_tray_menu_from_data(skill_count, update_count, agent_count, &borrowed);
+    let active = store.get_active_scenario_id().ok().flatten();
+    let model = build_tray_menu_from_data(
+        skill_count,
+        update_count,
+        agent_count,
+        &borrowed,
+        active.as_deref(),
+    );
     let status = MenuItem::with_id(app, "status", label(&model, "status"), false, None::<&str>)?;
     let updates = MenuItem::with_id(app, "updates", label(&model, "updates"), true, None::<&str>)?;
     let mut preset_items: Vec<MenuItem<tauri::Wry>> = Vec::new();
     for (id, name) in &pairs {
-        preset_items.push(MenuItem::with_id(
-            app,
-            format!("apply:{id}"),
-            format!("Apply {name}"),
-            true,
-            None::<&str>,
-        )?);
-        preset_items.push(MenuItem::with_id(
-            app,
-            format!("remove:{id}"),
-            format!("Remove {name}"),
-            true,
-            None::<&str>,
-        )?);
+        if active.as_deref() == Some(id.as_str()) {
+            preset_items.push(MenuItem::with_id(
+                app,
+                format!("remove:{id}"),
+                format!("Remove {name}"),
+                true,
+                None::<&str>,
+            )?);
+        } else {
+            preset_items.push(MenuItem::with_id(
+                app,
+                format!("apply:{id}"),
+                format!("Apply {name}"),
+                true,
+                None::<&str>,
+            )?);
+        }
     }
     let preset_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = preset_items
         .iter()

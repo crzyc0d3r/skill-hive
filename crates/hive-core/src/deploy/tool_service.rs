@@ -124,15 +124,17 @@ pub fn disable_all(store: &SkillStore) -> Result<()> {
 }
 
 pub fn reorder_tools(store: &SkillStore, keys: &[String]) -> Result<()> {
-    store.set_setting("tool_order", &serde_json::to_string(&keys)?)?;
-    Ok(())
+    crate::core::tool_service::set_tool_order(store, keys)
+        .map_err(|err| anyhow::anyhow!(err.to_string()))
 }
 
 pub fn set_tool_path(store: &SkillStore, key: &str, path: &str) -> Result<()> {
+    let path = crate::core::tool_service::normalize_skills_dir_input(path)
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
     let mut paths = custom_tool_paths(store);
-    paths.insert(key.to_string(), path.to_string());
-    store.set_setting("custom_tool_paths", &serde_json::to_string(&paths)?)?;
-    Ok(())
+    paths.insert(key.to_string(), path);
+    crate::core::tool_service::set_custom_tool_paths(store, &paths)
+        .map_err(|err| anyhow::anyhow!(err.to_string()))
 }
 
 pub fn reset_tool_path(store: &SkillStore, key: &str) -> Result<()> {
@@ -143,10 +145,19 @@ pub fn reset_tool_path(store: &SkillStore, key: &str) -> Result<()> {
 }
 
 pub fn set_project_path(store: &SkillStore, key: &str, path: &str) -> Result<()> {
+    let path = crate::core::tool_service::normalize_project_relative_skills_dir_input(path)
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
     let mut paths = custom_tool_project_paths(store);
-    paths.insert(key.to_string(), path.to_string());
-    store.set_setting("custom_tool_project_paths", &serde_json::to_string(&paths)?)?;
-    Ok(())
+    match path {
+        Some(path) => {
+            paths.insert(key.to_string(), path);
+        }
+        None => {
+            paths.remove(key);
+        }
+    }
+    crate::core::tool_service::set_custom_tool_project_paths(store, &paths)
+        .map_err(|err| anyhow::anyhow!(err.to_string()))
 }
 
 pub fn add_custom_tool(store: &SkillStore, def: CustomToolDef) -> Result<CustomAdd> {
@@ -161,7 +172,8 @@ pub fn add_custom_tool(store: &SkillStore, def: CustomToolDef) -> Result<CustomA
         return Ok(CustomAdd::SkippedCollision);
     }
     customs.push(def);
-    store.set_setting("custom_tools", &serde_json::to_string(&customs)?)?;
+    crate::core::tool_service::set_custom_tools(store, &customs)
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
     Ok(CustomAdd::Added)
 }
 

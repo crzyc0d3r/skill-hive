@@ -313,12 +313,9 @@ pub fn run() {
                     central_repo::set_runtime_base_dir_override(Some(PathBuf::from(base)));
                 }
             }
-            central_repo::ensure_central_repo(true).map_err(box_err)?;
-            let db = central_repo::db_path();
-            if let Some(parent) = db.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let store = Arc::new(SkillStore::new(&db).map_err(box_err)?);
+            let (store, timings) =
+                hive_core::core::app_state::initialize_store().map_err(box_err)?;
+            timings.log();
             app.manage(store.clone());
             let watched = store.clone();
             std::thread::spawn(move || loop {
@@ -328,12 +325,22 @@ pub fn run() {
                     .map(|elapsed| elapsed.as_millis() as i64)
                     .unwrap_or(0);
                 let _ = commands::maybe_run_auto_update(&watched, now);
+                let _ = hive_core::backup::auto_backup::maybe_run_auto_backup(
+                    &watched,
+                    &central_repo::skills_dir(),
+                    (now.max(0) as u64) / 1000,
+                );
             });
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|elapsed| elapsed.as_millis() as i64)
                 .unwrap_or(0);
             let _ = commands::maybe_run_auto_update(&store, now);
+            let _ = hive_core::backup::auto_backup::maybe_run_auto_backup(
+                &store,
+                &central_repo::skills_dir(),
+                (now.max(0) as u64) / 1000,
+            );
             start_file_watcher(Arc::new(TauriNotifier(app.handle().clone())), store);
             if let Ok(dir) = app.path().app_log_dir() {
                 hive_core::util::panic_log::install_panic_hook(dir);
