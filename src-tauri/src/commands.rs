@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -183,6 +184,15 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
             .collect();
         agents.sort();
         agents.dedup();
+        let files = skill_tree_files(
+            Path::new(&skill.central_path),
+            source_dir(&skill).as_deref(),
+        );
+        let source_body = files
+            .iter()
+            .find(|file| file.path == "SKILL.md")
+            .map(|file| file.remote.clone())
+            .unwrap_or_else(|| body.clone());
         skills.push(ManagedSkill {
             id: skill.id.clone(),
             name: skill.name.clone(),
@@ -190,12 +200,8 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
             source: skill.source_type.clone(),
             tags: tags.get(&skill.id).cloned().unwrap_or_default(),
             enabled: skill.enabled,
-            source_body: body.clone(),
-            files: vec![SkillFile {
-                path: "SKILL.md".into(),
-                local: body.clone(),
-                remote: body.clone(),
-            }],
+            source_body,
+            files,
             body,
             agents,
             updated_at: skill.updated_at,
@@ -204,6 +210,63 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
     }
     skills.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(skills)
+}
+
+fn skill_tree_files(central: &Path, source: Option<&Path>) -> Vec<SkillFile> {
+    let mut files = Vec::new();
+    collect_skill_files(central, central, source, &mut files);
+    if let Some(source) = source {
+        let mut remote_only = Vec::new();
+        collect_skill_files(source, source, Some(source), &mut remote_only);
+        for file in remote_only {
+            if files.iter().any(|existing| existing.path == file.path) {
+                continue;
+            }
+            files.push(SkillFile {
+                path: file.path,
+                local: String::new(),
+                remote: file.remote,
+            });
+        }
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    files
+}
+
+fn collect_skill_files(root: &Path, dir: &Path, source: Option<&Path>, files: &mut Vec<SkillFile>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == ".git" || name == ".skill-hive" || name == "node_modules" {
+            continue;
+        }
+        if path.is_dir() {
+            collect_skill_files(root, &path, source, files);
+            continue;
+        }
+        if !path.is_file() {
+            continue;
+        }
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let local = std::fs::read_to_string(&path).unwrap_or_default();
+        let remote = source
+            .map(|root| root.join(&relative))
+            .filter(|path| path.is_file())
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .unwrap_or_else(|| local.clone());
+        files.push(SkillFile {
+            path: relative,
+            local,
+            remote,
+        });
+    }
 }
 
 fn scan(store: &SkillStore) -> Result<Vec<ScannedSkill>, AppError> {
@@ -594,9 +657,39 @@ pub fn import_all_discovered(store: State<'_, Arc<SkillStore>>) -> Result<Vec<St
     scanner::import_all(store, &root(), &found).map_err(|err| AppError::io(err.to_string()))
 }
 
+pub fn normalize_install_source(url: &str) -> (String, Option<String>) {
+    let trimmed = url.trim();
+    let bare = trimmed
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    let Some(rest) = bare.strip_prefix("skills.sh/") else {
+        return (trimmed.to_string(), None);
+    };
+    let parts: Vec<&str> = rest.split('/').filter(|part| !part.is_empty()).collect();
+    if parts.len() < 2 {
+        return (trimmed.to_string(), None);
+    }
+    let repo = format!("https://github.com/{}/{}", parts[0], parts[1]);
+    let subpath = if parts.len() > 2 {
+        Some(parts[2..].join("/"))
+    } else {
+        None
+    };
+    (repo, subpath)
+}
+
 #[tauri::command]
 pub fn preview_git_install(url: String) -> Result<GitPreviewDto, AppError> {
-    preview_repository(&url)
+    let (source, subpath) = normalize_install_source(&url);
+    let mut preview = preview_repository(&source)?;
+    if let Some(subpath) = subpath {
+        preview.skills.retain(|skill| {
+            skill.relative == subpath
+                || skill.relative.ends_with(&format!("/{subpath}"))
+                || skill.name == subpath
+        });
+    }
+    Ok(preview)
 }
 
 #[tauri::command]
@@ -648,8 +741,42 @@ pub fn cancel_install(preview_id: Option<String>) -> Result<bool, AppError> {
             }
             return Ok(true);
         }
+        drop(guard);
+        if cancel_registered_install(&id) {
+            if id == "market" || id.starts_with("market:") {
+                let _ = cancel_market_install();
+            }
+            return Ok(true);
+        }
     }
     Ok(false)
+}
+
+static INSTALLS: Mutex<BTreeMap<String, bool>> = Mutex::new(BTreeMap::new());
+
+pub fn register_install(key: &str) {
+    if let Ok(mut installs) = INSTALLS.lock() {
+        installs.insert(key.to_string(), false);
+    }
+}
+
+pub fn install_is_cancelled(key: &str) -> bool {
+    INSTALLS
+        .lock()
+        .ok()
+        .and_then(|installs| installs.get(key).copied())
+        .unwrap_or(false)
+}
+
+fn cancel_registered_install(key: &str) -> bool {
+    let Ok(mut installs) = INSTALLS.lock() else {
+        return false;
+    };
+    if !installs.contains_key(key) {
+        return false;
+    }
+    installs.insert(key.to_string(), true);
+    true
 }
 
 #[tauri::command]
@@ -802,11 +929,30 @@ pub fn create_preset(name: String, store: State<'_, Arc<SkillStore>>) -> Result<
 pub fn update_preset(
     id: String,
     name: String,
+    description: Option<String>,
+    icon: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
+    update_preset_record(store.inner(), &id, &name, description, icon)
+}
+
+pub fn update_preset_record(
+    store: &SkillStore,
+    id: &str,
+    name: &str,
+    description: Option<String>,
+    icon: Option<String>,
+) -> Result<(), AppError> {
+    let existing = store
+        .get_all_scenarios()
+        .map_err(db)?
+        .into_iter()
+        .find(|row| row.id == id);
+    let description =
+        description.or_else(|| existing.as_ref().and_then(|row| row.description.clone()));
+    let icon = icon.or_else(|| existing.as_ref().and_then(|row| row.icon.clone()));
     store
-        .inner()
-        .update_scenario(&id, name.trim(), None, None)
+        .update_scenario(id, name.trim(), description.as_deref(), icon.as_deref())
         .map_err(db)
 }
 
@@ -973,7 +1119,27 @@ fn source_dir(skill: &SkillRecord) -> Option<PathBuf> {
     }
 }
 
+fn check_ttl_ms(store: &SkillStore) -> i64 {
+    store
+        .get_setting("update_check_ttl_minutes")
+        .ok()
+        .flatten()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|minutes| *minutes > 0)
+        .map(|minutes| minutes.saturating_mul(60_000))
+        .unwrap_or(0)
+}
+
 fn remember_check(store: &SkillStore, skill: &SkillRecord) -> Result<String, AppError> {
+    let ttl = check_ttl_ms(store);
+    if ttl > 0 {
+        if let Some(checked) = skill.last_checked_at {
+            let status = skill.update_status.trim();
+            if now().saturating_sub(checked) < ttl && !status.is_empty() && status != "unknown" {
+                return Ok(status.to_string());
+            }
+        }
+    }
     let (status, detail) =
         skill_check::classify_dirs(Path::new(&skill.central_path), source_dir(skill).as_deref());
     store
@@ -990,6 +1156,35 @@ fn apply_engine_preference(store: &SkillStore) {
         .unwrap_or_default();
     let proxy = store.get_setting("proxy_url").ok().flatten();
     hive_core::core::git2_engine::set_preference(engine == "git2", proxy);
+}
+
+pub fn maybe_run_auto_update(store: &SkillStore, now_ms: i64) -> Result<u32, AppError> {
+    let interval = store
+        .get_setting("auto_update_interval")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    if interval != "daily" {
+        return Ok(0);
+    }
+    let last = store
+        .get_setting("auto_update_last_run_ms")
+        .ok()
+        .flatten()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
+    if last > 0 && now_ms.saturating_sub(last) < 86_400_000 {
+        return Ok(0);
+    }
+    store
+        .set_setting("auto_update_last_run_ms", &now_ms.to_string())
+        .map_err(db)?;
+    let found = check_updates_in(store)?;
+    let apply = store.get_setting("auto_update_apply").ok().flatten();
+    if matches!(apply.as_deref(), Some("1") | Some("true")) {
+        apply_available_in(store)?;
+    }
+    Ok(found)
 }
 
 pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
@@ -1024,7 +1219,10 @@ pub fn check_skill_update(
 
 #[tauri::command]
 pub fn apply_available_skill_updates(store: State<'_, Arc<SkillStore>>) -> Result<u32, AppError> {
-    let store = store.inner();
+    apply_available_in(store.inner())
+}
+
+pub fn apply_available_in(store: &SkillStore) -> Result<u32, AppError> {
     let skills = store.get_all_skills().map_err(db)?;
     let mut applied = 0u32;
     for skill in skills {
@@ -1160,19 +1358,25 @@ pub fn git_backup_restore_version(tag: String) -> Result<String, AppError> {
 }
 
 #[tauri::command]
-pub fn git_backup_set_remote(url: String) -> Result<(), AppError> {
+pub fn git_backup_set_remote(
+    url: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<(), AppError> {
     let path = backup_repo();
     ensure_backup_repo(&path)?;
-    git_backup::set_remote(&path, url.trim()).map_err(|err| AppError::git(err.to_string()))
+    git_backup::set_remote(&path, url.trim()).map_err(|err| AppError::git(err.to_string()))?;
+    store
+        .set_setting("git_backup_remote_url", url.trim())
+        .map_err(db)
 }
 
 #[tauri::command]
-pub fn git_backup_remove_remote() -> Result<(), AppError> {
+pub fn git_backup_remove_remote(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
     let path = backup_repo();
     if path.join(".git").exists() {
         git_backup::remove_remote(&path).map_err(|err| AppError::git(err.to_string()))?;
     }
-    Ok(())
+    store.set_setting("git_backup_remote_url", "").map_err(db)
 }
 
 #[tauri::command]
@@ -1286,6 +1490,7 @@ pub fn search_skillssh(query: String, limit: Option<u32>) -> Result<Vec<MarketDt
 fn install_market_work(
     source: &str,
     name: &str,
+    subpath: Option<&str>,
     store: &SkillStore,
 ) -> Result<InstalledDto, AppError> {
     MARKET_CANCEL.store(false, Ordering::SeqCst);
@@ -1294,7 +1499,11 @@ fn install_market_work(
         return Err(AppError::invalid_input("marketplace install cancelled"));
     }
     if Path::new(&raw).is_dir() {
-        let installed = installer::install_from_local(Path::new(&raw), None)
+        let folder = match subpath.filter(|value| !value.is_empty()) {
+            Some(subpath) => Path::new(&raw).join(subpath),
+            None => PathBuf::from(&raw),
+        };
+        let installed = installer::install_from_local(&folder, None)
             .map_err(|err| AppError::io(err.to_string()))?;
         let dto = persist_install(store, &installed, "skillssh", Some(raw.clone()))?;
         store
@@ -1341,6 +1550,14 @@ fn install_market_work(
     let folder = dirs
         .iter()
         .find(|dir| {
+            if let Some(subpath) = subpath.filter(|value| !value.is_empty()) {
+                let relative = dir
+                    .strip_prefix(&dest)
+                    .unwrap_or(dir)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                return relative == subpath || relative.ends_with(&format!("/{subpath}"));
+            }
             read_skill_document(dir)
                 .map(|doc| doc.name == sanitize_skill_name(name))
                 .unwrap_or(false)
@@ -1368,9 +1585,15 @@ fn set_market_status(value: &str) {
 pub fn install_from_skillssh(
     source: String,
     name: String,
+    subpath: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<InstalledDto, AppError> {
-    install_market_work(&source, &name, store.inner())
+    let key = format!("market:{source}");
+    register_install(&key);
+    if install_is_cancelled(&key) {
+        return Err(AppError::invalid_input("marketplace install cancelled"));
+    }
+    install_market_work(&source, &name, subpath.as_deref(), store.inner())
 }
 
 #[tauri::command]
@@ -1382,7 +1605,7 @@ pub fn begin_market_install(
     set_market_status("running");
     let store = Arc::clone(store.inner());
     std::thread::spawn(move || {
-        let status = match install_market_work(&source, &name, &store) {
+        let status = match install_market_work(&source, &name, None, &store) {
             Ok(installed) => format!("installed:{}:{}", installed.id, installed.name),
             Err(err) => format!("error:{err}"),
         };
@@ -1657,19 +1880,19 @@ pub fn apply_optimized_description(description: String) -> Result<String, AppErr
             skill_name: "optimized".into(),
             evals: vec![SuiteCase {
                 id: 1,
-                prompt: description.into(),
-                expected_output: "applied".into(),
+                prompt: description.to_string(),
+                expected_output: description.to_string(),
                 files: Vec::new(),
-                expectations: vec!["applied".into()],
+                expectations: vec![description.to_string()],
             }],
             triggers: vec![TriggerRow {
-                query: "suite".into(),
+                query: description.to_string(),
                 should_trigger: true,
                 rationale: None,
             }],
             checks: vec![CheckSpec {
-                id: "applied".into(),
-                expectation: "applied".into(),
+                id: "description".into(),
+                expectation: description.to_string(),
                 kind: "text".into(),
                 path: "SKILL.md".into(),
                 pattern: None,
@@ -2447,6 +2670,142 @@ mod tests {
                 .update_status,
             "current"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn update_checks_honor_ttl_and_daily_auto_apply_writes_the_library() {
+        use hive_core::db::skill_store::{SkillRecord, SkillStore};
+
+        let root = std::env::temp_dir().join(format!(
+            "skill-hive-ttl-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_millis())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let central = root.join("central");
+        let source = root.join("source");
+        fs::create_dir_all(&central).unwrap();
+        fs::create_dir_all(&source).unwrap();
+        fs::write(central.join("SKILL.md"), "---\nname: notes\n---\nold\n").unwrap();
+        fs::write(source.join("SKILL.md"), "---\nname: notes\n---\nnew\n").unwrap();
+        let store = SkillStore::new(&root.join("hive.db")).unwrap();
+        store
+            .insert_skill(&SkillRecord {
+                id: "notes".into(),
+                name: "notes".into(),
+                description: None,
+                source_type: "local".into(),
+                source_ref: Some(source.to_string_lossy().to_string()),
+                source_ref_resolved: None,
+                source_subpath: None,
+                source_branch: None,
+                source_revision: None,
+                remote_revision: None,
+                central_path: central.to_string_lossy().to_string(),
+                content_hash: None,
+                enabled: true,
+                created_at: 1,
+                updated_at: 1,
+                status: "managed".into(),
+                update_status: "unknown".into(),
+                last_checked_at: None,
+                last_check_error: None,
+            })
+            .unwrap();
+        store.set_setting("update_check_ttl_minutes", "60").unwrap();
+        assert_eq!(super::check_updates_in(&store).unwrap(), 1);
+        fs::write(source.join("SKILL.md"), "---\nname: notes\n---\nold\n").unwrap();
+        assert_eq!(super::check_updates_in(&store).unwrap(), 1);
+        assert_eq!(
+            store
+                .get_skill_by_id("notes")
+                .unwrap()
+                .unwrap()
+                .update_status,
+            "update_available"
+        );
+        store.set_skill_checked_at("notes", 1).unwrap();
+        assert_eq!(super::check_updates_in(&store).unwrap(), 0);
+        assert_eq!(
+            store
+                .get_skill_by_id("notes")
+                .unwrap()
+                .unwrap()
+                .update_status,
+            "current"
+        );
+        fs::write(source.join("notes.md"), "remote notes\n").unwrap();
+        let listed = super::managed(&store).unwrap();
+        let skill = listed.iter().find(|row| row.id == "notes").unwrap();
+        assert!(skill.files.iter().any(|file| file.path == "notes.md"));
+        assert_eq!(
+            skill
+                .files
+                .iter()
+                .find(|file| file.path == "notes.md")
+                .unwrap()
+                .remote,
+            "remote notes\n"
+        );
+
+        fs::write(source.join("SKILL.md"), "---\nname: notes\n---\napplied\n").unwrap();
+        store.set_setting("auto_update_interval", "daily").unwrap();
+        store.set_setting("auto_update_apply", "1").unwrap();
+        store.set_setting("update_check_ttl_minutes", "0").unwrap();
+        store.set_skill_checked_at("notes", 1).unwrap();
+        assert_eq!(super::maybe_run_auto_update(&store, 10_000).unwrap(), 1);
+        assert!(fs::read_to_string(central.join("SKILL.md"))
+            .unwrap()
+            .contains("applied"));
+        fs::write(source.join("SKILL.md"), "---\nname: notes\n---\nlater\n").unwrap();
+        assert_eq!(super::maybe_run_auto_update(&store, 20_000).unwrap(), 0);
+        assert!(!fs::read_to_string(central.join("SKILL.md"))
+            .unwrap()
+            .contains("later"));
+        store.set_skill_checked_at("notes", 1).unwrap();
+        assert_eq!(
+            super::maybe_run_auto_update(&store, 20_000 + 86_400_000).unwrap(),
+            1
+        );
+        assert!(fs::read_to_string(central.join("SKILL.md"))
+            .unwrap()
+            .contains("later"));
+
+        let (repo, subpath) =
+            super::normalize_install_source("https://skills.sh/acme/widgets/helper");
+        assert_eq!(repo, "https://github.com/acme/widgets");
+        assert_eq!(subpath.as_deref(), Some("helper"));
+        super::register_install("market:acme/widgets");
+        assert!(super::cancel_install(Some("market:acme/widgets".into())).unwrap());
+        assert!(super::install_is_cancelled("market:acme/widgets"));
+
+        store
+            .insert_scenario(&hive_core::db::skill_store::ScenarioRecord {
+                id: "preset-keep".into(),
+                name: "Keep".into(),
+                description: Some("kept".into()),
+                icon: Some("book".into()),
+                sort_order: 0,
+                created_at: 1,
+                updated_at: 1,
+            })
+            .unwrap();
+        super::update_preset_record(&store, "preset-keep", "Renamed", None, None).unwrap();
+        let preset = store
+            .get_all_scenarios()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == "preset-keep")
+            .unwrap();
+        assert_eq!(preset.name, "Renamed");
+        assert_eq!(preset.description.as_deref(), Some("kept"));
+        assert_eq!(preset.icon.as_deref(), Some("book"));
+
         let _ = fs::remove_dir_all(root);
     }
 }

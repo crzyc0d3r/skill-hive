@@ -312,6 +312,15 @@ impl SkillStore {
         Ok(())
     }
 
+    pub fn set_skill_checked_at(&self, id: &str, at_ms: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE skills SET last_checked_at = ?1 WHERE id = ?2",
+            params![at_ms, id],
+        )?;
+        Ok(())
+    }
+
     pub fn update_skill_check_state(
         &self,
         id: &str,

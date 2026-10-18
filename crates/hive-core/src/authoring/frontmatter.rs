@@ -278,7 +278,14 @@ fn parse_keys(doc: &mut Document, start: usize, end: usize) -> Result<(), String
                 if let Some(item) = next.trim().strip_prefix("- ") {
                     seq.push(unquote(item.trim()).to_string());
                 } else if let Some((child, value)) = split_key(next.trim()) {
-                    map.push((child, unquote(value.trim()).to_string()));
+                    let raw = value.trim();
+                    let text = unquote(raw).to_string();
+                    let stored = if map_value_is_string(raw) {
+                        text
+                    } else {
+                        format!("\u{1}{text}")
+                    };
+                    map.push((child, stored));
                 } else {
                     return Err(format!("invalid YAML at line {}", content_end + 1));
                 }
@@ -312,6 +319,19 @@ fn parse_keys(doc: &mut Document, start: usize, end: usize) -> Result<(), String
         index += 1;
     }
     Ok(())
+}
+
+fn map_value_is_string(raw: &str) -> bool {
+    if (raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2)
+        || (raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2)
+    {
+        return true;
+    }
+    match raw {
+        "true" | "True" | "TRUE" | "yes" | "on" | "false" | "False" | "FALSE" | "no" | "off"
+        | "~" | "null" | "Null" | "NULL" => false,
+        _ => raw.parse::<i64>().is_err() && !raw.starts_with('[') && !raw.starts_with('{'),
+    }
 }
 
 fn parse_inline(raw: &str) -> Result<Scalar, String> {

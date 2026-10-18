@@ -12,7 +12,8 @@ use super::skill::{
     resolve_inside, template_ids, BuiltInTemplate, Deployment,
 };
 use super::validator::{
-    first_qv_error, validate_agent, validate_command_file, validate_skill, Profile, Severity,
+    directory_is_safe, first_qv_error, validate_agent, validate_command_file, validate_skill,
+    Profile, Severity,
 };
 use super::versions::{
     export_history_json, hide_version, restore_version, save_autosave, VersionStore,
@@ -254,9 +255,11 @@ fn rename_refuses_unsafe_names_and_updates_evals() {
         r#"{"skill_name":"demo","evals":[]}"#,
     )
     .unwrap();
-    let err = rename_skill(&dir, "Bad Name").unwrap_err();
+    let err = rename_skill(&dir, "CON").unwrap_err();
     assert!(matches!(err.kind, ErrorKind::InvalidInput));
-    let moved = rename_skill(&dir, "demo-renamed").unwrap();
+    let spaced = rename_skill(&dir, "Bad Name").unwrap();
+    assert_eq!(spaced.file_name().unwrap().to_string_lossy(), "Bad Name");
+    let moved = rename_skill(&spaced, "demo-renamed").unwrap();
     let text = fs::read_to_string(moved.join("SKILL.md")).unwrap();
     assert!(text.contains("name: demo-renamed"));
     assert!(fs::read_to_string(moved.join("evals").join("evals.json"))
@@ -464,7 +467,7 @@ fn body_gauge_references_and_silent_skip_reasons() {
         "gauge",
         &[("SKILL.md", &{
             let mut body = "---\nname: gauge\ndescription: A long body.\n---\n".to_string();
-            for index in 0..500 {
+            for index in 0..501 {
                 body.push_str(&format!("line {index}\n"));
             }
             body
@@ -548,6 +551,207 @@ fn quick_validate(dir: &Path) -> Qv {
         ok: parsed["ok"].as_bool().unwrap_or(false),
         rule: parsed["rule"].as_str().unwrap_or("").to_string(),
     }
+}
+
+#[test]
+fn plan_rules_keep_safe_names_and_report_the_remaining_cases() {
+    assert!(directory_is_safe("My Skill"));
+    assert!(directory_is_safe("技能-测试"));
+    assert!(directory_is_safe("my-skill"));
+    assert!(!directory_is_safe("CON"));
+    assert!(!directory_is_safe("foo:bar"));
+    assert!(!directory_is_safe(""));
+
+    let tmp = tempfile::tempdir().unwrap();
+    write_skill(
+        tmp.path(),
+        "typed-meta",
+        &[(
+            "SKILL.md",
+            "---\nname: typed-meta\ndescription: Numbers are not strings.\nmetadata:\n  count: 1\n  ready: true\n---\n",
+        )],
+    );
+    assert!(
+        validate_skill(&tmp.path().join("typed-meta"), Profile::Portable)
+            .iter()
+            .any(|finding| finding.rule_id == "S-21")
+    );
+
+    write_skill(
+        tmp.path(),
+        "comma-tools",
+        &[(
+            "SKILL.md",
+            "---\nname: comma-tools\ndescription: Commas are not spaces.\nallowed-tools: Bash,Read\n---\n",
+        )],
+    );
+    assert!(
+        validate_skill(&tmp.path().join("comma-tools"), Profile::Portable)
+            .iter()
+            .any(|finding| finding.rule_id == "S-22")
+    );
+    write_skill(
+        tmp.path(),
+        "number-tools",
+        &[(
+            "SKILL.md",
+            "---\nname: number-tools\ndescription: A number is not a tool list.\nallowed-tools: 1\n---\n",
+        )],
+    );
+    assert!(
+        validate_skill(&tmp.path().join("number-tools"), Profile::Portable)
+            .iter()
+            .any(|finding| finding.rule_id == "S-22")
+    );
+
+    write_skill(
+        tmp.path(),
+        "unknown-agent",
+        &[(
+            "SKILL.md",
+            "---\nname: unknown-agent\ndescription: Unknown agent.\nagent: made-up\ncontext: fork\n---\n",
+        )],
+    );
+    assert!(
+        validate_skill(&tmp.path().join("unknown-agent"), Profile::ClaudeCode)
+            .iter()
+            .any(|finding| finding.rule_id == "S-25")
+    );
+    let agents = tmp.path().join(".claude").join("agents");
+    fs::create_dir_all(&agents).unwrap();
+    fs::write(
+        agents.join("field-notes.md"),
+        "---\nname: field-notes\n---\n",
+    )
+    .unwrap();
+    write_skill(
+        tmp.path(),
+        "known-agent",
+        &[(
+            "SKILL.md",
+            "---\nname: known-agent\ndescription: Known agent.\nagent: field-notes\ncontext: fork\n---\n",
+        )],
+    );
+    assert!(
+        !validate_skill(&tmp.path().join("known-agent"), Profile::ClaudeCode)
+            .iter()
+            .any(|finding| finding.rule_id == "S-25")
+    );
+
+    let mut exact =
+        "---\nname: exact-five-hundred\ndescription: Exactly 500 lines.\n---\n".to_string();
+    for index in 0..500 {
+        exact.push_str(&format!("line {index}\n"));
+    }
+    write_skill(tmp.path(), "exact-five-hundred", &[("SKILL.md", &exact)]);
+    assert!(
+        !validate_skill(&tmp.path().join("exact-five-hundred"), Profile::Portable)
+            .iter()
+            .any(|finding| finding.rule_id == "S-27")
+    );
+
+    let mut long = String::new();
+    for index in 0..301 {
+        long.push_str(&format!("paragraph {index}\n"));
+    }
+    write_skill(
+        tmp.path(),
+        "nested-md",
+        &[
+            (
+                "SKILL.md",
+                "---\nname: nested-md\ndescription: Nested markdown.\n---\n",
+            ),
+            ("docs/guide.md", &long),
+        ],
+    );
+    assert!(
+        validate_skill(&tmp.path().join("nested-md"), Profile::Portable)
+            .iter()
+            .any(|finding| finding.rule_id == "S-29")
+    );
+
+    write_skill(
+        tmp.path(),
+        "same-dir",
+        &[(
+            "SKILL.md",
+            "---\nname: same-dir\ndescription: Same directory reference.\n---\nSee notes.md for the rest.\n",
+        )],
+    );
+    assert!(
+        validate_skill(&tmp.path().join("same-dir"), Profile::Portable)
+            .iter()
+            .any(|finding| finding.rule_id == "S-30" && finding.message.contains("notes.md"))
+    );
+
+    let script = tmp
+        .path()
+        .join("bare-script")
+        .join("scripts")
+        .join("nested");
+    fs::create_dir_all(&script).unwrap();
+    write_skill(
+        tmp.path(),
+        "bare-script",
+        &[(
+            "SKILL.md",
+            "---\nname: bare-script\ndescription: Bare script.\n---\n",
+        )],
+    );
+    let bare = script.join("run");
+    fs::write(&bare, "echo hi\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&bare).unwrap().permissions();
+        permissions.set_mode(0o644);
+        fs::set_permissions(&bare, permissions).unwrap();
+        assert!(
+            validate_skill(&tmp.path().join("bare-script"), Profile::Portable)
+                .iter()
+                .any(|finding| finding.rule_id == "S-32" && finding.path.contains("run"))
+        );
+    }
+
+    write_skill(
+        tmp.path(),
+        "empty-grade",
+        &[
+            (
+                "SKILL.md",
+                "---\nname: empty-grade\ndescription: Empty grade.\n---\n",
+            ),
+            ("grading.json", "{}"),
+            ("benchmark.json", r#"{"score":1}"#),
+        ],
+    );
+    let graded = validate_skill(&tmp.path().join("empty-grade"), Profile::Portable);
+    assert!(
+        graded
+            .iter()
+            .filter(|finding| finding.rule_id == "S-34")
+            .count()
+            >= 2
+    );
+
+    let agent_dir = tmp.path().join("agents");
+    fs::create_dir_all(&agent_dir).unwrap();
+    let agent = "---\nname: reviewer\ndescription: Reviews diffs.\n---\nRead the diff.\n";
+    fs::write(agent_dir.join("one.md"), agent).unwrap();
+    fs::write(agent_dir.join("two.md"), agent).unwrap();
+    assert!(validate_agent(&agent_dir.join("one.md"), false)
+        .iter()
+        .any(|finding| finding.rule_id == "A-18"));
+    let huge = "a".repeat(60_004);
+    fs::write(
+        agent_dir.join("wide.md"),
+        format!("---\nname: wide\ndescription: {huge}\n---\nBody.\n"),
+    )
+    .unwrap();
+    assert!(validate_agent(&agent_dir.join("one.md"), false)
+        .iter()
+        .any(|finding| finding.rule_id == "A-19"));
 }
 
 fn python_bin() -> (String, Vec<String>) {

@@ -195,6 +195,7 @@ fn render_key(name: &str, value: &Scalar) -> String {
         Scalar::Map(entries) => {
             let mut text = format!("{name}:");
             for (key, value) in entries {
+                let value = value.strip_prefix('\u{1}').unwrap_or(value);
                 text.push_str(&format!("\n  {key}: {value}"));
             }
             text
@@ -213,6 +214,7 @@ fn scalar_json(value: &Scalar) -> Value {
         Scalar::Map(entries) => {
             let mut map = serde_json::Map::new();
             for (key, value) in entries {
+                let value = value.strip_prefix('\u{1}').unwrap_or(value);
                 map.insert(key.clone(), json!(value));
             }
             Value::Object(map)

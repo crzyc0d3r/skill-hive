@@ -42,10 +42,42 @@ pub fn fetch_latest_release_tag(url: &str) -> Result<String, String> {
 }
 
 pub fn update_install_blocker(active_runs: u32) -> Option<&'static str> {
+    let installer = std::env::var_os("SKILL_HIVE_INSTALLER").map(std::path::PathBuf::from);
+    update_install_blocker_at(active_runs, installer.as_deref())
+}
+
+pub fn update_install_blocker_at(
+    active_runs: u32,
+    installer: Option<&std::path::Path>,
+) -> Option<&'static str> {
     if active_runs > 0 {
-        Some("A test run is still active.")
-    } else {
-        None
+        return Some("A test run is still active.");
+    }
+    if installer.is_some_and(installer_file_locked) {
+        return Some("The installer file is locked.");
+    }
+    None
+}
+
+pub fn installer_file_locked(path: &std::path::Path) -> bool {
+    use fs2::FileExt;
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+    {
+        Ok(file) => file,
+        Err(err) => {
+            return err.kind() == std::io::ErrorKind::PermissionDenied
+                || matches!(err.raw_os_error(), Some(32 | 33));
+        }
+    };
+    match file.try_lock_exclusive() {
+        Ok(()) => {
+            let _ = file.unlock();
+            false
+        }
+        Err(_) => true,
     }
 }
 
@@ -87,8 +119,8 @@ pub fn verify_updater_signature(
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_release, latest_platform_signature, update_install_blocker, updater_proxy,
-        verify_updater_signature,
+        classify_release, latest_platform_signature, update_install_blocker,
+        update_install_blocker_at, updater_proxy, verify_updater_signature,
     };
     use minisign::{sign, KeyPair};
     use std::io::Cursor;
@@ -99,7 +131,25 @@ mod tests {
             update_install_blocker(1),
             Some("A test run is still active.")
         );
-        assert_eq!(update_install_blocker(0), None);
+        assert_eq!(update_install_blocker_at(0, None), None);
+        let dir = tempfile::tempdir().expect("temp");
+        let installer = dir.path().join("Skill Hive");
+        std::fs::write(&installer, b"installer").expect("write");
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&installer)
+            .expect("hold");
+        fs2::FileExt::lock_exclusive(&held).expect("lock");
+        assert_eq!(
+            update_install_blocker_at(0, Some(installer.as_path())),
+            Some("The installer file is locked.")
+        );
+        fs2::FileExt::unlock(&held).expect("unlock");
+        assert_eq!(
+            update_install_blocker_at(0, Some(installer.as_path())),
+            None
+        );
         assert_eq!(updater_proxy(""), None);
         assert_eq!(updater_proxy("ftp://files"), None);
         assert_eq!(
