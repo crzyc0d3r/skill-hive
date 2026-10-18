@@ -265,14 +265,31 @@ try {
   }
 
   async function dismissToasts() {
+    // A removed toast node makes the next React commit unmount #root. Leave the
+    // node in place and only stop it from covering the control under it.
     await call("POST", `${prefix}/execute/sync`, {
-      script: "document.querySelectorAll('[data-sonner-toast]').forEach((node) => node.remove()); return true;",
+      script: "document.querySelectorAll('[data-sonner-toaster],[data-sonner-toast]').forEach((node) => { node.style.pointerEvents = 'none'; }); return true;",
       args: [],
     }).catch(() => {});
   }
-  async function click(selector) {
-    const id = await find(selector);
+  async function clickFound(id) {
     await call("POST", `${prefix}/element/${id}/click`, {});
+  }
+  async function click(selector) {
+    let last;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const id = await find(selector);
+      try {
+        await clickFound(id);
+        return;
+      } catch (err) {
+        last = err;
+        const message = String(err?.message ?? err);
+        if (message.includes("click intercepted")) await dismissToasts();
+        else if (!message.includes("stale element")) throw err;
+      }
+    }
+    throw last;
   }
 
   await find("[data-testid=sidebar]");
@@ -325,8 +342,20 @@ try {
   async function clickText(text, last = false) {
     const quoted = JSON.stringify(text);
     const expression = last ? `(//button[normalize-space()=${quoted}])[last()]` : `//button[normalize-space()=${quoted}]`;
-    const id = await find(expression, "xpath");
-    await call("POST", `${prefix}/element/${id}/click`, {});
+    let lastError;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const id = await find(expression, "xpath");
+      try {
+        await clickFound(id);
+        return;
+      } catch (err) {
+        lastError = err;
+        const message = String(err?.message ?? err);
+        if (message.includes("click intercepted")) await dismissToasts();
+        else if (!message.includes("stale element")) throw err;
+      }
+    }
+    throw lastError;
   }
   async function typeInto(selector, value) {
     const id = await find(selector);
@@ -631,9 +660,24 @@ conn.commit()
   await clickText("Use remote library");
   await waitUntil("first-run restore", () => readFileSync(path.join(base, "skills", "restored-marker.txt"), "utf8").includes("restored-from-remote"));
 
-  await openPath("/project/fixture");
-  await click("[data-testid=link-project]");
-  await clickText("Pull center");
+  let projectError;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await openPath("/project/fixture");
+      await find("[data-testid=project]");
+      await click("[data-testid=link-project]");
+      await clickText("Pull center");
+      projectError = undefined;
+      break;
+    } catch (err) {
+      projectError = err;
+      const message = String(err?.message ?? err);
+      const recoverable = message.includes("stale element") || message.includes('id="root"></div>') || message.includes("not found");
+      if (attempt === 2 || !recoverable) break;
+      await restart();
+    }
+  }
+  if (projectError) throw projectError;
   await waitUntil("project center", () => readFileSync(path.join(base, "skills", "projects", "notes", "SKILL.md"), "utf8").includes("center v2"));
 
   const diagnostics = path.join(base, "diagnostics.zip");
