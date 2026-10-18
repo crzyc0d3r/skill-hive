@@ -24,8 +24,6 @@ export let generatedPayload: string | null = null;
 export let comparePayload: string | null = null;
 export let optimizePayload: string | null = null;
 export let logExcerpt: { path: string; text: string } | null = null;
-export let effectivenessPayload: string | null = null;
-let holdEffectiveness = false;
 
 export function seedSetting(key: string, value: string) {
   storedSettings.set(key, value);
@@ -63,11 +61,6 @@ export function setLogExcerpt(value: { path: string; text: string } | null) {
   logExcerpt = value;
 }
 
-export function setEffectivenessPayload(value: string | null) {
-  effectivenessPayload = value;
-  holdEffectiveness = value !== null;
-}
-
 function installState(skills: SkillCard[], agents: AgentRow[]): IpcState {
   return {
     skills: skills.map((skill) => ({ ...skill, tags: [...skill.tags], agents: [...skill.agents] })),
@@ -97,16 +90,6 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
   if (cmd === "check_app_update") return "current";
   if (cmd === "get_diagnostic_info") return { version: "1.2.3", os: "linux", arch: "x64", libraryPath: "/tmp/hive-diag", skillsPath: "/tmp/hive-diag/skills" };
   if (cmd === "get_recent_log_excerpt") return logExcerpt;
-  if (cmd === "get_effectiveness_report") return effectivenessPayload;
-  if (cmd === "run_effectiveness_suite") {
-    return JSON.stringify({
-      cells: [{ id: "with-live", label: "with_skill 1", passRate: 1, configuration: "with_skill" }],
-      with_rate: 1,
-      without_rate: 0,
-      exportCsv: "configuration,pass_rate\nwith_skill,1\n",
-    });
-  }
-  if (cmd === "interview_generation") return JSON.stringify({ questions: ["What output format?"] });
   if (cmd === "get_source_skill_document") return { name: text("skillId"), description: "Collect sources", body: "source", path: "/src/research" };
   if (cmd === "get_projects") return projectRows;
   if (cmd === "remove_project") {
@@ -322,7 +305,6 @@ export function installIpc(skills = SKILLS, failSettings = false) {
   comparePayload = null;
   optimizePayload = null;
   logExcerpt = null;
-  effectivenessPayload = null;
   const state = installState(skills, [
     { key: "claude_code", name: "Claude Code", installed: true, enabled: true, path: "~/.claude/skills", projectPath: ".claude/skills", custom: false },
   ]);
@@ -349,8 +331,6 @@ export function renderShell(path: string) {
   comparePayload = null;
   optimizePayload = null;
   logExcerpt = null;
-  if (!holdEffectiveness) effectivenessPayload = null;
-  holdEffectiveness = false;
   const state = installState([], []);
   mockIPC((cmd, args) => handleIpc(state, cmd, (args ?? {}) as Record<string, unknown>, false));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

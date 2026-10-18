@@ -1,11 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { t } from "../../lib/i18n";
 import { demoEnabled } from "@/lib/demo";
-import { interviewGeneration } from "@/lib/ipc/actions";
 import {
   acceptDefaults,
   askDiscard,
@@ -15,7 +13,6 @@ import {
   reviseDraft,
   saveDraft,
   setGoal,
-  setQuestions,
   stayInWizard,
   useGenerate,
 } from "@/features/generate/store";
@@ -26,7 +23,6 @@ export function GenerateWizard() {
   const { sessionId } = useParams();
   const { wizard } = useGenerate();
   const demo = demoEnabled();
-  const [endpoint, setEndpoint] = useState("http://127.0.0.1:9");
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") askDiscard();
@@ -77,31 +73,6 @@ export function GenerateWizard() {
       {wizard.step === "interview" ? (
         <div className="space-y-2">
           {wizard.questions.length === 0 ? <p>{t("generate.interview.empty")}</p> : wizard.questions.map((question) => <p key={question}>{question}</p>)}
-          <label className="block text-sm" htmlFor="generate-endpoint">
-            {t("generate.endpoint")}
-            <Input id="generate-endpoint" className="mt-1 h-8" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
-          </label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void interviewGeneration(endpoint, "", wizard.goal).then((raw) => {
-                if (typeof raw !== "string") return;
-                try {
-                  const parsed = JSON.parse(raw) as { questions?: unknown };
-                  const questions = Array.isArray(parsed.questions)
-                    ? parsed.questions.filter((item): item is string => typeof item === "string")
-                    : [];
-                  if (questions.length) setQuestions(questions);
-                } catch {
-                  /* a reply that is not interview JSON stays on the empty list */
-                }
-              });
-            }}
-          >
-            {t("generate.ask")}
-          </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => acceptDefaults()}>{t("generate.defaults")}</Button>
         </div>
       ) : null}

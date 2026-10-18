@@ -1,30 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useEffect, useState } from "react";
 import { t } from "../../lib/i18n";
 import { recordVerdict, useGenerate } from "@/features/generate/store";
 import { demoEnabled } from "@/lib/demo";
-import { silent } from "@/lib/ipc/actions";
 
 export function CompareView() {
   const { wizard } = useGenerate();
   const demo = demoEnabled();
   const revealed = wizard.verdict.length > 0;
-  const [blind, setBlind] = useState<{ outputA: string; outputB: string; sealed: string } | null>(null);
-  useEffect(() => {
-    if (demo) return;
-    void silent<string>("get_effectiveness_report").then((raw) => {
-      if (typeof raw !== "string") return;
-      try {
-        const parsed = JSON.parse(raw) as { outputA?: string; outputB?: string; sealed?: string };
-        if (typeof parsed.outputA === "string" && parsed.outputA.length > 0) {
-          setBlind({ outputA: parsed.outputA, outputB: parsed.outputB ?? "", sealed: parsed.sealed ?? "" });
-        }
-      } catch {
-        /* no measured comparison yet */
-      }
-    });
-  }, [demo]);
   return (
     <section data-testid="compare" className="flex w-full flex-col gap-4">
       <h1 className="font-mono text-[22px] font-semibold tracking-tight">{t("compare.title")}</h1>
@@ -37,17 +20,6 @@ export function CompareView() {
           <Card className="gap-2 rounded-lg border-border px-4 py-4 shadow-none">
             <h2 className="text-sm font-medium">{revealed ? "security-reviewer v1" : t("compare.outputB")}</h2>
             <p className="text-sm text-muted-foreground">No findings.</p>
-          </Card>
-        </div>
-      ) : blind ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          <Card className="gap-2 rounded-lg border-border px-4 py-4 shadow-none">
-            <h2 className="text-sm font-medium">{revealed ? blind.sealed : t("compare.outputA")}</h2>
-            <p className="max-h-24 overflow-auto text-sm text-muted-foreground">{blind.outputA}</p>
-          </Card>
-          <Card className="gap-2 rounded-lg border-border px-4 py-4 shadow-none">
-            <h2 className="text-sm font-medium">{t("compare.outputB")}</h2>
-            <p className="max-h-24 overflow-auto text-sm text-muted-foreground">{blind.outputB}</p>
           </Card>
         </div>
       ) : wizard.compareText ? (
