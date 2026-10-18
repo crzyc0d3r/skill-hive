@@ -18,6 +18,9 @@ export function SuiteView() {
           <Link to="/runs/run-fixture" className={buttonVariants({ variant: "secondary", size: "sm" })}>
             {t("suite.run")}
           </Link>
+          <Link to="/effectiveness" data-testid="effectiveness-link" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            {t("suite.effectiveness")}
+          </Link>
         </div>
         {wizard.optimized ? <p data-testid="optimize-preview">{wizard.optimizePath || t("suite.optimized")}</p> : null}
         {wizard.applied ? <p data-testid="optimize-applied">{t("suite.apply")}</p> : null}

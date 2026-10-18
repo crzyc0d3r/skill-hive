@@ -422,6 +422,8 @@ pub fn run() {
             commands::export_agent_draft,
             commands::save_generated_draft,
             commands::apply_optimized_description,
+            commands::get_effectiveness_report,
+            commands::run_effectiveness_suite,
             commands::record_compare_verdict,
             commands::write_history_baseline,
             commands::set_provider_secret,

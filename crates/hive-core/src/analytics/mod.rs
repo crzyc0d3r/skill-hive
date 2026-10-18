@@ -20,7 +20,8 @@ pub use optimize::{
     apply_optimized, optimize, propose_description, Candidate, OptimizeOutcome, QueryScore,
 };
 pub use regression::{
-    evaluate, set_baseline, Alert, ExpectationOutcome, RegressionReport, RunSlice, SampleCell,
+    evaluate, load_baseline, set_baseline, Alert, ExpectationOutcome, RegressionReport, RunSlice,
+    SampleCell,
 };
 pub use workflow::{demonstrate_d1, demonstrate_d2, demonstrate_d3, WorkflowReport};
 

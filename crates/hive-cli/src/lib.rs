@@ -150,6 +150,25 @@ enum TestCmd {
     Status,
     Results,
     Export,
+    /// Run with_skill and without_skill through the configured Anthropic or OpenAI adapter.
+    Measure {
+        #[arg(long)]
+        skill: PathBuf,
+        #[arg(long, default_value_t = 1)]
+        repetitions: u32,
+        /// Optional program that speaks Claude Code stream-json. The temp command file is deleted on exit.
+        #[arg(long)]
+        cli_program: Option<PathBuf>,
+    },
+    /// Send template P12 to the configured adapter. The side names stay sealed in the saved file.
+    Blind {
+        #[arg(long)]
+        prompt: String,
+        #[arg(long)]
+        output_a: String,
+        #[arg(long)]
+        output_b: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -235,6 +254,11 @@ enum GenerateCmd {
         name: String,
         #[arg(long, default_value_t = false)]
         replay: bool,
+    },
+    /// Ask the configured provider the generation interview (template P1).
+    Interview {
+        #[arg(long)]
+        goal: String,
     },
 }
 
@@ -676,6 +700,16 @@ fn test_cmd(command: &TestCmd) -> Result<Value, Fail> {
         TestCmd::Status => eval::test_status(),
         TestCmd::Results => eval::test_results(),
         TestCmd::Export => eval::test_export(),
+        TestCmd::Measure {
+            skill,
+            repetitions,
+            cli_program,
+        } => eval::test_measure(skill, *repetitions, cli_program.as_deref()),
+        TestCmd::Blind {
+            prompt,
+            output_a,
+            output_b,
+        } => eval::test_blind(prompt, output_a, output_b),
     }
 }
 
@@ -688,6 +722,7 @@ fn generate_cmd(command: &GenerateCmd) -> Result<Value, Fail> {
             generate::generate_agent(name, task.as_deref(), *replay)
         }
         GenerateCmd::Evals { name, replay } => generate::generate_evals(name, *replay),
+        GenerateCmd::Interview { goal } => generate::generate_interview(goal),
     }
 }
 

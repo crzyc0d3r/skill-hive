@@ -1923,6 +1923,106 @@ pub fn apply_optimized_description(description: String) -> Result<String, AppErr
 }
 
 #[tauri::command]
+pub fn get_effectiveness_report() -> Result<String, AppError> {
+    let path = central_repo::base_dir()
+        .join("effectiveness")
+        .join("last.json");
+    if !path.is_file() {
+        return Ok(String::new());
+    }
+    std::fs::read_to_string(path).map_err(AppError::io)
+}
+
+#[tauri::command]
+pub fn run_effectiveness_suite(skill_path: String) -> Result<String, AppError> {
+    let skill = PathBuf::from(skill_path.trim());
+    if !skill.join("SKILL.md").is_file() {
+        return Err(AppError::invalid_input(
+            "the skill directory has no SKILL.md",
+        ));
+    }
+    let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
+        .map_err(AppError::db)?;
+    let Some(row) = rows
+        .into_iter()
+        .find(|row| row.base_url.as_ref().is_some_and(|url| !url.is_empty()))
+    else {
+        return Err(AppError::invalid_input(
+            "add a provider with a base URL before measuring",
+        ));
+    };
+    let kind = match row.kind {
+        hive_core::providers::ProviderKind::OpenaiCompat => "openai",
+        hive_core::providers::ProviderKind::Anthropic => "anthropic",
+        hive_core::providers::ProviderKind::LocalCli => {
+            return Err(AppError::invalid_input(
+                "measuring needs an Anthropic or OpenAI adapter",
+            ));
+        }
+    };
+    let api_key = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            hive_core::providers::load_provider_secret(
+                &row.id,
+                &central_repo::base_dir().join("provider-secrets"),
+            )
+            .ok()
+        });
+    let Some(api_key) = api_key else {
+        return Err(AppError::invalid_input(
+            "measuring needs SKILL_HIVE_API_KEY or a stored provider secret",
+        ));
+    };
+    if !skill.join("evals").join("evals.json").is_file() {
+        let name = skill
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("skill");
+        hive_core::testing::write_default_suite(
+            &skill,
+            name,
+            &format!("Complete this task: {name}"),
+        )
+        .map_err(AppError::io)?;
+    }
+    let model = row
+        .default_model
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "claude-sonnet-5-5".to_string());
+    let root = central_repo::base_dir().join("test-runs");
+    std::fs::create_dir_all(&root)?;
+    let report = hive_core::testing::run_measured(&hive_core::testing::MeasureRequest {
+        skill_dir: skill,
+        workspace: root.join("workspace"),
+        db_path: root.join("hive.db"),
+        base_url: row.base_url.unwrap_or_default(),
+        api_key,
+        kind: kind.to_string(),
+        flavor: None,
+        models: vec![hive_core::testing::ModelChoice {
+            id: model,
+            strong: true,
+        }],
+        adapter: "emulated".into(),
+        repetitions: 1,
+        threshold: 0.5,
+        pass_bar: 0.5,
+        distractors: Vec::new(),
+        seed: 7,
+        cli_program: None,
+        cli_prefix: Vec::new(),
+    })
+    .map_err(AppError::io)?;
+    let text = serde_json::to_string(&report).map_err(AppError::io)?;
+    let saved = central_repo::base_dir().join("effectiveness");
+    std::fs::create_dir_all(&saved)?;
+    std::fs::write(saved.join("last.json"), &text)?;
+    Ok(text)
+}
+
+#[tauri::command]
 pub fn record_compare_verdict(id: String, verdict: String) -> Result<String, AppError> {
     store_verdict(&central_repo::db_path(), id.trim(), verdict.trim()).map_err(AppError::db)
 }

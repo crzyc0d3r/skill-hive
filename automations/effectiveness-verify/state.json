@@ -1,0 +1,312 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-18T15:51:06+00:00",
+  "finished": "2026-10-18T15:51:44+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n1_counts": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "a3469e624c3aa82d22b95f01f24c14e11da4d7921a44be906b9a41dba8d8afcd",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/effectiveness-verify/code/check_audit.py` → exit 0: real=36 stand-in=16 missing=11 total=63"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-18T15:51:38+00:00",
+        "output_hash": "a3469e624c3aa82d22b95f01f24c14e11da4d7921a44be906b9a41dba8d8afcd",
+        "log": "automations/effectiveness-verify/runs/r1/gates/n1_counts.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/effectiveness-verify/code/check_audit.py` → exit 0: real=36 stand-in=16 missing=11 total=63"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-18T15:51:38+00:00",
+          "output_hash": "a3469e624c3aa82d22b95f01f24c14e11da4d7921a44be906b9a41dba8d8afcd",
+          "log": "automations/effectiveness-verify/runs/r1/gates/n1_counts.a1.md"
+        },
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/effectiveness-verify/code/check_audit.py` → exit 0: real=36 stand-in=16 missing=11 total=63"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-18T15:51:38+00:00",
+          "output_hash": "a3469e624c3aa82d22b95f01f24c14e11da4d7921a44be906b9a41dba8d8afcd",
+          "log": "automations/effectiveness-verify/runs/r1/gates/n1_counts.a1.md"
+        }
+      ]
+    },
+    "n2_result": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "3f07ae25a48357eddc466d4738f472be806cce0bc42ee37068920c277bb03c87",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/effectiveness-verify/code/check_result.py` → exit 0: real=36\nstand-in=16\nmissing=11\ntotal=63\nwire_test=True\nblind_command=True\nscreenshots=4/4"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: real=36\nstand-in=16\nmissing=11\ntotal=63\nwire_test=True\nblind_command=True\nscreenshots=4/4"
+          ]
+        ],
+        "at": "2026-10-18T15:51:39+00:00",
+        "output_hash": "3f07ae25a48357eddc466d4738f472be806cce0bc42ee37068920c277bb03c87",
+        "log": "automations/effectiveness-verify/runs/r1/gates/n2_result.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/effectiveness-verify/code/check_result.py` → exit 0: real=36\nstand-in=16\nmissing=11\ntotal=63\nwire_test=True\nblind_command=True\nscreenshots=4/4"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: real=36\nstand-in=16\nmissing=11\ntotal=63\nwire_test=True\nblind_command=True\nscreenshots=4/4"
+            ]
+          ],
+          "at": "2026-10-18T15:51:38+00:00",
+          "output_hash": "3f07ae25a48357eddc466d4738f472be806cce0bc42ee37068920c277bb03c87",
+          "log": "automations/effectiveness-verify/runs/r1/gates/n2_result.a1.md"
+        },
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/effectiveness-verify/code/check_result.py` → exit 0: real=36\nstand-in=16\nmissing=11\ntotal=63\nwire_test=True\nblind_command=True\nscreenshots=4/4"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: real=36\nstand-in=16\nmissing=11\ntotal=63\nwire_test=True\nblind_command=True\nscreenshots=4/4"
+            ]
+          ],
+          "at": "2026-10-18T15:51:39+00:00",
+          "output_hash": "3f07ae25a48357eddc466d4738f472be806cce0bc42ee37068920c277bb03c87",
+          "log": "automations/effectiveness-verify/runs/r1/gates/n2_result.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_counts",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-18T15:51:38+00:00",
+      "finished": "2026-10-18T15:51:38+00:00",
+      "verdict": "pass",
+      "output": "automations/effectiveness-verify/out/counts.txt",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n2_result",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-18T15:51:38+00:00",
+      "finished": "2026-10-18T15:51:38+00:00",
+      "verdict": "pass",
+      "output": "automations/effectiveness-verify/out/result.md",
+      "evidence": "exit 0: real=36\nstand-in=16\nmissing=11\ntotal=63\nwire_test=True\nblind_command=True\nscreenshots=4/4",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/effectiveness-verify/code/check_audit.py` → exit 0: real=36 stand-in=16 missing=11 total=63",
+      "at": "2026-10-18T15:51:44+00:00"
+    },
+    {
+      "index": 1,
+      "verdict": "pass",
+      "evidence": "result.md records wire_test=True, blind_command=True, and screenshots=4/4 for light and dark grade and chart views.",
+      "at": "2026-10-18T15:51:44+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-18T15:51:38+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-18T15:51:38+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash 8292b2d92ecce1e1)"
+    },
+    {
+      "at": "2026-10-18T15:51:38+00:00",
+      "type": "baseline",
+      "msg": "1/4 pass before the run"
+    },
+    {
+      "at": "2026-10-18T15:51:38+00:00",
+      "type": "gate",
+      "msg": "n1_counts attempt 1: pass"
+    },
+    {
+      "at": "2026-10-18T15:51:38+00:00",
+      "type": "gate",
+      "msg": "n1_counts attempt 1: pass"
+    },
+    {
+      "at": "2026-10-18T15:51:38+00:00",
+      "type": "gate",
+      "msg": "n2_result attempt 1: pass"
+    },
+    {
+      "at": "2026-10-18T15:51:39+00:00",
+      "type": "gate",
+      "msg": "n2_result attempt 1: pass"
+    },
+    {
+      "at": "2026-10-18T15:51:44+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-18T15:51:44+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 8292b2d92ecce1e1"
+      ],
+      [
+        "n1_counts: output exists and can be opened",
+        "pass",
+        "automations/effectiveness-verify/out/counts.txt (40 bytes)"
+      ],
+      [
+        "n1_counts: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-18T15:51:38+00:00"
+      ],
+      [
+        "n2_result: output exists and can be opened",
+        "pass",
+        "automations/effectiveness-verify/out/result.md (90 bytes)"
+      ],
+      [
+        "n2_result: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-18T15:51:39+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 2 of 2 declared nodes"
+      ],
+      [
+        "acceptance 0: audit counts match the status rows",
+        "pass",
+        "`python3 automations/effectiveness-verify/code/check_audit.py` → exit 0: real=36 stand-in=16 missing=11 total=63"
+      ],
+      [
+        "acceptance 1: measured wire test and both theme screenshots exist",
+        "pass",
+        "result.md records wire_test=True, blind_command=True, and screenshots=4/4 for light and dark grade and chart views."
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/effectiveness-verify/out/result.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-18T15:51:38+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "automations/effectiveness-verify/out/result.md absent"
+      ],
+      [
+        "acceptance 0: audit counts match the status rows",
+        "pass",
+        "`python3 automations/effectiveness-verify/code/check_audit.py` → exit 0: real=36 stand-in=16 missing=11 total=63"
+      ],
+      [
+        "acceptance 1: measured wire test and both theme screenshots exist",
+        "unresolved",
+        "no cmd; judged at completion"
+      ],
+      [
+        "note",
+        "noted",
+        "audit already scored 36 real, 16 stand-in, 11 missing"
+      ]
+    ]
+  }
+}

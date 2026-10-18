@@ -180,6 +180,50 @@ pub fn generate_evals(name: &str, replay: bool) -> Result<Value, Fail> {
     }))
 }
 
+pub fn generate_interview(goal: &str) -> Result<Value, Fail> {
+    let target = crate::providers::measure_target().map_err(Fail::other)?;
+    if target.kind == "local_cli" {
+        return Err(Fail::other(
+            "the interview needs an Anthropic or OpenAI adapter",
+        ));
+    }
+    let api_key = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            hive_core::providers::load_provider_secret(
+                &target.id,
+                &central_repo::base_dir().join("provider-secrets"),
+            )
+            .ok()
+        })
+        .ok_or_else(|| {
+            Fail::other("the interview needs SKILL_HIVE_API_KEY or a stored provider secret")
+        })?;
+    let secret = hive_core::providers::SecretString::new(api_key.clone());
+    let provider: Box<dyn hive_core::providers::ChatProvider> = if target.kind == "openai" {
+        Box::new(hive_core::providers::OpenAiProvider::new(
+            "interview",
+            target.url,
+            hive_core::providers::Flavor::Openai,
+            secret,
+        ))
+    } else {
+        Box::new(hive_core::providers::AnthropicProvider::new(
+            "interview",
+            target.url,
+            secret,
+        ))
+    };
+    let parsed =
+        hive_core::testing::interview_goal(provider.as_ref(), &target.model, goal, &api_key)
+            .map_err(Fail::other)?;
+    Ok(json!({
+        "command": "generate.interview",
+        "questions": parsed.get("questions").cloned().unwrap_or(json!([])),
+    }))
+}
+
 fn refuse_live(replay: bool) -> Result<(), Fail> {
     if replay {
         Ok(())

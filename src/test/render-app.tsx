@@ -24,6 +24,7 @@ export let generatedPayload: string | null = null;
 export let comparePayload: string | null = null;
 export let optimizePayload: string | null = null;
 export let logExcerpt: { path: string; text: string } | null = null;
+export let effectivenessReport = "";
 
 export function seedSetting(key: string, value: string) {
   storedSettings.set(key, value);
@@ -61,6 +62,10 @@ export function setLogExcerpt(value: { path: string; text: string } | null) {
   logExcerpt = value;
 }
 
+export function setEffectivenessReport(value: string) {
+  effectivenessReport = value;
+}
+
 function installState(skills: SkillCard[], agents: AgentRow[]): IpcState {
   return {
     skills: skills.map((skill) => ({ ...skill, tags: [...skill.tags], agents: [...skill.agents] })),
@@ -90,6 +95,7 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
   if (cmd === "check_app_update") return "current";
   if (cmd === "get_diagnostic_info") return { version: "1.2.3", os: "linux", arch: "x64", libraryPath: "/tmp/hive-diag", skillsPath: "/tmp/hive-diag/skills" };
   if (cmd === "get_recent_log_excerpt") return logExcerpt;
+  if (cmd === "get_effectiveness_report") return effectivenessReport;
   if (cmd === "get_source_skill_document") return { name: text("skillId"), description: "Collect sources", body: "source", path: "/src/research" };
   if (cmd === "get_projects") return projectRows;
   if (cmd === "remove_project") {

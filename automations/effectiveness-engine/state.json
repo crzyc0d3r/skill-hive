@@ -1,0 +1,284 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-18T14:44:56+00:00",
+  "finished": "2026-10-18T14:45:15+00:00",
+  "project_root": "/workspace",
+  "dispatches": 1,
+  "nodes": {
+    "n1_audit": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "53a1cdd796fd0159ed74529e69aa0fe431fc5fbd63484cfed8fce42b33ba988e",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/effectiveness-engine/code/check_audit.py` → exit 0: real=38 stand-in=12 missing=13 total=63"
+          ],
+          [
+            "node.report",
+            "pass",
+            "docs/plan-conformance-audit.md has 63 rows: 38 real, 12 stand-in, 13 missing. Stand-in rows are listed separately and the summary says they are not done."
+          ]
+        ],
+        "at": "2026-10-18T14:45:08+00:00",
+        "output_hash": "53a1cdd796fd0159ed74529e69aa0fe431fc5fbd63484cfed8fce42b33ba988e",
+        "log": "automations/effectiveness-engine/runs/r1/gates/n1_audit.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/effectiveness-engine/code/check_audit.py` → exit 0: real=38 stand-in=12 missing=13 total=63"
+            ],
+            [
+              "node.report",
+              "pass",
+              "docs/plan-conformance-audit.md has 63 rows: 38 real, 12 stand-in, 13 missing. Stand-in rows are listed separately and the summary says they are not done."
+            ]
+          ],
+          "at": "2026-10-18T14:45:08+00:00",
+          "output_hash": "53a1cdd796fd0159ed74529e69aa0fe431fc5fbd63484cfed8fce42b33ba988e",
+          "log": "automations/effectiveness-engine/runs/r1/gates/n1_audit.a1.md"
+        }
+      ]
+    },
+    "n2_counts": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "f4933c349827a67119c3864cebf412ae2163ca0214428def73d7a383ccd1a1fb",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/effectiveness-engine/code/check_counts.py` → exit 0: real=38\nstand-in=12\nmissing=13\ntotal=63"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: real=38\nstand-in=12\nmissing=13\ntotal=63"
+          ]
+        ],
+        "at": "2026-10-18T14:45:08+00:00",
+        "output_hash": "f4933c349827a67119c3864cebf412ae2163ca0214428def73d7a383ccd1a1fb",
+        "log": "automations/effectiveness-engine/runs/r1/gates/n2_counts.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/effectiveness-engine/code/check_counts.py` → exit 0: real=38\nstand-in=12\nmissing=13\ntotal=63"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: real=38\nstand-in=12\nmissing=13\ntotal=63"
+            ]
+          ],
+          "at": "2026-10-18T14:45:08+00:00",
+          "output_hash": "f4933c349827a67119c3864cebf412ae2163ca0214428def73d7a383ccd1a1fb",
+          "log": "automations/effectiveness-engine/runs/r1/gates/n2_counts.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_audit",
+      "attempt": 1,
+      "role": "node",
+      "started": "2026-10-18T14:45:08+00:00",
+      "finished": "2026-10-18T14:45:08+00:00",
+      "verdict": "pass",
+      "output": "docs/plan-conformance-audit.md",
+      "evidence": "docs/plan-conformance-audit.md has 63 rows: 38 real, 12 stand-in, 13 missing. Stand-in rows are listed separately and the summary says they are not done.",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "automations/effectiveness-engine/runs/r1/snapshots/n1_audit/a1/plan-conformance-audit.md"
+    },
+    {
+      "node": "n2_counts",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-18T14:45:08+00:00",
+      "finished": "2026-10-18T14:45:08+00:00",
+      "verdict": "pass",
+      "output": "automations/effectiveness-engine/out/counts.txt",
+      "evidence": "exit 0: real=38\nstand-in=12\nmissing=13\ntotal=63",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/effectiveness-engine/code/check_audit.py` → exit 0: real=38 stand-in=12 missing=13 total=63",
+      "at": "2026-10-18T14:45:15+00:00"
+    },
+    {
+      "index": 1,
+      "verdict": "pass",
+      "evidence": "The summary says stand-in rows are not done, and the 12 stand-in rows name ScriptedProvider, frozen fixtures, the fake CLI binary, or a screen that does not call the engine.",
+      "at": "2026-10-18T14:45:15+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-18T14:45:03+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash b9be045485d5a61a)"
+    },
+    {
+      "at": "2026-10-18T14:45:03+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-18T14:45:03+00:00",
+      "type": "baseline",
+      "msg": "2/4 pass before the run"
+    },
+    {
+      "at": "2026-10-18T14:45:08+00:00",
+      "type": "snapshot",
+      "msg": "n1_audit: saved docs/plan-conformance-audit.md to automations/effectiveness-engine/runs/r1/snapshots/n1_audit/a1/plan-conformance-audit.md"
+    },
+    {
+      "at": "2026-10-18T14:45:08+00:00",
+      "type": "dispatch",
+      "msg": "n1_audit attempt 1 (brief automations/effectiveness-engine/runs/r1/briefs/n1_audit.a1.md)"
+    },
+    {
+      "at": "2026-10-18T14:45:08+00:00",
+      "type": "report",
+      "msg": "n1_audit node verdict=pass"
+    },
+    {
+      "at": "2026-10-18T14:45:08+00:00",
+      "type": "gate",
+      "msg": "n1_audit attempt 1: pass"
+    },
+    {
+      "at": "2026-10-18T14:45:08+00:00",
+      "type": "gate",
+      "msg": "n2_counts attempt 1: pass"
+    },
+    {
+      "at": "2026-10-18T14:45:15+00:00",
+      "type": "learn",
+      "msg": "A localhost server that speaks the Anthropic or OpenAI wire protocol is a real adapter test. ScriptedProvider, demo fixtures, and a fake claude binary are stand-ins."
+    },
+    {
+      "at": "2026-10-18T14:45:15+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-18T14:45:15+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash b9be045485d5a61a"
+      ],
+      [
+        "n1_audit: output exists and can be opened",
+        "pass",
+        "docs/plan-conformance-audit.md (19036 bytes)"
+      ],
+      [
+        "n1_audit: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-18T14:45:08+00:00"
+      ],
+      [
+        "n2_counts: output exists and can be opened",
+        "pass",
+        "automations/effectiveness-engine/out/counts.txt (40 bytes)"
+      ],
+      [
+        "n2_counts: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-18T14:45:08+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 2 of 2 declared nodes"
+      ],
+      [
+        "acceptance 0: summary counts match the status rows",
+        "pass",
+        "`python3 automations/effectiveness-engine/code/check_audit.py` → exit 0: real=38 stand-in=12 missing=13 total=63"
+      ],
+      [
+        "acceptance 1: stand-in rows are not counted as done",
+        "pass",
+        "The summary says stand-in rows are not done, and the 12 stand-in rows name ScriptedProvider, frozen fixtures, the fake CLI binary, or a screen that does not call the engine."
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "docs/plan-conformance-audit.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "1/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-18T14:45:03+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "pass",
+        "docs/plan-conformance-audit.md (19036 bytes)"
+      ],
+      [
+        "acceptance 0: summary counts match the status rows",
+        "pass",
+        "`python3 automations/effectiveness-engine/code/check_audit.py` → exit 0: real=38 stand-in=12 missing=13 total=63"
+      ],
+      [
+        "acceptance 1: stand-in rows are not counted as done",
+        "unresolved",
+        "no cmd; judged at completion"
+      ],
+      [
+        "note",
+        "noted",
+        "audit already drafted; engine tests and screen tests passed before the graph ran"
+      ]
+    ]
+  }
+}

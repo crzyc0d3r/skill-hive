@@ -71,6 +71,8 @@ export interface IpcCommands {
   export_agent_draft: { args: { id: string; text: string }; result: string };
   save_generated_draft: { args: { goal: string }; result: string };
   apply_optimized_description: { args: { description: string }; result: string };
+  get_effectiveness_report: { args: Record<string, never>; result: string };
+  run_effectiveness_suite: { args: { skillPath: string }; result: string };
   record_compare_verdict: { args: { id: string; verdict: string }; result: string };
   write_history_baseline: { args: { skillName: string }; result: string };
   set_provider_secret: { args: { id: string; secret: string }; result: string };

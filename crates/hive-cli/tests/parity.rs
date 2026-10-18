@@ -982,3 +982,61 @@ fn skills_update_check_remove_disable_and_sync() {
     assert!(!central.exists(), "central files remained");
     assert!(!claude.exists(), "deployment remained");
 }
+
+#[test]
+fn test_measure_does_not_fall_back_to_the_scripted_provider() {
+    let (_tmp, state, config) = fresh();
+    let skill = state.join("pine");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(
+        skill.join("SKILL.md"),
+        "---\nname: pine\ndescription: File the weekly pine report\n---\n",
+    )
+    .unwrap();
+    let (code, parsed) = run(
+        &state,
+        &config,
+        &["test", "measure", "--skill", skill.to_str().unwrap()],
+    );
+    assert_ne!(code, 0, "{parsed}");
+    let message = parsed["error"]["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("base URL") || message.contains("provider"),
+        "{parsed}"
+    );
+    let base = base_of(&state, &config);
+    assert!(
+        !base.join("test-runs").join("last.json").is_file(),
+        "measure wrote a scripted last.json"
+    );
+}
+
+#[test]
+fn test_blind_does_not_fall_back_to_the_scripted_provider() {
+    let (_tmp, state, config) = fresh();
+    let (code, parsed) = run(
+        &state,
+        &config,
+        &[
+            "test",
+            "blind",
+            "--prompt",
+            "file the token",
+            "--output-a",
+            "alpha",
+            "--output-b",
+            "beta",
+        ],
+    );
+    assert_ne!(code, 0, "{parsed}");
+    let message = parsed["error"]["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("base URL") || message.contains("provider"),
+        "{parsed}"
+    );
+    let base = base_of(&state, &config);
+    assert!(
+        !base.join("test-runs").join("blind.json").is_file(),
+        "blind wrote a scripted comparison"
+    );
+}

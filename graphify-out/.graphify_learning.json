@@ -1,6 +1,22 @@
 {
-  "generated_at": "2026-10-14T04:20:30.461787+00:00",
+  "generated_at": "2026-10-18T00:54:26.811710+00:00",
   "nodes": {
+    "crates_hive_core_src_generation_session_generationsession": {
+      "code_fingerprint": "d8b77f3a4b589816174d49f66f1f2f50856dafe90e82b8d1a4a7ff0723a550b4",
+      "label": "GenerationSession",
+      "last": "2026-10-14T04:47:03.311155+00:00",
+      "provenance": [
+        {
+          "date": "2026-10-14T04:47:03.311155+00:00",
+          "outcome": "useful",
+          "q": "Which directory name lets a generated skill pass S-14?"
+        }
+      ],
+      "score": 0.915131593,
+      "source_file": "crates/hive-core/src/generation/session.rs",
+      "status": "tentative",
+      "uses": 1
+    },
     "validate_skill": {
       "code_fingerprint": "",
       "label": "validate_skill",
@@ -12,7 +28,7 @@
           "q": "Which communities should Phase 3 authoring nodes read?"
         }
       ],
-      "score": 0.997925852,
+      "score": 0.91284456,
       "source_file": "",
       "status": "tentative",
       "uses": 1

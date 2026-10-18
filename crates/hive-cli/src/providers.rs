@@ -157,6 +157,38 @@ pub fn providers_probe_live(id: &str) -> Result<Value, Fail> {
     }
 }
 
+pub(crate) struct MeasureTarget {
+    pub url: String,
+    pub kind: String,
+    pub model: String,
+    pub id: String,
+}
+
+/// The first configured provider, including vendor hosts. `test measure` uses this.
+/// `post_local` still refuses those hosts.
+pub(crate) fn measure_target() -> Result<MeasureTarget, String> {
+    let rows = list_named_providers(&central_repo::db_path()).map_err(|err| err.to_string())?;
+    let row = rows
+        .into_iter()
+        .find(|row| row.base_url.as_ref().is_some_and(|url| !url.is_empty()))
+        .ok_or_else(|| "add a provider with a base URL before measuring".to_string())?;
+    let kind = match row.kind {
+        ProviderKind::OpenaiCompat => "openai",
+        ProviderKind::Anthropic => "anthropic",
+        ProviderKind::LocalCli => "local_cli",
+    };
+    let model = row
+        .default_model
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| default_model_for(kind).to_string());
+    Ok(MeasureTarget {
+        url: row.base_url.unwrap_or_default(),
+        kind: kind.to_string(),
+        model,
+        id: row.id,
+    })
+}
+
 pub(crate) fn local_base_url() -> Option<String> {
     let rows = list_named_providers(&central_repo::db_path()).ok()?;
     rows.into_iter().find_map(|row| {

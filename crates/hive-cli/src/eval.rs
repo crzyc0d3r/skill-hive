@@ -5,8 +5,11 @@ use std::path::Path;
 
 use hive_core::analytics::{export_workspace, ExportCell, ExportSlice};
 use hive_core::library::central_repo;
-use hive_core::providers::{RunMode, ScriptedProvider};
-use hive_core::testing::{run_plan, save_suite, CheckSpec, Plan, Suite, SuiteCase};
+use hive_core::providers::{load_provider_secret, RunMode, ScriptedProvider};
+use hive_core::testing::{
+    run_measured, run_plan, save_suite, write_default_suite, CheckSpec, MeasureRequest,
+    ModelChoice, Plan, Suite, SuiteCase,
+};
 use serde_json::{json, Value};
 
 use crate::Fail;
@@ -143,6 +146,138 @@ fn test_run_scripted(skill: &Path) -> Result<Value, Fail> {
     .map_err(|err| Fail::other(err.to_string()))?;
     Ok(json!({"command": "test.run", "status": report.status, "run_id": report.run_id}))
 }
+pub fn test_measure(
+    skill: &Path,
+    repetitions: u32,
+    cli_program: Option<&Path>,
+) -> Result<Value, Fail> {
+    let target = crate::providers::measure_target().map_err(Fail::other)?;
+    if target.kind == "local_cli" {
+        return Err(Fail::other(
+            "test measure needs an Anthropic or OpenAI adapter, not the local CLI provider",
+        ));
+    }
+    let key = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            load_provider_secret(
+                &target.id,
+                &central_repo::base_dir().join("provider-secrets"),
+            )
+            .ok()
+        });
+    let Some(api_key) = key else {
+        return Err(Fail::other(
+            "test measure needs SKILL_HIVE_API_KEY or a stored provider secret",
+        ));
+    };
+    if !skill.join("evals").join("evals.json").is_file() {
+        let name = skill
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("skill");
+        write_default_suite(skill, name, &format!("Complete this task: {name}"))
+            .map_err(Fail::other)?;
+    }
+    let root = central_repo::base_dir().join("test-runs");
+    fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
+    let report = run_measured(&MeasureRequest {
+        skill_dir: skill.to_path_buf(),
+        workspace: root.join("workspace"),
+        db_path: root.join("hive.db"),
+        base_url: target.url,
+        api_key,
+        kind: target.kind,
+        flavor: None,
+        models: vec![ModelChoice {
+            id: target.model.clone(),
+            strong: true,
+        }],
+        adapter: "emulated".into(),
+        repetitions,
+        threshold: 0.5,
+        pass_bar: 0.5,
+        distractors: Vec::new(),
+        seed: 7,
+        cli_program: cli_program.map(Path::to_path_buf),
+        cli_prefix: Vec::new(),
+    })
+    .map_err(Fail::other)?;
+    let text = serde_json::to_string(&report).map_err(|err| Fail::other(err.to_string()))?;
+    fs::write(root.join("last.json"), &text).map_err(|err| Fail::other(err.to_string()))?;
+    let saved = central_repo::base_dir().join("effectiveness");
+    fs::create_dir_all(&saved).map_err(|err| Fail::other(err.to_string()))?;
+    fs::write(saved.join("last.json"), &text).map_err(|err| Fail::other(err.to_string()))?;
+    Ok(json!({
+        "command": "test.measure",
+        "status": "done",
+        "run_id": report["run_id"],
+        "grade": report["grade"],
+        "verdict": report["verdict"],
+    }))
+}
+
+pub fn test_blind(prompt: &str, output_a: &str, output_b: &str) -> Result<Value, Fail> {
+    let target = crate::providers::measure_target().map_err(Fail::other)?;
+    if target.kind == "local_cli" {
+        return Err(Fail::other(
+            "test blind needs an Anthropic or OpenAI adapter, not the local CLI provider",
+        ));
+    }
+    let api_key = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            load_provider_secret(
+                &target.id,
+                &central_repo::base_dir().join("provider-secrets"),
+            )
+            .ok()
+        });
+    let Some(api_key) = api_key else {
+        return Err(Fail::other(
+            "test blind needs SKILL_HIVE_API_KEY or a stored provider secret",
+        ));
+    };
+    let secret = hive_core::providers::SecretString::new(api_key.clone());
+    let provider: Box<dyn hive_core::providers::ChatProvider> = if target.kind == "openai" {
+        Box::new(hive_core::providers::OpenAiProvider::new(
+            "blind",
+            target.url,
+            hive_core::providers::Flavor::Openai,
+            secret,
+        ))
+    } else {
+        Box::new(hive_core::providers::AnthropicProvider::new(
+            "blind", target.url, secret,
+        ))
+    };
+    let compared = hive_core::testing::blind_compare(&hive_core::testing::BlindRequest {
+        provider: provider.as_ref(),
+        model: &target.model,
+        prompt,
+        output_a,
+        output_b,
+        sealed_a: "with_skill",
+        sealed_b: "without_skill",
+        secret: &api_key,
+    })
+    .map_err(Fail::other)?;
+    let root = central_repo::base_dir().join("test-runs");
+    fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
+    fs::write(
+        root.join("blind.json"),
+        serde_json::to_string_pretty(&compared).map_err(|err| Fail::other(err.to_string()))?,
+    )
+    .map_err(|err| Fail::other(err.to_string()))?;
+    Ok(json!({
+        "command": "test.blind",
+        "winner": compared["winner"],
+        "revealed": false,
+    }))
+}
+
 pub fn test_show() -> Result<Value, Fail> {
     let path = central_repo::base_dir().join("test-runs").join("last.json");
     let raw = fs::read_to_string(&path).map_err(|err| Fail::other(err.to_string()))?;

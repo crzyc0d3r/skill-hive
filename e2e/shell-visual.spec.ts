@@ -13,6 +13,7 @@ const screens = [
   { name: "settings-general", path: "/settings?tab=general", landmark: "settings" },
   { name: "settings-agents", path: "/settings?tab=agents", landmark: "settings" },
   { name: "settings-about", path: "/settings?tab=about", landmark: "settings" },
+  { name: "effectiveness", path: "/effectiveness", landmark: "effectiveness" },
 ] as const;
 
 async function prepare(page: Page, theme: "light" | "dark") {
@@ -56,6 +57,24 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByTestId("command-palette")).toBeVisible();
       await expect(page.getByLabel("Command search")).toBeVisible();
       await assertFrame(page, theme, "command-palette");
+    });
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`effectiveness charts ${theme}`, async ({ page }) => {
+    await prepare(page, theme);
+    await page.goto("/effectiveness");
+    await expect(page.getByTestId("effect-grade")).toBeVisible();
+    await page.getByRole("button", { name: "Show the charts" }).click();
+    await expect(page.getByTestId("effect-map")).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, "effectiveness charts horizontal overflow").toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: `docs/parity/screenshots/${theme}/effectiveness-charts.png`,
+      fullPage: true,
     });
   });
 }
