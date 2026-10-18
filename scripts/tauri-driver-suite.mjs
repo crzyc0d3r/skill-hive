@@ -107,12 +107,17 @@ const driverArgs = process.env.TAURI_NATIVE_DRIVER
 const driver = spawnCommand("tauri-driver", driverArgs, { stdio: "inherit" });
 await new Promise((resolve) => setTimeout(resolve, 1000));
 
-async function call(method, urlPath, body) {
+const suiteDeadline = setTimeout(() => {
+  console.error("tauri-driver suite exceeded 10 minutes");
+  process.exit(1);
+}, 10 * 60 * 1000);
+
+async function call(method, urlPath, body, timeoutMs = 20000) {
   const response = await fetch(`http://127.0.0.1:4444${urlPath}`, {
     method,
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`${method} ${urlPath} ${response.status} ${text}`);
@@ -199,7 +204,7 @@ async function openSession() {
   let last;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      return await call("POST", "/session", sessionBody);
+      return await call("POST", "/session", sessionBody, 45000);
     } catch (err) {
       last = err;
       const message = String(err?.message ?? err);
@@ -265,12 +270,20 @@ try {
   }
 
   async function dismissToasts() {
-    // A removed toast node makes the next React commit unmount #root. Leave the
-    // node in place and only stop it from covering the control under it.
-    await call("POST", `${prefix}/execute/sync`, {
-      script: "document.querySelectorAll('[data-sonner-toaster],[data-sonner-toast]').forEach((node) => { node.style.pointerEvents = 'none'; }); return true;",
-      args: [],
-    }).catch(() => {});
+    // Removing a toast node unmounts #root on the next React commit. Click the
+    // close control instead, and ignore a shell that has no toast.
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      let id;
+      try {
+        const found = await call("POST", `${prefix}/element`, { using: "css selector", value: "button[data-close-button]" });
+        id = found.value?.["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(found.value ?? {})[0];
+      } catch {
+        return;
+      }
+      if (!id) return;
+      await call("POST", `${prefix}/element/${id}/click`, {}).catch(() => {});
+    }
   }
   async function clickFound(id) {
     await call("POST", `${prefix}/element/${id}/click`, {});
@@ -700,10 +713,16 @@ conn.commit()
   });
 
   console.log("tauri-driver suite: shell routes, install, and authoring artifacts");
+} catch (err) {
+  console.error(err);
+  process.exitCode = 1;
 } finally {
+  clearTimeout(suiteDeadline);
   if (promoter) clearInterval(promoter);
   if (session) {
-    await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE", signal: AbortSignal.timeout(5000) }).catch(() => {});
   }
   driver.kill("SIGTERM");
+  driverWire.close();
+  process.exit(process.exitCode || 0);
 }
