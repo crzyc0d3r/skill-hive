@@ -828,6 +828,7 @@ fn job_object_kills_the_grandchild() {
     );
 }
 
+#[cfg(unix)]
 static CLI_PATH_LOCK: Mutex<()> = Mutex::new(());
 
 #[cfg(unix)]
