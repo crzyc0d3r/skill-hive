@@ -9,6 +9,7 @@ import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/lib
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
 import { deleteManagedSkills, silent, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
 import { t } from "@/lib/i18n";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 export interface WorkspaceCard {
   id: string;
@@ -52,7 +53,12 @@ export function WorkspaceView({
   const [openId, setOpenId] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"local" | "diff" | "center">("local");
   const [adding, setAdding] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [coverageSkills, setCoverageSkills] = useState(library);
   const [loadedPresets, setLoadedPresets] = useState<PresetRow[] | null>(null);
+  useEffect(() => {
+    setCoverageSkills(library);
+  }, [library]);
   useEffect(() => {
     void silent<{ id: string; name: string; skillIds: string[] }[]>("get_presets").then((rows) => {
       if (Array.isArray(rows) && rows.length) setLoadedPresets(rows.map((row) => ({ ...row, synced: 0 })));
@@ -101,10 +107,9 @@ export function WorkspaceView({
       setRows((current) => current.map((row) => (pending.ids.includes(row.id) ? { ...row, status: "in_sync", managed: true } : row)));
       if (agentKey) {
         pending.ids.forEach((id) => {
-          void syncSkillToTool(id, agentKey);
           const name = rows.find((row) => row.id === id)?.name ?? id;
-          if (pending.kind === "upload") void silent("import_global_local_skill_to_center", { tool: agentKey, name });
-          if (pending.kind === "pull") void silent("update_global_local_skill_from_center", { tool: agentKey, skillId: id });
+          if (pending.kind === "upload") void syncSkillToTool(id, agentKey);
+          if (pending.kind === "pull") void silent("import_global_local_skill_to_center", { tool: agentKey, name });
         });
       }
     }
@@ -127,11 +132,26 @@ export function WorkspaceView({
         </form>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="preset-bar">
           {shownPresets.map((preset) => {
-            const total = preset.skillIds.length;
-            const synced = applied === preset.id ? total : 0;
+            const members = coverageSkills.filter((skill) => preset.skillIds.includes(skill.id));
+            const total = preset.skillIds.length || members.length;
+            const synced = preset.skillIds.filter((id) => {
+              const skill = coverageSkills.find((item) => item.id === id);
+              return Boolean(skill && skill.agents.length > 0);
+            }).length;
             const fill = presetFill(synced, total);
             return (
-              <Button key={preset.id} type="button" data-fill={fill} variant="outline" size="sm" onClick={() => { setApplied(preset.id); void onApply(preset.id); void silent("switch_preset", { presetId: preset.id }); void silent("apply_preset_to_coding_agents", { presetId: preset.id }); void silent<string[]>("get_preset_skill_order", { presetId: preset.id }); }}>
+              <Button key={preset.id} type="button" data-fill={fill} variant="outline" size="sm" onClick={() => {
+                const tool = agents[0]?.key ?? "claude_code";
+                setCoverageSkills((current) => current.map((skill) => {
+                  if (!preset.skillIds.includes(skill.id) || skill.agents.includes(tool)) return skill;
+                  return { ...skill, agents: [...skill.agents, tool] };
+                }));
+                setApplied(preset.id);
+                void onApply(preset.id);
+                void silent("switch_preset", { presetId: preset.id });
+                void silent("apply_preset_to_coding_agents", { presetId: preset.id });
+                void silent<string[]>("get_preset_skill_order", { presetId: preset.id });
+              }}>
                 {presetLabel(preset.name, synced, total)}
               </Button>
             );
@@ -199,14 +219,17 @@ export function WorkspaceView({
           ))}
         </ul>
         {pending ? (
-          <div role="dialog" aria-label={t("workspace.confirm")} className="mt-3 rounded-md border border-border p-3">
-            <p>{pending.kind}</p>
-            <Button type="button" size="sm" onClick={applyPending}>{t("workspace.confirm")}</Button>
-          </div>
+          <ConfirmDialog
+            label={t("workspace.confirm")}
+            detail={pending.kind === "upload" ? t("workspace.upload") : pending.kind === "pull" ? t("workspace.pull") : pending.kind === "remove" ? t("workspace.remove") : t("workspace.delete")}
+            confirmLabel={t("workspace.confirm")}
+            onConfirm={applyPending}
+          />
         ) : null}
         {adding ? (
           <div data-testid="add-sheet" className="mt-3 rounded-md border border-border p-3">
-            {library.map((skill) => (
+            <Input aria-label={t("workspace.picker.search")} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="mb-2 h-8" />
+            {library.filter((skill) => skill.name.toLowerCase().includes(pickerQuery.trim().toLowerCase())).map((skill) => (
               <button key={skill.id} type="button" className="mr-2 text-sm" onClick={() => { setRows((current) => current.some((row) => row.id === skill.id) ? current : [...current, { id: skill.id, name: skill.name, status: "in_sync", tags: skill.tags, body: skill.body, center: skill.sourceBody, managed: true }]); if (agentKey) void syncSkillToTool(skill.id, agentKey); setAdding(false); }}>
                 {skill.name}
               </button>

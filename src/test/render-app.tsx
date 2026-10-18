@@ -14,6 +14,53 @@ interface IpcState {
   marketStatus: string;
 }
 
+export const ipcLog: { cmd: string; args: Record<string, unknown> }[] = [];
+const storedSettings = new Map<string, string>();
+export let projectRows: { id: string; name: string; path: string }[] = [];
+export let projectSkillRows: { name: string; path: string; enabled: boolean; agent: string }[] = [];
+export let updateCount = 0;
+export let backupRemote: string | null = null;
+export let generatedPayload: string | null = null;
+export let comparePayload: string | null = null;
+export let optimizePayload: string | null = null;
+export let logExcerpt: { path: string; text: string } | null = null;
+
+export function seedSetting(key: string, value: string) {
+  storedSettings.set(key, value);
+}
+
+export function setProjectRows(rows: { id: string; name: string; path: string }[]) {
+  projectRows = rows;
+}
+
+export function setProjectSkillRows(rows: { name: string; path: string; enabled: boolean; agent: string }[]) {
+  projectSkillRows = rows;
+}
+
+export function setUpdateCount(count: number) {
+  updateCount = count;
+}
+
+export function setBackupRemote(url: string | null) {
+  backupRemote = url;
+}
+
+export function setGeneratedPayload(value: string | null) {
+  generatedPayload = value;
+}
+
+export function setComparePayload(value: string | null) {
+  comparePayload = value;
+}
+
+export function setOptimizePayload(value: string | null) {
+  optimizePayload = value;
+}
+
+export function setLogExcerpt(value: { path: string; text: string } | null) {
+  logExcerpt = value;
+}
+
 function installState(skills: SkillCard[], agents: AgentRow[]): IpcState {
   return {
     skills: skills.map((skill) => ({ ...skill, tags: [...skill.tags], agents: [...skill.agents] })),
@@ -27,14 +74,42 @@ function installState(skills: SkillCard[], agents: AgentRow[]): IpcState {
 }
 
 function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, failSettings: boolean) {
+  ipcLog.push({ cmd, args: { ...args } });
   const text = (key: string) => String(args[key] ?? "");
   if (cmd === "get_settings") {
     if (failSettings) throw new Error("database unreadable");
+    if (storedSettings.has(text("key"))) return storedSettings.get(text("key")) ?? null;
     return text("key") === "theme" ? "light" : null;
   }
-  if (cmd === "set_settings" || cmd === "log_startup_event") return null;
+  if (cmd === "set_settings") {
+    storedSettings.set(text("key"), text("value"));
+    return null;
+  }
+  if (cmd === "log_startup_event") return null;
   if (cmd === "list_base_entries") return [];
   if (cmd === "check_app_update") return "current";
+  if (cmd === "get_diagnostic_info") return { version: "1.2.3", os: "linux", arch: "x64", libraryPath: "/tmp/hive-diag", skillsPath: "/tmp/hive-diag/skills" };
+  if (cmd === "get_recent_log_excerpt") return logExcerpt;
+  if (cmd === "get_source_skill_document") return { name: text("skillId"), description: "Collect sources", body: "source", path: "/src/research" };
+  if (cmd === "get_projects") return projectRows;
+  if (cmd === "remove_project") {
+    projectRows = projectRows.filter((project) => project.id !== text("id"));
+    return null;
+  }
+  if (cmd === "get_project_skills") return projectSkillRows.length ? projectSkillRows : null;
+  if (cmd === "get_active_preset") return storedSettings.get("active_preset") ?? null;
+  if (cmd === "switch_preset") {
+    storedSettings.set("active_preset", text("presetId"));
+    return 1;
+  }
+  if (cmd === "set_tool_enabled") {
+    state.agents = state.agents.map((agent) => (agent.key === text("key") ? { ...agent, enabled: Boolean(args.enabled) } : agent));
+    return null;
+  }
+  if (cmd === "update_skill" || cmd === "reimport_local_skill" || cmd === "batch_update_skills") return cmd === "batch_update_skills" ? (args.ids as string[]).length : null;
+  if (cmd === "save_generated_draft") return generatedPayload;
+  if (cmd === "record_compare_verdict") return comparePayload;
+  if (cmd === "apply_optimized_description") return optimizePayload ?? "/tmp/suite/evals/evals.json";
   if (cmd === "get_managed_skills") return state.skills;
   if (cmd === "list_presets") return state.presets;
   if (cmd === "get_tool_status") return state.agents;
@@ -141,7 +216,12 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
   }
   if (cmd === "reset_custom_tool_path") return "~/.claude/skills";
   if (cmd === "set_tool_order_cmd") return null;
-  if (cmd === "preview_git_install") return { id: "preview-1", skills: [{ relative: "seeded-git", name: "seeded-git" }] };
+  if (cmd === "preview_git_install") {
+    if (text("url").includes("multi")) {
+      return { id: "preview-2", skills: [{ relative: "alpha", name: "alpha" }, { relative: "beta", name: "beta" }] };
+    }
+    return { id: "preview-1", skills: [{ relative: "seeded-git", name: "seeded-git" }] };
+  }
   if (cmd === "confirm_git_install_skill" || cmd === "install_local_skill" || cmd === "install_archive_skill" || cmd === "import_existing_skill" || cmd === "install_from_skillssh") {
     return { id: "installed", name: text("name") || text("path") || "skill" };
   }
@@ -158,13 +238,13 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
   if (cmd === "cancel_install") return true;
   if (cmd === "git_backup_sync") return { id: "snap-1", label: "Snapshot 1" };
   if (cmd === "git_backup_restore_version") return `safety-${text("tag")}`;
-  if (cmd === "git_backup_status") return { branch: "main", clean: true, remote: null, head: "abc" };
+  if (cmd === "git_backup_status") return { branch: "main", clean: true, remote: backupRemote, head: "abc" };
   if (cmd === "git_backup_list_versions") return [];
   if (cmd === "git_backup_set_remote" || cmd === "git_backup_remove_remote" || cmd === "backup_set_device_name") return null;
   if (cmd === "add_project") return "project-1";
   if (cmd === "get_central_repo_path") return "~/.skill-hive";
   if (cmd === "set_central_repo_path") return text("path") || "~/.skill-hive";
-  if (cmd === "check_all_skill_updates") return 0;
+  if (cmd === "check_all_skill_updates") return updateCount;
   if (cmd === "check_skill_update") return "current";
   if (cmd === "write_history_baseline") {
     return JSON.stringify({
@@ -215,6 +295,16 @@ export const SKILLS: SkillCard[] = [
 ];
 
 export function installIpc(skills = SKILLS, failSettings = false) {
+  ipcLog.length = 0;
+  storedSettings.clear();
+  projectRows = [];
+  projectSkillRows = [];
+  updateCount = 0;
+  backupRemote = null;
+  generatedPayload = null;
+  comparePayload = null;
+  optimizePayload = null;
+  logExcerpt = null;
   const state = installState(skills, [
     { key: "claude_code", name: "Claude Code", installed: true, enabled: true, path: "~/.claude/skills", projectPath: ".claude/skills", custom: false },
   ]);
@@ -231,6 +321,16 @@ export function renderAt(path: string) {
 }
 
 export function renderShell(path: string) {
+  ipcLog.length = 0;
+  storedSettings.clear();
+  projectRows = [];
+  projectSkillRows = [];
+  updateCount = 0;
+  backupRemote = null;
+  generatedPayload = null;
+  comparePayload = null;
+  optimizePayload = null;
+  logExcerpt = null;
   const state = installState([], []);
   mockIPC((cmd, args) => handleIpc(state, cmd, (args ?? {}) as Record<string, unknown>, false));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

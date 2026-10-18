@@ -466,6 +466,14 @@ export function exportHistory(skillName: string, versions: DraftVersion[]): {
   };
 }
 
+export function agentCamelFields(text: string): string[] {
+  const found = new Set<string>();
+  for (const [snake, camel] of Object.entries(NEAR_MISS)) {
+    if (text.includes(snake) || text.includes(camel)) found.add(camel);
+  }
+  return [...found];
+}
+
 export function renderAgentFile(text: string): string {
   return text.endsWith("\n") ? text : `${text}\n`;
 }

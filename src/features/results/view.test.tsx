@@ -12,6 +12,7 @@ describe("results", () => {
   });
 
 it("opens a heatmap cell with the keyboard and jumps to evidence", async () => {
+    localStorage.setItem("skill-hive-demo", "1");
     const user = userEvent.setup();
     renderAt("/runs/run-fixture");
     const grid = await screen.findByTestId("heatmap");

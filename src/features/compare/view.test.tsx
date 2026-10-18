@@ -12,6 +12,7 @@ describe("compare", () => {
   });
 
 it("keeps comparison blind until the verdict and applies optimization only on click", async () => {
+    localStorage.setItem("skill-hive-demo", "1");
     const user = userEvent.setup();
     renderAt("/compare/cmp-fixture");
     expect(await screen.findByText("Output A")).toBeInTheDocument();

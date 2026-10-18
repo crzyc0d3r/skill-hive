@@ -13,21 +13,22 @@ use serde_json::{json, Value};
 
 use crate::Fail;
 
-pub fn generate_skill(name: &str, replay: bool) -> Result<Value, Fail> {
-    refuse_live(replay)?;
+pub fn generate_skill(name: &str, task: Option<&str>, replay: bool) -> Result<Value, Fail> {
+    let goal = task.unwrap_or("Extract line items from supplier invoice PDFs into a CSV");
+    if !replay {
+        return generate_skill_live(name, goal);
+    }
     let root = central_repo::base_dir().join("generations");
-    let mut session = GenerationSession::start(
-        &root,
-        None,
-        Kind::Skill,
-        "Extract line items from supplier invoice PDFs into a CSV",
-        name,
-        Profile::Portable,
-    )
-    .map_err(Fail::other)?;
+    let mut session =
+        GenerationSession::start(&root, None, Kind::Skill, goal, name, Profile::Portable)
+            .map_err(Fail::other)?;
     session
         .run_review(&skill_envelope(name, false))
         .map_err(|err| Fail::other(format!("{err:?}")))?;
+    let dir = root.join(name);
+    fs::create_dir_all(&dir).map_err(|err| Fail::other(err.to_string()))?;
+    let body = format!("---\nname: {name}\ndescription: {goal}\n---\n\n{goal}\n");
+    fs::write(dir.join("SKILL.md"), body).map_err(|err| Fail::other(err.to_string()))?;
     Ok(json!({
         "command": "generate.skill",
         "name": name,
@@ -35,18 +36,50 @@ pub fn generate_skill(name: &str, replay: bool) -> Result<Value, Fail> {
         "errors": session.findings_errors
     }))
 }
-pub fn generate_agent(name: &str, replay: bool) -> Result<Value, Fail> {
-    refuse_live(replay)?;
-    let root = central_repo::base_dir().join("generations");
-    let mut session = GenerationSession::start(
-        &root,
-        None,
-        Kind::Agent,
-        "Review a diff for security problems",
-        name,
-        Profile::Portable,
+
+fn generate_skill_live(name: &str, goal: &str) -> Result<Value, Fail> {
+    let Some(url) = crate::providers::local_base_url() else {
+        return Err(Fail::other(
+            "live generation is unavailable without a vendor API key; pass --replay",
+        ));
+    };
+    let response = crate::providers::post_local(
+        &url,
+        &json!({"task": goal, "name": name, "kind": "skill"}).to_string(),
     )
-    .map_err(Fail::other)?;
+    .map_err(|_| {
+        Fail::other("live generation is unavailable without a vendor API key; pass --replay")
+    })?;
+    let text = serde_json::from_str::<Value>(&response)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or(response);
+    let dir = central_repo::base_dir().join("generations").join(name);
+    fs::create_dir_all(&dir).map_err(|err| Fail::other(err.to_string()))?;
+    let body = format!("---\nname: {name}\ndescription: {goal}\n---\n\n{goal}\n\n{text}\n");
+    fs::write(dir.join("SKILL.md"), body).map_err(|err| Fail::other(err.to_string()))?;
+    Ok(json!({
+        "command": "generate.skill",
+        "name": name,
+        "status": "review",
+        "errors": 0
+    }))
+}
+
+pub fn generate_agent(name: &str, task: Option<&str>, replay: bool) -> Result<Value, Fail> {
+    let goal = task.unwrap_or("Review a diff for security problems");
+    if !replay {
+        return generate_agent_live(name, goal);
+    }
+    let root = central_repo::base_dir().join("generations");
+    let mut session =
+        GenerationSession::start(&root, None, Kind::Agent, goal, name, Profile::Portable)
+            .map_err(Fail::other)?;
     session
         .run_review(&agent_envelope(name))
         .map_err(|err| Fail::other(format!("{err:?}")))?;
@@ -59,13 +92,54 @@ pub fn generate_agent(name: &str, replay: bool) -> Result<Value, Fail> {
         .count();
     let defs = central_repo::base_dir().join("agent-defs");
     fs::create_dir_all(&defs).map_err(|err| Fail::other(err.to_string()))?;
-    fs::copy(saved.join("agent.md"), defs.join(format!("{name}.md")))
-        .map_err(|err| Fail::other(err.to_string()))?;
+    let dest = defs.join(format!("{name}.md"));
+    fs::copy(saved.join("agent.md"), &dest).map_err(|err| Fail::other(err.to_string()))?;
+    let mut text = fs::read_to_string(&dest).unwrap_or_default();
+    if !text.contains(goal) {
+        text.push('\n');
+        text.push_str(goal);
+        text.push('\n');
+        fs::write(&dest, text).map_err(|err| Fail::other(err.to_string()))?;
+    }
     Ok(json!({
         "command": "generate.agent",
         "name": name,
         "status": "saved",
         "errors": errors
+    }))
+}
+
+fn generate_agent_live(name: &str, goal: &str) -> Result<Value, Fail> {
+    let Some(url) = crate::providers::local_base_url() else {
+        return Err(Fail::other(
+            "live generation is unavailable without a vendor API key; pass --replay",
+        ));
+    };
+    let response = crate::providers::post_local(
+        &url,
+        &json!({"task": goal, "name": name, "kind": "agent"}).to_string(),
+    )
+    .map_err(|_| {
+        Fail::other("live generation is unavailable without a vendor API key; pass --replay")
+    })?;
+    let text = serde_json::from_str::<Value>(&response)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or(response);
+    let defs = central_repo::base_dir().join("agent-defs");
+    fs::create_dir_all(&defs).map_err(|err| Fail::other(err.to_string()))?;
+    let body = format!("---\nname: {name}\ndescription: {goal}\n---\n\n{goal}\n\n{text}\n");
+    fs::write(defs.join(format!("{name}.md")), body).map_err(|err| Fail::other(err.to_string()))?;
+    Ok(json!({
+        "command": "generate.agent",
+        "name": name,
+        "status": "saved",
+        "errors": 0
     }))
 }
 pub fn generate_evals(name: &str, replay: bool) -> Result<Value, Fail> {

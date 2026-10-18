@@ -40,7 +40,6 @@ import { SettingsView } from "./features/settings/SettingsView";
 import { WorkspaceView } from "./features/workspace/WorkspaceView";
 import { centerChangedNames, draftSkillCards, useAuthoring } from "@/lib/authoring/store";
 import { BackupView } from "./features/backup/BackupView";
-import { LobsterView } from "./features/lobster/LobsterView";
 import { ProjectView } from "./features/project/ProjectView";
 import { EndpointsView } from "./features/endpoints/EndpointsView";
 import { ResultsView } from "./features/results/ResultsView";
@@ -59,7 +58,7 @@ function DashboardPage() {
 
 function LibraryPage() {
   const client = useQueryClient();
-  const { skills, presets, setPresets } = useOutletContext<ShellOutletContext>();
+  const { skills, presets, setPresets, activePresetId } = useOutletContext<ShellOutletContext>();
   useAuthoring();
   const drafts = draftSkillCards();
   const [params] = useSearchParams();
@@ -67,7 +66,7 @@ function LibraryPage() {
   useEffect(() => {
     setRows(skills);
   }, [skills]);
-  const preset = presets.find((item) => item.id === "research") ?? presets[0];
+  const preset = presets.find((item) => item.id === activePresetId) ?? presets.find((item) => item.id === "research") ?? presets[0];
   const memberIds = preset?.skillIds ?? [];
   const refresh = () => client.invalidateQueries({ queryKey: ["skills"] });
   return (
@@ -241,7 +240,21 @@ function screenFor(path: string) {
 
 function LobsterPage() {
   const { agentKey } = useParams();
-  return <LobsterView agentKey={agentKey} />;
+  const { presets, skills, agents } = useOutletContext<ShellOutletContext>();
+  useAuthoring();
+  return (
+    <div data-testid="lobster">
+      <WorkspaceView
+        presets={presets}
+        agents={agents}
+        library={skills}
+        agentKey={agentKey}
+        cards={agentKey ? workspaceCards(skills, agentKey) : []}
+        onApply={(id) => applyPreset(id, agentKey).then(() => undefined)}
+        onCreate={(name) => createPreset(name).then(() => undefined)}
+      />
+    </div>
+  );
 }
 
 export function App({ client }: { client: QueryClient }) {

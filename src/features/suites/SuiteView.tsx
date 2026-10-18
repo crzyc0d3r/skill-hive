@@ -19,7 +19,7 @@ export function SuiteView() {
             {t("suite.run")}
           </Link>
         </div>
-        {wizard.optimized ? <p data-testid="optimize-preview">{t("suite.optimized")}</p> : null}
+        {wizard.optimized ? <p data-testid="optimize-preview">{wizard.optimizePath || t("suite.optimized")}</p> : null}
         {wizard.applied ? <p data-testid="optimize-applied">{t("suite.apply")}</p> : null}
       </Card>
     </section>

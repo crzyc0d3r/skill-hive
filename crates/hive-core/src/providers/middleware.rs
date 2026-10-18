@@ -167,13 +167,15 @@ impl Limiter {
             drop(guard);
             write_ledger_row(
                 ledger.as_deref(),
-                &provider_id,
-                model,
-                purpose,
-                0.0,
-                "rate_limited",
-                Some("rpm"),
-                now_ms / 1000,
+                &LedgerWrite {
+                    provider_id: &provider_id,
+                    model,
+                    purpose,
+                    cost_usd: 0.0,
+                    status: "rate_limited",
+                    error_kind: Some("rpm"),
+                    ts: now_ms / 1000,
+                },
             )?;
             let mut err =
                 ProviderError::new(ErrorClass::RateLimited, "requests per minute exceeded");
@@ -190,13 +192,15 @@ impl Limiter {
             drop(guard);
             write_ledger_row(
                 ledger.as_deref(),
-                &provider_id,
-                model,
-                purpose,
-                0.0,
-                "rate_limited",
-                Some("tpm"),
-                now_ms / 1000,
+                &LedgerWrite {
+                    provider_id: &provider_id,
+                    model,
+                    purpose,
+                    cost_usd: 0.0,
+                    status: "rate_limited",
+                    error_kind: Some("tpm"),
+                    ts: now_ms / 1000,
+                },
             )?;
             let mut err = ProviderError::new(ErrorClass::RateLimited, "tokens per minute exceeded");
             err.retryable = false;
@@ -216,13 +220,15 @@ impl Limiter {
         drop(guard);
         let _ = write_ledger_row(
             ledger.as_deref(),
-            &provider_id,
-            &row.model,
-            &row.purpose,
-            row.cost_usd,
-            &row.status,
-            row.error_kind.as_deref(),
-            now_ms / 1000,
+            &LedgerWrite {
+                provider_id: &provider_id,
+                model: &row.model,
+                purpose: &row.purpose,
+                cost_usd: row.cost_usd,
+                status: &row.status,
+                error_kind: row.error_kind.as_deref(),
+                ts: now_ms / 1000,
+            },
         );
     }
 
@@ -252,16 +258,17 @@ impl Limiter {
     }
 }
 
-fn write_ledger_row(
-    db: Option<&Path>,
-    provider_id: &str,
-    model: &str,
-    purpose: &str,
+struct LedgerWrite<'a> {
+    provider_id: &'a str,
+    model: &'a str,
+    purpose: &'a str,
     cost_usd: f64,
-    status: &str,
-    error_kind: Option<&str>,
+    status: &'a str,
+    error_kind: Option<&'a str>,
     ts: u64,
-) -> Result<(), ProviderError> {
+}
+
+fn write_ledger_row(db: Option<&Path>, row: &LedgerWrite<'_>) -> Result<(), ProviderError> {
     let Some(db) = db else {
         return Ok(());
     };
@@ -270,13 +277,13 @@ fn write_ledger_row(
     conn.execute(
         "INSERT INTO usage_ledger (ts, provider_config_id, model, purpose, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, status, error_kind) VALUES (?1, ?2, ?3, ?4, 0, 0, 0, 0, ?5, ?6, ?7)",
         (
-            ts as i64,
-            provider_id,
-            model,
-            purpose,
-            cost_usd,
-            status,
-            error_kind,
+            row.ts as i64,
+            row.provider_id,
+            row.model,
+            row.purpose,
+            row.cost_usd,
+            row.status,
+            row.error_kind,
         ),
     )
     .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?;

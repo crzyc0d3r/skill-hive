@@ -14,7 +14,10 @@ interface WizardState {
   discardAsk: boolean;
   optimized: boolean;
   applied: boolean;
+  optimizePath: string;
+  questions: string[];
   verdict: string;
+  compareText: string;
 }
 
 const wizardEmpty: WizardState = {
@@ -27,7 +30,10 @@ const wizardEmpty: WizardState = {
   discardAsk: false,
   optimized: false,
   applied: false,
+  optimizePath: "",
+  questions: [],
   verdict: "",
+  compareText: "",
 };
 
 let wizard = wizardEmpty;
@@ -87,9 +93,24 @@ export function setGoal(goal: string): void {
   publish();
 }
 
+function takeQuestions(raw: unknown) {
+  if (typeof raw !== "string") return;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+      wizard = { ...wizard, questions: parsed };
+      publish();
+    }
+  } catch {
+    /* a saved path is not an interview list */
+  }
+}
+
 export function acceptDefaults(): void {
+  const goal = wizard.goal || "interview";
   wizard = { ...wizard, answers: "accepted defaults", step: "drafting" };
   publish();
+  void saveGeneratedDraft(goal).then(takeQuestions);
 }
 
 export function continueWizard(): void {
@@ -141,13 +162,23 @@ export function applyOptimized(): void {
   if (!wizard.optimized) return;
   wizard = { ...wizard, applied: true };
   publish();
-  void applyOptimizedDescription(wizard.goal);
+  void applyOptimizedDescription(wizard.goal).then((value) => {
+    if (typeof value === "string" && value) {
+      wizard = { ...wizard, optimizePath: value };
+      publish();
+    }
+  });
 }
 
 export function recordVerdict(verdict: string): void {
   wizard = { ...wizard, verdict };
   publish();
-  void recordCompareVerdict("comparison", verdict);
+  void recordCompareVerdict("comparison", verdict).then((value) => {
+    if (typeof value === "string" && value) {
+      wizard = { ...wizard, compareText: value };
+      publish();
+    }
+  });
 }
 
 export function resetGenerate(): void {

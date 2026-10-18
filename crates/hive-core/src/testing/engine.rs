@@ -108,14 +108,20 @@ fn rfc3339(secs: i64) -> String {
 struct Clock {
     origin: i64,
     tick: AtomicU64,
+    timing: EngineClock,
 }
 
 impl Clock {
-    fn new(seed: u64) -> Self {
+    fn new(timing: &EngineClock) -> Self {
         Self {
-            origin: 1_736_000_000 + i64::try_from(seed % 10_000).unwrap_or(0),
+            origin: timing.start_unix,
             tick: AtomicU64::new(0),
+            timing: timing.clone(),
         }
+    }
+
+    fn from_seed(seed: u64) -> Self {
+        Self::new(&EngineClock::from_seed(seed))
     }
 
     fn now(&self) -> i64 {
@@ -160,8 +166,10 @@ pub fn run_plan_with_clock(
         &suite,
         &cells,
         &mut report,
-        false,
-        clock,
+        &Batch {
+            resuming: false,
+            timing: clock,
+        },
     )?;
     Ok(report)
 }
@@ -186,6 +194,7 @@ pub fn resume_run(plan: &Plan, provider: &dyn ChatProvider) -> Result<RunReport>
     let mut resumed = plan.clone();
     resumed.crash_after = None;
     resumed.cancel_after = None;
+    let timing = EngineClock::from_seed(plan.seed);
     execute_cells(
         &resumed,
         provider,
@@ -193,10 +202,17 @@ pub fn resume_run(plan: &Plan, provider: &dyn ChatProvider) -> Result<RunReport>
         &suite,
         &cells,
         &mut report,
-        true,
-        &EngineClock::from_seed(plan.seed),
+        &Batch {
+            resuming: true,
+            timing: &timing,
+        },
     )?;
     Ok(report)
+}
+
+struct Batch<'a> {
+    resuming: bool,
+    timing: &'a EngineClock,
 }
 
 fn execute_cells(
@@ -206,10 +222,10 @@ fn execute_cells(
     suite: &Suite,
     cells: &[CellSpec],
     report: &mut RunReport,
-    resuming: bool,
-    timing: &EngineClock,
+    batch: &Batch<'_>,
 ) -> Result<()> {
-    let clock = Clock::new(plan.seed);
+    let clock = Clock::new(batch.timing);
+    let resuming = batch.resuming;
     report.progress.push("started".into());
     let mut spent = if resuming {
         spent_usd(conn, &report.run_id)?
@@ -270,7 +286,7 @@ fn execute_cells(
         )?;
         copy_case_inputs(plan, suite, cell, &sandbox, &dir)?;
         report.progress.push("cell".into());
-        let outcome = execute_cell(plan, provider, cell, &sandbox, &dir, &clock, suite, timing)?;
+        let outcome = execute_cell(plan, provider, cell, &sandbox, &dir, &clock, suite)?;
         fs::write(dir.join("sandbox-listing.txt"), skills_listing(&sandbox))?;
         fs::remove_dir_all(&sandbox)?;
         let cost = plan.usd_per_cell.unwrap_or(outcome.cost);
@@ -366,7 +382,6 @@ fn execute_cell(
     dir: &Path,
     clock: &Clock,
     suite: &Suite,
-    timing_clock: &EngineClock,
 ) -> Result<CellOutcome> {
     let skilled = cell.configuration == "with_skill";
     let marker = fs::read_to_string(plan.skill_dir.join("SKILL.md")).unwrap_or_default();
@@ -505,8 +520,8 @@ fn execute_cell(
         "total_tokens": usage.total(),
         "duration_ms": duration_ms,
         "total_duration_seconds": (duration_ms as f64) / 1000.0,
-        "executor_start": timing_clock.start_stamp(),
-        "executor_end": timing_clock.end_stamp(),
+        "executor_start": clock.timing.start_stamp(),
+        "executor_end": clock.timing.end_stamp(),
         "executor_duration_seconds": (duration_ms as f64) / 1000.0
     });
     fs::write(
@@ -592,7 +607,7 @@ fn grade_cell(input: &GradeInput<'_>) -> Result<(Value, f64)> {
                 provider,
                 &request,
                 &mut Transcript::new(dir.join("grader.jsonl"), secret),
-                &Clock::new(plan.seed),
+                &Clock::from_seed(plan.seed),
             )?;
             let parsed: Value = serde_json::from_str(&response.text).unwrap_or(Value::Null);
             let row = parsed

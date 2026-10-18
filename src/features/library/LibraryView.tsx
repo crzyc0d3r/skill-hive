@@ -7,7 +7,7 @@ import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type Sk
 import { windowRows } from "@/lib/perf";
 import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
-import { checkSkillUpdate, silent } from "@/lib/ipc/actions";
+import { applyAvailableSkillUpdates, checkSkillUpdate, silent } from "@/lib/ipc/actions";
 import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
@@ -82,7 +82,20 @@ export function LibraryView({
   const [dragId, setDragId] = useState<string | null>(null);
   const [batchTag, setBatchTag] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
+  const [catalogAgents, setCatalogAgents] = useState<string[]>([]);
+  const [sourceRef, setSourceRef] = useState<string | null>(null);
   const { seed } = useGenerate();
+  useEffect(() => {
+    void silent<{ key: string }[]>("get_tool_status").then((rows) => {
+      if (Array.isArray(rows)) setCatalogAgents(rows.map((row) => row.key));
+    });
+  }, []);
+  useEffect(() => {
+    if (!openId) return;
+    void silent<{ path?: string }>("get_source_skill_document", { skillId: openId }).then((doc) => {
+      setSourceRef(doc?.path ?? null);
+    });
+  }, [openId]);
 
   const sources = useMemo(() => [...new Set(skills.map((skill) => skill.source))], [skills]);
   const tags = useMemo(() => [...new Set(skills.flatMap((skill) => skill.tags))], [skills]);
@@ -232,6 +245,7 @@ export function LibraryView({
           <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { void applyAvailableSkillUpdates(); void silent("batch_update_skills", { ids: selected }); }}>{t("library.batch.update")}</Button>
           <Button type="button" size="sm" onClick={() => setSyncOpen(true)}>
             {t("library.sync")}
           </Button>
@@ -294,7 +308,7 @@ export function LibraryView({
                     <Link to={`/skills/${skill.id}/edit`} className={menuItem}>{t("library.menu.edit")}</Link>
                     <Link to={`/skills/${skill.id}/tests`} className={menuItem} aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
                     <button type="button" className={menuItem} onClick={() => { setChecked({ name: skill.name, status: "" }); void checkSkillUpdate(skill.id).then((status) => setChecked({ name: skill.name, status: status || "" })); }}>{t("library.menu.check")}</button>
-                    <button type="button" className={menuItem} onClick={() => { void silent("reimport_local_skill", { skillId: skill.id }); }}>{t("library.menu.update")}</button>
+                    <button type="button" className={menuItem} onClick={() => { void checkSkillUpdate(skill.id).then((status) => { setChecked({ name: skill.name, status: status || "" }); void silent("update_skill", { skillId: skill.id }); }); if (skill.source === "local") void silent("reimport_local_skill", { skillId: skill.id }); }}>{skill.source === "local" ? t("library.menu.reimport") : t("library.menu.update")}</button>
                     <button type="button" className={cn(menuItem, "text-destructive")} onClick={() => onDeleteSkills([skill.id])}>{t("library.menu.delete")}</button>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -351,7 +365,7 @@ export function LibraryView({
                   {memberIds.includes(skill.id) ? <span className="truncate text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
                 <div className="flex gap-1" data-testid={`sync-dots-${skill.id}`}>
-                  {["claude_code", "codex"].map((agent) => {
+                  {[...new Set(["claude_code", "codex", ...catalogAgents, ...skill.agents])].map((agent) => {
                     const filled = skill.agents.includes(agent);
                     return (
                       <button key={agent} type="button" data-filled={filled ? "true" : "false"} title={agent} className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" onClick={() => onToggleAgent(skill.id, agent)}>
@@ -376,7 +390,7 @@ export function LibraryView({
             ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {["claude_code", "codex"].map((agent) => (
+            {[...new Set(["claude_code", "codex", ...catalogAgents, ...open.agents])].map((agent) => (
               <Button key={agent} type="button" aria-pressed={open.agents.includes(agent)} variant={open.agents.includes(agent) ? "secondary" : "outline"} size="sm" onClick={() => onToggleAgent(open.id, agent)}>
                 {agent}
               </Button>
@@ -386,10 +400,11 @@ export function LibraryView({
           {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.body}</pre> : null}
           {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.sourceBody}</pre> : null}
           {tab === "local" ? (
-            <div className="mt-3">
+            <div className="mt-3" data-testid="origin-meta">
               <p className="text-xs text-muted-foreground">{open.source} · {open.updateStatus ?? t("library.checked")}</p>
               <ul className="mt-2 text-sm">
-                <li>{t("library.detail.source")}: {open.source}</li>
+                <li>{t("library.origin.type")}: {open.source}</li>
+                {open.sourceRef || sourceRef ? <li>{t("library.origin.ref")}: {open.sourceRef || sourceRef}</li> : null}
               </ul>
             </div>
           ) : null}

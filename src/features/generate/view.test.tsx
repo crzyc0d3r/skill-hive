@@ -12,6 +12,7 @@ describe("generate", () => {
   });
 
 it("walks the wizard, keeps save disabled until the diff opens, and asks before discard", async () => {
+    localStorage.setItem("skill-hive-demo", "1");
     const user = userEvent.setup();
     renderAt("/generate/skill");
     expect(await screen.findByTestId("generate-wizard")).toBeInTheDocument();

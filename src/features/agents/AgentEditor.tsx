@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { t } from "@/lib/i18n";
-import { exportStatus, renderAgentFile, renderAgentsCliJson, validateAgentText } from "@/lib/authoring/model";
+import { agentCamelFields, exportStatus, parseFrontmatter, renderAgentFile, renderAgentsCliJson, validateAgentText } from "@/lib/authoring/model";
 import { agentState, ensureAgent, exportAgent, fixAgent, saveAgent, useAuthoring } from "@/lib/authoring/store";
 
 const TABS = ["problems", "preview", "export", "versions"] as const;
@@ -21,6 +21,9 @@ export function AgentEditor() {
   if (!agent) return <p>{t("library.empty")}</p>;
   const findings = validateAgentText(agent.text, agent.plugin);
   const rendered = renderAgentFile(agent.text);
+  const description = parseFrontmatter(agent.text).keys.find((entry) => entry.name === "description")?.value ?? "";
+  const fields = agentCamelFields(agent.text);
+  const versions = authoring.versions[id] ?? [];
   const status = agentState(id);
   const json = JSON.stringify(renderAgentsCliJson(agent.text));
 
@@ -35,6 +38,11 @@ export function AgentEditor() {
         <Button type="button" aria-pressed={agent.plugin} variant="outline" size="sm" onClick={() => saveAgent({ ...agent, plugin: !agent.plugin })}>{t("editor.plugin")}</Button>
       </div>
       <p data-testid="export-status">{t(`agents.${status}`)}</p>
+      <p data-testid="description-length">{t("editor.descriptionLength")} {description.length}</p>
+      <p data-testid="agent-fields">{t("editor.agentFields")} {fields.join(" ")}</p>
+      <ul data-testid="agent-versions">
+        {versions.map((version) => <li key={version.id}>{version.label || version.id}</li>)}
+      </ul>
       <label className="mt-3 block text-sm">
         {t("editor.body")}
         <textarea aria-label={t("editor.body")} value={agent.text} onChange={(event) => saveAgent({ ...agent, text: event.target.value })} className="mt-1 h-40 w-full rounded-md border border-input p-2 font-mono text-sm" />
