@@ -604,6 +604,33 @@ pub fn run_cli_trigger(
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+pub fn benchmark_notes(
+    provider: &dyn ChatProvider,
+    model: &str,
+    summary: &str,
+    secret: &str,
+) -> Result<Vec<String>, String> {
+    let mut vars = std::collections::BTreeMap::new();
+    vars.insert("benchmark".to_string(), summary.to_string());
+    let prompt = format!("HIVE_ANALYST\n{}", render(Template::P13, &vars));
+    let text = send_prompt(provider, model, &prompt, secret)?;
+    let parsed: Value = serde_json::from_str(text.trim()).unwrap_or(Value::Null);
+    let mut notes = Vec::new();
+    if let Some(rows) = parsed.get("notes").and_then(Value::as_array) {
+        for row in rows {
+            if let Some(line) = row.get("text").and_then(Value::as_str) {
+                notes.push(line.to_string());
+            } else if let Some(line) = row.as_str() {
+                notes.push(line.to_string());
+            }
+        }
+    }
+    if notes.is_empty() && !text.trim().is_empty() {
+        notes.push(text);
+    }
+    Ok(notes)
+}
+
 pub fn interview_goal(
     provider: &dyn ChatProvider,
     model: &str,
@@ -736,17 +763,29 @@ pub fn run_measured(request: &MeasureRequest) -> Result<Value, String> {
     let lookalikes = write_lookalikes(&request.workspace, &candidate)?;
     let mut library = request.distractors.clone();
     library.extend(lookalikes.iter().cloned());
+    library.extend(sibling_skills(&request.skill_dir, &candidate.name));
     let provider = provider_for(request)?;
     let model = request.models[0].id.clone();
+    let control = fs::read_to_string(request.workspace.join("control.json")).unwrap_or_default();
+    let budget_usd = if control.contains("\"stop\"") {
+        Some(0.0)
+    } else {
+        None
+    };
+    let cancel_after = if control.contains("\"cancel\"") {
+        Some(0)
+    } else {
+        None
+    };
     let plan = Plan {
         skill_dir: request.skill_dir.clone(),
         workspace: request.workspace.clone(),
         db_path: request.db_path.clone(),
         mode: RunMode::Live,
         seed: request.seed,
-        repetitions: 1,
-        budget_usd: None,
-        cancel_after: None,
+        repetitions: request.repetitions.max(1),
+        budget_usd,
+        cancel_after,
         crash_after: None,
         recordings: request.workspace.join("recordings"),
         personal_skills: None,
@@ -951,33 +990,43 @@ pub fn run_measured(request: &MeasureRequest) -> Result<Value, String> {
     let names: Vec<String> = std::iter::once(candidate.name.clone())
         .chain(library.iter().map(|skill| skill.name.clone()))
         .collect();
-    let matrix = conflict_matrix(&library_rows, &names);
+    let mut matrix = conflict_matrix(&library_rows, &names);
     let won = library_rows
         .iter()
         .filter(|row| row.should_trigger && row.outcome == "fired_alone")
         .count() as u64;
-    let influence = influence_map(
-        &[SkillScore {
-            name: candidate.name.clone(),
-            won,
-            grade: grade.clone(),
-            score,
-        }],
-        &matrix,
-    );
+    let peers = score_peers(&PeerAsk {
+        request,
+        provider: provider.as_ref(),
+        candidate: &candidate,
+        library: &library,
+        model: &model,
+        queries: &queries,
+    })?;
+    matrix.extend(peers.matrix);
+    let mut skill_scores = vec![SkillScore {
+        name: candidate.name.clone(),
+        won,
+        grade: grade.clone(),
+        score,
+    }];
+    skill_scores.extend(peers.scores);
+    let influence = influence_map(&skill_scores, &matrix);
     let efficiency = axes
         .iter()
         .find(|item| item.name == "Efficiency")
         .and_then(|item| item.value)
         .unwrap_or(0.0);
     let fires = trigger_pass.unwrap_or(0.0);
-    let board = rank_leaderboard(&[RankRow {
+    let mut rank_rows = vec![RankRow {
         skill: candidate.name.clone(),
         fires,
         quality: with_rate,
         value_added: value_score,
         efficiency,
-    }]);
+    }];
+    rank_rows.extend(peers.ranks);
+    let board = rank_leaderboard(&rank_rows);
     let overlap = static_overlap(
         &{
             let mut all = vec![candidate.clone()];
@@ -1059,6 +1108,13 @@ pub fn run_measured(request: &MeasureRequest) -> Result<Value, String> {
             )
         })
         .unwrap_or_default();
+    let summary = format!("with_rate={with_rate} without_rate={without_rate}");
+    let analyst = benchmark_notes(provider.as_ref(), &model, &summary, &request.api_key)?;
+    fs::write(
+        request.workspace.join("analyst-notes.json"),
+        serde_json::to_string(&analyst).map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())?;
     let omitted: Vec<String> = axes
         .iter()
         .filter(|item| item.value.is_none())
@@ -1077,6 +1133,7 @@ pub fn run_measured(request: &MeasureRequest) -> Result<Value, String> {
         "leader_factor": "fires and quality",
         "axes": axes.iter().map(|item| json!({"name": item.name, "value": item.value})).collect::<Vec<_>>(),
         "influence": influence,
+        "overlay": peers.overlay,
         "leaderboard": board.iter().enumerate().map(|(index, row)| json!({
             "rank": index + 1,
             "skill": row.skill,
@@ -1099,6 +1156,7 @@ pub fn run_measured(request: &MeasureRequest) -> Result<Value, String> {
         "overlap": overlap.iter().map(|hit| json!({"left": hit.left, "right": hit.right, "reason": hit.reason})).collect::<Vec<_>>(),
         "interference": interference,
         "history": history,
+        "analyst_notes": analyst,
         "alerts": regression.alerts.iter().map(|alert| json!({"rule": alert.rule, "message": alert.message})).collect::<Vec<_>>(),
         "offer_set_baseline": regression.offer_set_baseline,
         "with_rate": with_rate,
@@ -1115,7 +1173,11 @@ pub fn run_measured(request: &MeasureRequest) -> Result<Value, String> {
             "configurations": ["with_skill", "without_skill"],
             "models": request.models.iter().map(|choice| choice.id.clone()).collect::<Vec<_>>(),
             "adapter": request.adapter,
+            "repetitions": repetitions,
+            "estimate_calls": estimate_calls(repetitions, queries.len(), library.len()),
         },
+        "progress": ["preparing", "running", "triggers", "done"],
+        "modes": ["emulated", "claude-code", "sequential", "static"],
     });
     fs::write(
         request.workspace.join("effectiveness.json"),
@@ -1189,14 +1251,14 @@ fn ask_trigger(ask_for: &TriggerAsk<'_>) -> Result<ActivationRow, String> {
         secret,
         workspace,
     } = *ask_for;
-    let listed = serde_json::to_string(
-        &skills
-            .iter()
-            .map(|skill| json!({"name": skill.name, "description": skill.description}))
-            .collect::<Vec<_>>(),
-    )
-    .map_err(|err| err.to_string())?;
-    let system = format!("HIVE_TRIGGER\navailable_skills: {listed}");
+    let mut vars = std::collections::BTreeMap::new();
+    let listing = skills
+        .iter()
+        .map(|skill| format!("{}|{}", skill.name, skill.description))
+        .collect::<Vec<_>>()
+        .join("\n");
+    vars.insert("skills".to_string(), listing);
+    let system = render(Template::P9, &vars);
     let tools = vec![
         ToolDef {
             name: "Skill".to_string(),
@@ -1539,6 +1601,351 @@ fn trigger_queries(suite: &Suite) -> Vec<TriggerRow> {
         ]
     } else {
         suite.triggers.clone()
+    }
+}
+
+struct PeerAsk<'a> {
+    request: &'a MeasureRequest,
+    provider: &'a dyn ChatProvider,
+    candidate: &'a LibrarySkill,
+    library: &'a [LibrarySkill],
+    model: &'a str,
+    queries: &'a [TriggerRow],
+}
+
+struct PeerScore {
+    scores: Vec<SkillScore>,
+    ranks: Vec<RankRow>,
+    matrix: Vec<Value>,
+    overlay: Value,
+}
+
+fn score_peers(ask: &PeerAsk<'_>) -> Result<PeerScore, String> {
+    let mut scores = Vec::new();
+    let mut ranks = Vec::new();
+    let mut matrix = Vec::new();
+    let mut overlay = Value::Null;
+    let Some(choice) = ask.request.models.iter().find(|item| item.id == ask.model) else {
+        return Ok(PeerScore {
+            scores,
+            ranks,
+            matrix,
+            overlay,
+        });
+    };
+    for peer in ask.library {
+        let mut context = vec![peer.clone(), ask.candidate.clone()];
+        context.extend(
+            ask.library
+                .iter()
+                .filter(|skill| skill.name != peer.name)
+                .cloned(),
+        );
+        let mut rows = Vec::new();
+        for (index, query) in ask.queries.iter().enumerate() {
+            rows.push(ask_trigger(&TriggerAsk {
+                provider: ask.provider,
+                model: &choice.id,
+                strong: choice.strong,
+                adapter: &ask.request.adapter,
+                context: "library",
+                candidate: &peer.name,
+                skills: &context,
+                query_id: &format!("peer-{}-{index}", peer.name),
+                query: &query.query,
+                should_trigger: query.should_trigger,
+                secret: &ask.request.api_key,
+                workspace: &ask.request.workspace,
+            })?);
+        }
+        let fires = fired_alone_rate(&rows).unwrap_or(0.0);
+        let won = rows
+            .iter()
+            .filter(|row| row.should_trigger && row.outcome == "fired_alone")
+            .count() as u64;
+        let peer_axes = radar_axes(&RadarInput {
+            trigger_pass_rate: Some(fires),
+            negative_pass_rate: pass_rate(&rows, false, ask.request.threshold),
+            fired_alone_alone: Some(1.0),
+            fired_alone_library: Some(fires),
+            with_rate: Some(fires),
+            without_rate: Some(0.0),
+            repetition_rates: vec![fires],
+            weak_pass_rate: None,
+            with_tokens: None,
+            without_tokens: None,
+            with_time: None,
+            without_time: None,
+        });
+        let (peer_grade, peer_score) = letter_grade(&peer_axes);
+        if overlay.is_null() {
+            overlay = json!({
+                "name": peer.name,
+                "axes": peer_axes.iter().map(|item| json!({"name": item.name, "value": item.value})).collect::<Vec<_>>(),
+            });
+        }
+        scores.push(SkillScore {
+            name: peer.name.clone(),
+            won,
+            grade: peer_grade,
+            score: peer_score,
+        });
+        ranks.push(RankRow {
+            skill: peer.name.clone(),
+            fires,
+            quality: fires,
+            value_added: peer_score,
+            efficiency: fires * 100.0,
+        });
+        let peer_names: Vec<String> = context.iter().map(|skill| skill.name.clone()).collect();
+        matrix.extend(conflict_matrix(&rows, &peer_names));
+    }
+    Ok(PeerScore {
+        scores,
+        ranks,
+        matrix,
+        overlay,
+    })
+}
+
+pub fn send_prompt(
+    provider: &dyn ChatProvider,
+    model: &str,
+    prompt: &str,
+    secret: &str,
+) -> Result<String, String> {
+    ask(provider, model, None, prompt, &[], secret, "generator").map(|response| response.text)
+}
+
+/// Send templates P1 through P13 to the configured adapter. The goal is in every prompt.
+pub fn send_templates(
+    provider: &dyn ChatProvider,
+    model: &str,
+    name: &str,
+    goal: &str,
+    kind: &str,
+    secret: &str,
+) -> Result<String, String> {
+    let mut vars = std::collections::BTreeMap::new();
+    let set = |vars: &mut std::collections::BTreeMap<String, String>, key: &str, value: &str| {
+        vars.insert(key.to_string(), value.to_string());
+    };
+    set(&mut vars, "kind", kind);
+    set(&mut vars, "goal", goal);
+    set(&mut vars, "name", name);
+    set(&mut vars, "library_listing", "");
+    set(&mut vars, "profile", "portable");
+    set(&mut vars, "answers_block", "accepted defaults");
+    set(&mut vars, "allowed_keys_rule", "");
+    set(&mut vars, "description", goal);
+    set(&mut vars, "positives", "8");
+    set(&mut vars, "negatives", "8");
+    set(&mut vars, "evals_block", "");
+    set(&mut vars, "current_files_envelope", "");
+    set(&mut vars, "user_feedback", "");
+    set(&mut vars, "validation_findings", "");
+    set(&mut vars, "run_evidence", "");
+    set(&mut vars, "transcripts", "");
+    set(&mut vars, "train_results", "");
+    set(&mut vars, "skills", &format!("{name}|{goal}"));
+    set(&mut vars, "workdir", ".");
+    set(&mut vars, "output_dir", "outputs");
+    set(&mut vars, "with_skill", "yes");
+    set(&mut vars, "skill_dir", ".");
+    set(&mut vars, "skill_name", name);
+    set(&mut vars, "skill_body_rendered", goal);
+    set(&mut vars, "transcript", "");
+    set(&mut vars, "benchmark", "");
+    set(&mut vars, "prompt", goal);
+    set(&mut vars, "outputs_a", "a");
+    set(&mut vars, "outputs_b", "b");
+    set(&mut vars, "tool_catalog", "Read");
+    let templates = [
+        Template::P1,
+        Template::P2,
+        Template::P3,
+        Template::P4,
+        Template::P5,
+        Template::P6,
+        Template::P7,
+        Template::P8,
+        Template::P9,
+        Template::P10,
+        Template::P11,
+        Template::P12,
+        Template::P13,
+    ];
+    let mut collected = String::new();
+    for template in templates {
+        let text = send_prompt(provider, model, &render(template, &vars), secret)?;
+        collected.push_str(&text);
+        collected.push('\n');
+    }
+    Ok(collected)
+}
+
+pub fn optimize_descriptions(request: &MeasureRequest, rounds: u32) -> Result<Value, String> {
+    if request.models.is_empty() {
+        return Err("optimization needs a model".to_string());
+    }
+    let suite = load_suite(&request.skill_dir).map_err(|err| err.to_string())?;
+    let queries = trigger_queries(&suite);
+    let cut = if queries.len() < 2 {
+        queries.len()
+    } else {
+        (queries.len() * 3 / 5).clamp(1, queries.len() - 1)
+    };
+    let train = &queries[..cut];
+    let held = if queries.len() < 2 {
+        queries.as_slice()
+    } else {
+        &queries[cut..]
+    };
+    let provider = provider_for(request)?;
+    let model = request.models[0].id.clone();
+    let document = fs::read_to_string(request.skill_dir.join("SKILL.md")).unwrap_or_default();
+    let current = front_description(&document);
+    let candidate = LibrarySkill {
+        name: suite.skill_name.clone(),
+        description: current.clone(),
+        content_hash: String::new(),
+        source_type: "local".to_string(),
+        source_ref: String::new(),
+        source_revision: String::new(),
+    };
+    let baseline_held = split_score(request, provider.as_ref(), &model, &candidate, held)?;
+    let mut best = current.clone();
+    let mut best_held = baseline_held;
+    let mut description = current.clone();
+    for _ in 0..rounds.max(1) {
+        let train_score = split_score(
+            request,
+            provider.as_ref(),
+            &model,
+            &candidate_with(&candidate, &description),
+            train,
+        )?;
+        let proposed = suggest_description(
+            provider.as_ref(),
+            &model,
+            &candidate.name,
+            &description,
+            &format!("train_rate={train_score}"),
+            &request.api_key,
+        )?;
+        let proposed_skill = candidate_with(&candidate, &proposed);
+        let held_score = split_score(request, provider.as_ref(), &model, &proposed_skill, held)?;
+        if held_score >= best_held {
+            best_held = held_score;
+            best = proposed.clone();
+        }
+        description = proposed;
+    }
+    let saved = json!({
+        "selected": best,
+        "held_out": best_held,
+        "baseline_held": baseline_held,
+        "applied": false,
+        "restored": best_held >= baseline_held,
+    });
+    fs::write(
+        request.skill_dir.join("optimization.json"),
+        serde_json::to_string_pretty(&saved).map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(saved)
+}
+
+fn sibling_skills(skill_dir: &Path, skip: &str) -> Vec<LibrarySkill> {
+    let Some(parent) = skill_dir.parent() else {
+        return Vec::new();
+    };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return Vec::new();
+    };
+    let mut skills = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path == skill_dir || !path.join("SKILL.md").is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if name.is_empty() || name == skip {
+            continue;
+        }
+        let document = fs::read_to_string(path.join("SKILL.md")).unwrap_or_default();
+        skills.push(LibrarySkill {
+            name: name.to_string(),
+            description: front_description(&document),
+            content_hash: String::new(),
+            source_type: "library".to_string(),
+            source_ref: path.display().to_string(),
+            source_revision: String::new(),
+        });
+    }
+    skills
+}
+
+fn estimate_calls(repetitions: u32, queries: usize, peers: usize) -> u64 {
+    let reps = u64::from(repetitions.max(1));
+    let queries = queries as u64;
+    reps.saturating_mul(2)
+        .saturating_add(reps.saturating_mul(queries).saturating_mul(2))
+        .saturating_add(queries.saturating_mul(peers as u64))
+}
+
+fn candidate_with(skill: &LibrarySkill, description: &str) -> LibrarySkill {
+    let mut next = skill.clone();
+    next.description = description.to_string();
+    next
+}
+
+fn split_score(
+    request: &MeasureRequest,
+    provider: &dyn ChatProvider,
+    model: &str,
+    skill: &LibrarySkill,
+    queries: &[TriggerRow],
+) -> Result<f64, String> {
+    let mut fired = 0_u64;
+    let mut total = 0_u64;
+    let choice = request
+        .models
+        .iter()
+        .find(|item| item.id == model)
+        .or(request.models.first());
+    let Some(choice) = choice else {
+        return Ok(0.0);
+    };
+    for (index, query) in queries.iter().enumerate() {
+        if !query.should_trigger {
+            continue;
+        }
+        total += 1;
+        let row = ask_trigger(&TriggerAsk {
+            provider,
+            model: &choice.id,
+            strong: choice.strong,
+            adapter: &request.adapter,
+            context: "optimize",
+            candidate: &skill.name,
+            skills: std::slice::from_ref(skill),
+            query_id: &format!("opt-{index}"),
+            query: &query.query,
+            should_trigger: true,
+            secret: &request.api_key,
+            workspace: &request.workspace,
+        })?;
+        if row.outcome == "fired_alone" {
+            fired += 1;
+        }
+    }
+    if total == 0 {
+        Ok(0.0)
+    } else {
+        Ok(fired as f64 / total as f64)
     }
 }
 
@@ -2365,6 +2772,11 @@ mod tests {
             .join("benchmark.json")
             .is_file());
         assert!(root.path().join("ws").join("review.html").is_file());
+        let notes = fs::read_to_string(root.path().join("ws").join("analyst-notes.json")).unwrap();
+        assert!(notes.contains("both configurations"));
+        assert!(bodies
+            .iter()
+            .any(|(_, _, body)| body.contains("HIVE_ANALYST")));
         assert!(root.path().join("ws").join("cells.csv").is_file());
         assert!(root.path().join("ws").join("junit.xml").is_file());
         assert!(skill.join("history.json").is_file());
@@ -2627,7 +3039,7 @@ mod tests {
         if path.contains("chat/completions") {
             return openai_text("openai");
         }
-        if request.contains("HIVE_TRIGGER") {
+        if request.contains("You are Claude Code") || request.contains("HIVE_TRIGGER") {
             if request.contains("should-not") || request.contains("weak-haiku") {
                 return sse_text("none");
             }
@@ -2638,6 +3050,11 @@ mod tests {
                 return sse_skill("culprit");
             }
             return sse_skill("pine");
+        }
+        if request.contains("HIVE_ANALYST") {
+            return sse_text(
+                r#"{"notes":[{"category":"both","priority":"low","text":"The expectation passes in both configurations."}]}"#,
+            );
         }
         if request.contains("HIVE_INTERVIEW") {
             return sse_text(

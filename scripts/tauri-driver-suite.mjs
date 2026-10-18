@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import net from "node:net";
 import { spawnCommand } from "./spawn-tool.mjs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -17,6 +18,34 @@ const base = mkdtempSync(path.join(tmpdir(), "skill-hive-driver-"));
 const isolateHome = process.platform === "linux";
 const home = isolateHome ? path.join(base, "home") : homedir();
 process.env.SKILL_HIVE_BASE = base;
+process.env.SKILL_HIVE_API_KEY = "sk-driver-measured";
+const driverWire = net.createServer((socket) => {
+  const chunks = [];
+  socket.on("data", (chunk) => {
+    chunks.push(chunk);
+    const buf = Buffer.concat(chunks);
+    const split = buf.indexOf("\r\n\r\n");
+    if (split < 0) return;
+    const head = buf.subarray(0, split).toString("utf8");
+    const length = Number(head.match(/content-length:\s*(\d+)/i)?.[1] ?? 0);
+    if (buf.length < split + 4 + length) return;
+    const payload = [
+      'data: {"type":"message_start","message":{"id":"m","usage":{"input_tokens":1}}}',
+      "",
+      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"driver-draft"}}',
+      "",
+      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}',
+      "",
+      'data: {"type":"message_stop"}',
+      "",
+      "",
+    ].join("\n");
+    const bytes = Buffer.byteLength(payload);
+    socket.end(`HTTP/1.1 200 OK\r\nContent-Length: ${bytes}\r\nConnection: close\r\n\r\n${payload}`);
+  });
+});
+await new Promise((resolve) => driverWire.listen(0, "127.0.0.1", resolve));
+const driverWirePort = driverWire.address().port;
 if (isolateHome) {
   process.env.HOME = home;
   process.env.USERPROFILE = home;
@@ -511,6 +540,15 @@ try {
   await clickText("User");
   await waitUntil("agent export", () => existsSync(path.join(authoring, "agent", "reviewer", "export", "AGENT.md")));
 
+  execFileSync(pythonBin(), ["-c", `
+import sqlite3
+conn = sqlite3.connect(${JSON.stringify(path.join(base, "hive.db"))})
+conn.execute("""INSERT INTO provider_configs
+ (id, name, kind, base_url, default_model, auth_mode, keyring_account, proxy_mode, supports_tools, role_generator, created_at, updated_at)
+ VALUES ('driver-gen', 'Driver Gen', 'anthropic', ?, 'claude-sonnet-4', 'keyring', 'driver-gen', 'none', 1, 1, 0, 0)
+ ON CONFLICT(id) DO UPDATE SET base_url = excluded.base_url""", (${JSON.stringify(`http://127.0.0.1:${driverWirePort}`)},))
+conn.commit()
+`], { stdio: "inherit" });
   await openPath("/generate/authoring");
   await find("[data-testid=generate-wizard]");
   await typeInto("#generate-goal", "authoring-goal");
@@ -519,7 +557,7 @@ try {
   await clickText("Continue");
   await clickText("Open diff");
   await clickText("Save");
-  await waitUntil("generated draft", () => readFileSync(path.join(authoring, "generate", "draft", "SKILL.md"), "utf8").includes("authoring-goal"));
+  await waitUntil("generated draft", () => readFileSync(path.join(authoring, "generate", "draft", "SKILL.md"), "utf8").includes("authoring-goal"), 45000);
 
   await openPath("/testing");
   await find("[data-testid=suite]");
@@ -536,12 +574,18 @@ try {
   await clickText("Record verdict");
   await waitUntil("compare verdict", () => sql("select verdict from comparisons where id = 'comparison'") === "Output A");
 
+  mkdirSync(path.join(base, "effectiveness"), { recursive: true });
+  writeFileSync(path.join(base, "effectiveness", "last.json"), JSON.stringify({
+    run_id: "measured-1",
+    with_rate: 0.81,
+    history: { iterations: [{ version: "measured-1", parent: null, expectation_pass_rate: 0.81, grading_result: "won", is_current_best: true }] },
+  }));
   await openPath("/skills/warnings/history");
   await find("[data-testid=history]");
   await clickText("Baseline");
   await waitUntil("history baseline", () => {
     const history = readFileSync(path.join(authoring, "history", "baseline", "history.json"), "utf8");
-    return history.includes("v2-optimized") && history.includes("\"is_current_best\": true");
+    return history.includes("measured-1") && history.includes("0.81") && history.includes("\"is_current_best\": true");
   });
 
   await openPath("/settings/endpoints");

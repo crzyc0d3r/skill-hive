@@ -144,6 +144,12 @@ enum TestCmd {
         skill: PathBuf,
         #[arg(long, default_value = "offline")]
         mode: String,
+        /// Trigger and task repetitions. The product default is 3.
+        #[arg(long, default_value_t = 3)]
+        repetitions: u32,
+        /// emulated, claude-code, sequential, or static.
+        #[arg(long, default_value = "emulated")]
+        adapter: String,
     },
     Show,
     Suites,
@@ -154,11 +160,28 @@ enum TestCmd {
     Measure {
         #[arg(long)]
         skill: PathBuf,
-        #[arg(long, default_value_t = 1)]
+        #[arg(long, default_value_t = 3)]
         repetitions: u32,
         /// Optional program that speaks Claude Code stream-json. The temp command file is deleted on exit.
         #[arg(long)]
         cli_program: Option<PathBuf>,
+        /// emulated, claude-code, sequential, or static.
+        #[arg(long, default_value = "emulated")]
+        adapter: String,
+    },
+    /// Train/test description search. The winner is selected on the held-out split and is not applied.
+    Optimize {
+        #[arg(long)]
+        skill: PathBuf,
+        #[arg(long, default_value_t = 5)]
+        rounds: u32,
+    },
+    /// Run one skill through the configured endpoint and a second base URL.
+    Pair {
+        #[arg(long)]
+        skill: PathBuf,
+        #[arg(long)]
+        second_url: String,
     },
     /// Send template P12 to the configured adapter. The side names stay sealed in the saved file.
     Blind {
@@ -691,9 +714,14 @@ fn providers_cmd(command: &ProvidersCmd) -> Result<Value, Fail> {
 fn test_cmd(command: &TestCmd) -> Result<Value, Fail> {
     match command {
         TestCmd::SaveSuite { skill } => eval::test_save_suite(skill),
-        TestCmd::Run { skill, mode } => {
+        TestCmd::Run {
+            skill,
+            mode,
+            repetitions,
+            adapter,
+        } => {
             eval::replay_mode(mode)?;
-            eval::test_run(skill, mode)
+            eval::test_run(skill, mode, *repetitions, Some(adapter))
         }
         TestCmd::Show => eval::test_show(),
         TestCmd::Suites => eval::test_suites(),
@@ -704,7 +732,10 @@ fn test_cmd(command: &TestCmd) -> Result<Value, Fail> {
             skill,
             repetitions,
             cli_program,
-        } => eval::test_measure(skill, *repetitions, cli_program.as_deref()),
+            adapter,
+        } => eval::test_measure(skill, *repetitions, cli_program.as_deref(), Some(adapter)),
+        TestCmd::Optimize { skill, rounds } => eval::test_optimize(skill, *rounds),
+        TestCmd::Pair { skill, second_url } => eval::test_pair(skill, second_url),
         TestCmd::Blind {
             prompt,
             output_a,

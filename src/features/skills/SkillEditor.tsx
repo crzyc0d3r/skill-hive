@@ -122,8 +122,38 @@ export function SkillEditor() {
             {draft.files.map((file) => (
               <li key={file.path}>
                 <button type="button" className="truncate" onClick={() => setRename(file.path)}>{file.path}</button>
+                <label className="ml-1 text-xs">
+                  <input
+                    type="checkbox"
+                    aria-label={t("editor.executable")}
+                    checked={file.executable}
+                    onChange={() => {
+                      const files = draft.files.map((item) => item.path === file.path ? { ...item, executable: !item.executable } : item);
+                      updateSkill({ ...draft, files });
+                    }}
+                  />
+                  {t("editor.executable")}
+                </label>
               </li>
             ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => {
+              const current = skillMarkdown(draft);
+              if (current.includes("allowed-tools:")) return;
+              const files = draft.files.map((file) =>
+                file.path.endsWith("SKILL.md") || file.path === "skill.md"
+                  ? { ...file, content: current.replace("---\n", "---\nallowed-tools: Read\n") }
+                  : file,
+              );
+              updateSkill({ ...draft, files });
+            }}
+          >
+            {t("editor.allowedTools")}
+          </Button>
           </ul>
           {rename ? <Input aria-label={t("editor.renameFile")} value={rename} onChange={(event) => setRename(event.target.value)} className="mt-2 h-8 w-full" /> : null}
           <form

@@ -1,4 +1,4 @@
-//! Handlebars-style renderer for generation prompts P1 to P8 and P12.
+//! Handlebars-style renderer for generation prompts P1 to P13.
 //! `{{name}}`, `{{#if name}}`, and `{{#each name}}` (rows are `name|description`).
 
 use std::collections::BTreeMap;
@@ -13,7 +13,11 @@ pub enum Template {
     P6,
     P7,
     P8,
+    P9,
+    P10,
+    P11,
     P12,
+    P13,
 }
 
 pub fn render(template: Template, vars: &BTreeMap<String, String>) -> String {
@@ -74,7 +78,11 @@ fn template_text(template: Template) -> &'static str {
         Template::P6 => P6,
         Template::P7 => P7,
         Template::P8 => P8,
+        Template::P9 => P9,
+        Template::P10 => P10,
+        Template::P11 => P11,
         Template::P12 => P12,
+        Template::P13 => P13,
     }
 }
 
@@ -146,6 +154,39 @@ Skill name: {{name}}\n\
 Current description:\n<<<\n{{description}}\n>>>\n\
 Trigger results on the training split:\n{{train_results}}\n\
 Return JSON only: {\"description\": \"...\", \"changes\": []}\n";
+
+const P9: &str =
+    "You are Claude Code. Besides your normal tools you can invoke skills. Before doing anything\n\
+else, decide whether one of the available skills applies to the user's request. If one does,\n\
+call the Skill tool with that skill's name as your very first action. If none applies, begin\n\
+the task with your ordinary tools or answer directly, without calling Skill. Skills are worth\n\
+invoking for multi-step or specialized work; do not invoke one for a trivial request you can\n\
+handle directly.\n\
+\n\
+Available skills:\n\
+{{#each skills}}\n\
+- {{name}}: {{description}}\n\
+{{/each}}\n";
+
+const P10: &str = "You are an AI coding agent working in the directory {{workdir}}. You have the tools listed in\n\
+this request. Complete the user's task and save every output file the user cares about under\n\
+{{output_dir}}. When you finish, reply with a short summary of what you produced and where.\n\
+{{#if with_skill}}\n\
+A skill has been loaded for this task because it matches the request. Follow it. Its\n\
+directory is {{skill_dir}}.\n\
+--- BEGIN SKILL {{skill_name}} ---\n\
+{{skill_body_rendered}}\n\
+--- END SKILL ---\n\
+{{/if}}\n";
+
+const P11: &str = "You are the grader. GRADE each expectation against the transcript.\n\
+Burden of proof: a pass needs cited evidence. No partial credit.\n\
+{{transcript}}\n\
+Return JSON only: {\"expectations\": [{\"text\": \"...\", \"passed\": true, \"evidence\": \"...\"}]}\n";
+
+const P13: &str = "You are the benchmark analyst. Read the completed run and write notes.\n\
+{{benchmark}}\n\
+Return JSON only: {\"notes\": [{\"category\": \"...\", \"priority\": \"...\", \"text\": \"...\"}]}\n";
 
 const P12: &str =
     "You are a blind comparator. Two outputs, A and B, were produced for the same task.\n\

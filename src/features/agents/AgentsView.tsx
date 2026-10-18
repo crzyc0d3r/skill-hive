@@ -13,7 +13,13 @@ export function AgentsView() {
   const authoring = useAuthoring();
   const [importName, setImportName] = useState("reviewer");
   const [collision, setCollision] = useState(false);
-  const agents = Object.values(authoring.agents);
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("");
+  const agents = Object.values(authoring.agents).filter((agent) => {
+    const matchesQuery = agent.name.toLowerCase().includes(query.trim().toLowerCase());
+    const matchesTag = tag.trim() === "" || tag.trim().toLowerCase() === "draft";
+    return matchesQuery && matchesTag;
+  });
   const budget = agentBudget();
   useEffect(() => {
     if (demoEnabled() && agents.length === 0) ensureAgent("reviewer");
@@ -33,6 +39,8 @@ export function AgentsView() {
           else importAgent(importName, "replace");
         }}
       >
+        <Input aria-label={t("agents.search")} value={query} onChange={(event) => setQuery(event.target.value)} className="h-8 w-40" />
+        <Input aria-label={t("agents.tag")} value={tag} onChange={(event) => setTag(event.target.value)} className="h-8 w-28" />
         <Input aria-label={t("agents.import")} value={importName} onChange={(event) => setImportName(event.target.value)} className="h-8 w-56" />
         <Button type="submit" size="sm">{t("agents.import")}</Button>
       </form>

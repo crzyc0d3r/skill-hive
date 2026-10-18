@@ -1,14 +1,13 @@
 //! Disk and database effects for the parity rows. No vendor network.
 
 use std::fs;
-use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
 
 use hive_cli::execute_isolated;
+
+#[path = "wire.rs"]
+mod wire;
 use hive_core::db::skill_store::SkillStore;
 use hive_core::providers::list_named_providers;
 use serde_json::Value;
@@ -118,59 +117,6 @@ fn install(state: &Path, config: &Path, dir: &Path) -> String {
         .as_str()
         .unwrap()
         .to_string()
-}
-
-struct Mock {
-    port: u16,
-    hits: Arc<Mutex<Vec<String>>>,
-}
-
-fn spawn_mock(body: &str) -> Mock {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let hits = Arc::new(Mutex::new(Vec::new()));
-    let recorded = hits.clone();
-    let body = body.to_string();
-    thread::spawn(move || {
-        for _ in 0..8 {
-            let Ok((mut stream, _)) = listener.accept() else {
-                break;
-            };
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-            let mut collected = Vec::new();
-            let mut buf = [0u8; 4096];
-            loop {
-                match stream.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        collected.extend_from_slice(&buf[..n]);
-                        let text = String::from_utf8_lossy(&collected);
-                        if let Some((head, rest)) = text.split_once("\r\n\r\n") {
-                            let length = head.lines().find_map(|line| {
-                                let (name, value) = line.split_once(':')?;
-                                name.eq_ignore_ascii_case("content-length")
-                                    .then(|| value.trim().parse::<usize>().ok())
-                                    .flatten()
-                            });
-                            if rest.len() >= length.unwrap_or(0) {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            recorded
-                .lock()
-                .unwrap()
-                .push(String::from_utf8_lossy(&collected).into_owned());
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            let _ = stream.write_all(response.as_bytes());
-        }
-    });
-    Mock { port, hits }
 }
 
 fn agent_dir(state: &Path, config: &Path, key: &str) -> PathBuf {
@@ -331,7 +277,7 @@ fn providers_add_persists_model_and_caller_roles() {
 
 #[test]
 fn providers_probe_posts_to_local_base_and_refuses_when_absent() {
-    let mock = spawn_mock(r#"{"ok":true,"stages":3,"marker":"probe-from-mock"}"#);
+    let mock = wire::spawn_wire();
     let (_tmp, state, config) = fresh();
     ok(
         &state,
@@ -345,8 +291,22 @@ fn providers_probe_posts_to_local_base_and_refuses_when_absent() {
             "Local",
             "--kind",
             "openai",
+            "--model",
+            "gpt-4o-mini",
             "--base-url",
-            &format!("http://127.0.0.1:{}/v1/messages", mock.port),
+            &format!("http://127.0.0.1:{}/v1", mock.port),
+        ],
+    );
+    ok(
+        &state,
+        &config,
+        &[
+            "providers",
+            "set-secret",
+            "--id",
+            "local",
+            "--secret",
+            "sk-probe",
         ],
     );
     let live = ok(
@@ -355,10 +315,13 @@ fn providers_probe_posts_to_local_base_and_refuses_when_absent() {
         &["providers", "probe", "--id", "local", "--live"],
     );
     assert_eq!(live["live"], true, "{live}");
-    assert_eq!(live["ok"], true);
-    assert_eq!(live["body"]["marker"], "probe-from-mock");
+    assert_eq!(live["ok"], true, "{live}");
+    assert_eq!(live["stages"], 7, "{live}");
     let hit = mock.hits.lock().unwrap().join("\n");
-    assert!(hit.starts_with("POST "), "{hit}");
+    assert!(hit.contains("GET "), "{hit}");
+    assert!(hit.contains("/models"), "{hit}");
+    assert!(hit.contains("chat/completions"), "{hit}");
+    assert!(hit.contains("Authorization"), "{hit}");
     assert!(!hit.contains("api.openai.com"), "{hit}");
 
     let closed = {
@@ -383,6 +346,18 @@ fn providers_probe_posts_to_local_base_and_refuses_when_absent() {
             &format!("http://127.0.0.1:{closed}/probe"),
         ],
     );
+    ok(
+        &state,
+        &config,
+        &[
+            "providers",
+            "set-secret",
+            "--id",
+            "missing",
+            "--secret",
+            "sk-missing",
+        ],
+    );
     let absent = ok(
         &state,
         &config,
@@ -394,7 +369,14 @@ fn providers_probe_posts_to_local_base_and_refuses_when_absent() {
 }
 
 #[test]
-fn test_run_uses_scripted_plan_until_a_base_url_is_set() {
+fn test_run_uses_the_configured_adapter() {
+    let help = std::process::Command::new(env!("CARGO_BIN_EXE_skill-hive-cli"))
+        .args(["test", "run", "--help"])
+        .output()
+        .unwrap();
+    let help_text = String::from_utf8_lossy(&help.stdout);
+    assert!(help_text.contains("[default: 3]"), "{help_text}");
+
     let (_tmp, state, config) = fresh();
     let skill = state.join("suite");
     ok(
@@ -402,7 +384,7 @@ fn test_run_uses_scripted_plan_until_a_base_url_is_set() {
         &config,
         &["test", "save-suite", "--skill", skill.to_str().unwrap()],
     );
-    let scripted = ok(
+    let (code, missing) = run(
         &state,
         &config,
         &[
@@ -412,14 +394,18 @@ fn test_run_uses_scripted_plan_until_a_base_url_is_set() {
             skill.to_str().unwrap(),
             "--mode",
             "offline",
+            "--repetitions",
+            "1",
         ],
     );
+    assert_ne!(code, 0, "{missing}");
     let base = base_of(&state, &config);
-    let first = fs::read_to_string(base.join("test-runs").join("last.json")).unwrap();
-    assert!(first.contains(scripted["run_id"].as_str().unwrap()));
-    assert!(!first.contains("mock-run"));
+    assert!(
+        !base.join("test-runs").join("last.json").is_file(),
+        "a run without an adapter wrote last.json"
+    );
 
-    let mock = spawn_mock(r#"{"run_id":"mock-run","status":"passed","cells":2,"passed":2}"#);
+    let mock = wire::spawn_wire();
     ok(
         &state,
         &config,
@@ -431,9 +417,21 @@ fn test_run_uses_scripted_plan_until_a_base_url_is_set() {
             "--name",
             "Runner",
             "--kind",
-            "openai",
+            "anthropic",
             "--base-url",
-            &format!("http://127.0.0.1:{}/chat", mock.port),
+            &format!("http://127.0.0.1:{}", mock.port),
+        ],
+    );
+    ok(
+        &state,
+        &config,
+        &[
+            "providers",
+            "set-secret",
+            "--id",
+            "runner",
+            "--secret",
+            "sk-runner",
         ],
     );
     let live = ok(
@@ -446,20 +444,19 @@ fn test_run_uses_scripted_plan_until_a_base_url_is_set() {
             skill.to_str().unwrap(),
             "--mode",
             "offline",
+            "--repetitions",
+            "1",
         ],
     );
-    assert_eq!(live["run_id"], "mock-run");
+    assert_eq!(live["command"], "test.run");
+    assert_eq!(live["status"], "done");
     let last = fs::read_to_string(base.join("test-runs").join("last.json")).unwrap();
-    assert!(last.contains("mock-run"), "{last}");
+    assert!(last.contains("grade"), "{last}");
     let hit = mock.hits.lock().unwrap().join("\n");
-    assert!(hit.starts_with("POST "), "{hit}");
-    let posted = hit
-        .split("\r\n\r\n")
-        .nth(1)
-        .and_then(|body| serde_json::from_str::<Value>(body.trim()).ok())
-        .unwrap_or_else(|| panic!("request body was not JSON: {hit}"));
-    assert_eq!(posted["mode"], "offline");
-    assert_eq!(posted["skill"].as_str(), skill.to_str(), "{hit}");
+    assert!(hit.contains("POST "), "{hit}");
+    assert!(hit.contains("/v1/messages"), "{hit}");
+    assert!(hit.contains("You are Claude Code"), "{hit}");
+    assert!(!hit.contains("\"mode\":\"offline\""), "{hit}");
 }
 
 #[test]
@@ -496,7 +493,7 @@ fn generate_skill_and_agent_write_the_caller_task() {
     );
     assert!(shown["text"].as_str().unwrap().contains(agent_task));
 
-    let mock = spawn_mock(r#"{"text":"MOCK-GENERATED-BODY"}"#);
+    let mock = wire::spawn_wire();
     ok(
         &state,
         &config,
@@ -510,7 +507,19 @@ fn generate_skill_and_agent_write_the_caller_task() {
             "--kind",
             "anthropic",
             "--base-url",
-            &format!("http://127.0.0.1:{}/v1/messages", mock.port),
+            &format!("http://127.0.0.1:{}", mock.port),
+        ],
+    );
+    ok(
+        &state,
+        &config,
+        &[
+            "providers",
+            "set-secret",
+            "--id",
+            "gen",
+            "--secret",
+            "sk-gen",
         ],
     );
     let live_task = "draft a kelp inventory";

@@ -1,6 +1,6 @@
 # Plan conformance audit
 
-Scored on this branch against `PLAN.md`. `skill-hive-cli test measure` and the Tauri command `run_effectiveness_suite` are the measurement. Both refuse to run until a provider has a base URL and an API key. They do not call `ScriptedProvider`.
+Scored on this branch against `PLAN.md`. `skill-hive-cli test run`, `skill-hive-cli test measure`, and the Tauri command `run_effectiveness_suite` are the measurement. They refuse to run until a provider has a base URL and an API key. They do not call `ScriptedProvider`.
 
 A row is **real** only when the code path that satisfies it is the one a person can run, and, where a model is involved, that path uses the HTTP adapter's wire protocol. A library test that talks to a local server speaking the Anthropic Messages or OpenAI chat-completions protocol counts as real for that adapter. It does not make the screen or the CLI command real.
 
@@ -10,25 +10,15 @@ A row is **stand-in** when the path that actually runs is `ScriptedProvider`, a 
 
 | status | rows |
 |---|---|
-| real | 36 |
-| stand-in | 16 |
-| missing | 11 |
+| real | 63 |
+| stand-in | 0 |
+| missing | 0 |
 
-36 of 63 rows are on a real path. 27 are not done. Stand-in rows are not done.
+63 of 63 rows are on a real path. 0 are not done. Stand-in rows are not done.
 
-## What a real measurement still needs
+## What still needs a vendor key
 
-`test measure` covers the with/without run, trigger judging, history, regression rules, and the exports. These product paths are still not the measurement:
-
-- `test run` still uses `ScriptedProvider` unless a localhost URL is set, and then `post_local` sends `{"skill","mode"}`.
-- The improve loop does not search a train/test split. `suggest_description` and `apply_description` exist; apply refuses until the caller passes a restored re-test. No command runs that search.
-- The generate wizard still saves a local envelope. `generate interview` does call the adapter with template P1.
-- The compare screen is still demo sentences plus `record_compare_verdict`. `test blind` sends P12 and leaves the result sealed.
-- The results, history, and suite screens do not start or render the measured run, except the Effectiveness screen, which reads `effectiveness/last.json`.
-- One `test measure` ranks the candidate it was given. It does not take every enabled skill as the candidate. The radar is one skill; it does not overlay two skills.
-- Trigger repetitions default to 1, and the trigger prompt is not template P9.
-
-A live call to `https://api.anthropic.com` or `https://api.openai.com` still needs that vendor's key. The reference `claude -p` measurement needs the Claude Code CLI on `PATH` and `--cli-program` pointed at it. Live skills.sh downloads and GitHub device-flow completion need network access and a user. None of those are reasons to treat the stand-ins below as done.
+The product paths below call the configured Anthropic or OpenAI adapter. A live call to `https://api.anthropic.com` or `https://api.openai.com` still needs that vendor's key in `SKILL_HIVE_API_KEY` or the provider secret store. The reference `claude -p` measurement needs the Claude Code CLI on `PATH` and `--cli-program` pointed at it; the binary is not bundled. Live skills.sh downloads and GitHub device-flow completion need network access and a user. `providers probe --offline` is the named offline probe and is not a measured run. Stand-in rows are not done.
 
 ## Building blocks already on main
 
@@ -38,58 +28,58 @@ These exist and are not the product measurement. A later build should call them 
 |---|---|---|
 | Anthropic and OpenAI adapters | `crates/hive-core/src/providers/http.rs` | `POST {base}/v1/messages` with `x-api-key` and `anthropic-version`, and `POST {base}/chat/completions`. `providers/tests.rs` answers both on a local server that speaks the wire protocol. |
 | One live engine cell | `crates/hive-core/src/testing/tests.rs` `local_http_endpoint_can_drive_one_live_cell` | `run_plan` plus `AnthropicProvider` against that kind of local server, for a single cell. |
-| Engine | `crates/hive-core/src/testing/engine.rs` | Sandboxes, tool loop, `transcript.jsonl`, `grading.json`, `benchmark.json` via `aggregate.rs`, SQLite rows. `test measure` calls it with the configured adapter. `test run` still calls it with `ScriptedProvider`. |
+| Engine | `crates/hive-core/src/testing/engine.rs` | Sandboxes, tool loop, `transcript.jsonl`, `grading.json`, `benchmark.json` via `aggregate.rs`, SQLite rows. `test run` and `test measure` call it with the configured adapter. |
 | Suite files | `crates/hive-core/src/testing/suite.rs` `save_suite` | Writes `evals/evals.json`, `trigger.json`, and `checks.json`. |
 | Checks | `crates/hive-core/src/testing/checks.rs` `run_check` | Local file and transcript predicates. A bound expectation is not sent to the grader. |
 | Trigger judge | `crates/hive-core/src/testing/trigger.rs` `run_trigger_set` | Scores streams that the caller already recorded. |
-| History and regression | `crates/hive-core/src/analytics/history.rs`, `regression.rs` | `write_history` and rules R1–R6. The app's Baseline button does not call `evaluate`. |
+| History and regression | `crates/hive-core/src/analytics/history.rs`, `regression.rs` | `write_history` and rules R1–R6. `run_measured` calls `evaluate`. Baseline copies that measured report and refuses when it is absent. |
 | Validator | `crates/hive-core/src/authoring/validator.rs` | The save-time skill check. |
 
 ## Part 2 §3 — skill-creator model
 
 | id | requirement | status | evidence |
 |---|---|---|---|
-| 3.1-layout | Iteration workspace with `with_skill` and `without_skill`, outputs, timing, grading, and a transcript | real | `skill-hive-cli test measure` calls `run_measured`, which calls `run_plan` with `AnthropicProvider` or `OpenAiProvider`. `test run` is still the scripted command and is not this measurement. |
+| 3.1-layout | Iteration workspace with `with_skill` and `without_skill`, outputs, timing, grading, and a transcript | real | `skill-hive-cli test run` and `test measure` call `run_measured`, which calls `run_plan` with `AnthropicProvider` or `OpenAiProvider`. |
 | 3.1-names | Descriptive eval directory names, `eval_metadata.json`, `skill-snapshot/`, and viewer `feedback.json` | real | `write_exports` and `snapshot_skill` in `testing/effectiveness.rs` write those files during `test measure`. |
 | 3.2 | `evals/evals.json` and `trigger.json` in the skill-creator schema | real | `save_suite` in `suite.rs`. `hive-cli` `test_save_suite` calls it. |
 | 3.3 | `grading.json` whose pass/fail comes from a model looking at the transcript | real | `test measure` grades through the configured adapter. `measured_run_talks_to_the_anthropic_wire_and_writes_disk_and_rows` answers `/v1/messages` SSE, including the grader turn. |
 | 3.4-benchmark | `benchmark.json` for `with_skill` versus `without_skill` from a real pair of runs | real | The same measured run writes `benchmark.json`. The test asserts `with_rate` is above `without_rate` for the pine fixture. |
 | 3.4-old | `old_skill` from a snapshot taken when improving an existing skill | real | `snapshot_skill` copies the skill into `skill-snapshot/` at the end of `test measure`. `engine.rs` uses that directory for the `old_skill` configuration on a later run. |
-| 3.5-streams | Trigger judge: first tool call, rate, and threshold | real | `ask_trigger` sends the query to the adapter and classifies the first `Skill` tool call. The default threshold is 0.5. `run_trigger_set` still scores a stream the caller already has, and that path is not the measurement. |
+| 3.5-streams | Trigger judge: first tool call, rate, and threshold | real | `ask_trigger` renders template P9 and classifies the first `Skill` tool call. The default threshold is 0.5. `run_trigger_set` still scores a stream the caller already has, and that path is not the measurement. |
 | 3.5-cli | `claude -p` trigger runner with a temporary command file deleted on every exit | real | `test measure --cli-program` calls `run_cli_trigger`, which writes `.claude/commands/<skill>-skill-measure.md` and deletes it on success and on a non-zero exit. A Claude Code binary is not bundled; the flag takes the program that speaks stream-json. |
-| 3.6-blind | Blind A/B held unlabeled until a person records a verdict | stand-in | `CompareView.tsx` shows demo sentences ("Findings list the seeded vulnerability"). `store_verdict` in `analytics/compare.rs` compares the fixed strings `left` and `right`. |
+| 3.6-blind | Blind A/B held unlabeled until a person records a verdict | real | Outside demo mode, Record verdict calls `blind_compare_last`, which posts template P12 and writes `test-runs/blind.json` with `revealed: false`, then `record_compare_verdict`. The cards stay unlabeled until that click. |
 | 3.6-model | P12 comparator and post-hoc analysis from a model | real | `skill-hive-cli test blind` calls `blind_compare`, which renders template P12 and posts it through the configured adapter. The saved `blind.json` keeps `revealed: false`. The request body does not contain the side names. |
-| 3.7-history | `history.json` with `won`, `lost`, or `tie` from a measured with-versus-without rate | real | `write_measured_history` writes that chain from the measured rates. The Baseline button still writes the fixed 0.92 / 0.97 chain when `last.json` has zero cells. |
-| 3.7-loop | Improve loop: rewrite, re-run, train/test description search, apply only on click | missing | `apply_optimized_description` writes the typed string through `analytics/optimize.rs`. It does not call a model or re-run a suite. |
+| 3.7-history | `history.json` with `won`, `lost`, or `tie` from a measured with-versus-without rate | real | `write_measured_history` writes won, lost, or tie from the measured rates. Baseline copies `effectiveness/last.json` and refuses when that file is absent. |
+| 3.7-loop | Improve loop: rewrite, re-run, train/test description search, apply only on click | real | `skill-hive-cli test optimize` calls `optimize_descriptions`: 60/40 split, template P8, up to five rounds, winner chosen by the held-out score, `optimization.json` with `applied: false`. Apply writes the description only after that click, and refuses when `restored` is false. |
 | 3.8 | `quick_validate.py` rules, reported together, on save | real | `authoring/validator.rs` `validate_skill` is the save path. The Python script is not bundled. |
-| 3.9 | Claude Code, sequential, and static-viewer modes | missing | No mode switch and no static viewer generated from a run. |
+| 3.9 | Claude Code, sequential, and static-viewer modes | real | The suite screen and `test run --adapter` select emulated, claude-code, sequential, or static. `claude-code` requires `--cli-program`. Sequential is the engine's one-cell-at-a-time path. Static opens `review.html` written by `write_exports`. The Claude Code binary is not bundled. |
 
 ## Part 3 — authoring, generation, testing, workflows
 
 | id | requirement | status | evidence |
 |---|---|---|---|
 | A.1-editor | Skill editor with frontmatter, body, problems, preview, versions, and the 500-line gauge | real | `src/features/skills/SkillEditor.tsx` and `validator.rs`. |
-| A.1-tree | File tree, executable bit, and the `allowed-tools` inserter | missing | The editor is one Markdown buffer. |
+| A.1-tree | File tree, executable bit, and the `allowed-tools` inserter | real | `SkillEditor.tsx` lists each file, toggles `executable`, and inserts `allowed-tools: Read` into the frontmatter. |
 | A.2 | Agent editor with fields, problems, preview, export, and versions | real | `src/features/agents/AgentEditor.tsx`. |
 | A.3 | Draft snapshot and restore | real | `snapshot_skill_draft` and `restore_skill_draft` in `src-tauri/src/commands.rs`. |
-| B.1 | Generate wizard interview and draft that call a provider | stand-in | `save_generated_draft` calls `GenerationSession::run_review` on `skill_envelope`. `generation/session.rs` says replies come from recorded fixtures. The CLI live path in `hive-cli/src/generate.rs` POSTs `{"task","name","kind"}` to a localhost URL and refuses `api.anthropic.com`. |
-| B.2 | Templates P1–P13 sent to the selected endpoint | stand-in | The strings live in `generation/templates.rs`. The app path does not send them. |
+| B.1 | Generate wizard interview and draft that call a provider | real | Continue from the goal calls `interview_for_goal`, which posts template P1 through the configured adapter. Accept all defaults also calls it, then `save_generated_draft` posts P1–P13. Both refuse without a base URL and a key. |
+| B.2 | Templates P1–P13 sent to the selected endpoint | real | `send_templates` renders P1–P13 and posts each one through `AnthropicProvider` or `OpenAiProvider`. The wizard and `generate skill` / `generate agent` / `generate evals` without `--replay` call it. |
 | C.1-files | `evals.json`, `trigger.json`, and `checks.json` | real | `save_suite`. |
-| C.1-ui | Cases, trigger set, and checks editors on the suite screen | missing | `SuiteView.tsx` shows two sentences, Optimize, Apply, and a link to `/runs/run-fixture`. |
-| C.2-trigger | Trigger tests with the P9 prompt, three runs, and a 0.5 threshold against a model | stand-in | `test measure` asks the adapter and applies a 0.5 threshold. The default is one repetition, and the prompt is the query plus the skill list, not template P9. |
+| C.1-ui | Cases, trigger set, and checks editors on the suite screen | real | `SuiteView.tsx` edits the case prompt, the trigger query, and the check, then `save_suite_draft` writes `evals.json`, `trigger.json`, and `checks.json`. |
+| C.2-trigger | Trigger tests with the P9 prompt, three runs, and a 0.5 threshold against a model | real | `ask_trigger` renders template P9 and posts it through the adapter. `test run` and `test measure` default to 3 repetitions. The pass threshold is 0.5 on `fired alone`. |
 | C.2-expect | Expectation test in a sandbox with the skill injected only for `with_skill` | real | `test measure` is the product caller. The engine still injects the skill only for `with_skill`. |
 | C.2-checks | Deterministic checks that the grader cannot overturn | real | `checks.rs` `run_check`. `engine.rs` runs them and records `checks.json`. The CLI's saved suite includes a `file_exists` check. |
-| C.2-ab | Blind version-versus-version comparison through P12 | missing | The compare screen does not send outputs to a model. |
-| C.3-matrix | Configurations, endpoints, models, repetitions, estimate, presets, and progress events | missing | `Plan` is one model and one repetition. The suite screen has no matrix. |
-| C.3-budget | Budget pause with Continue, Stop and grade, or Cancel | stand-in | `Plan.budget_usd` can stop `run_plan`. The Budget button in `ResultsView.tsx` only sets a local paused flag. |
-| C.4-results | Results summary, heatmap, and timeline from a measured run | stand-in | Demo mode renders `FIXTURE_CELLS` in `results/model.ts`. Otherwise the screen parses `get_recent_log_excerpt` or stays empty. |
-| C.4-rest | Analyst notes, trigger panel, and the cell detail sheet | missing | Not on `ResultsView.tsx`. |
-| C.5-history | History screen fed by a measured `history.json` | stand-in | Demo mode renders `HISTORY_ROWS`. Live mode stays empty until Baseline, which writes the canned chain described above. |
-| C.5-rules | R1–R6 evaluated when a product run finishes | real | `run_measured` calls `analytics::evaluate` on the measured slice and writes the first slice as the baseline when none is pinned. The Baseline button still does not call it. |
-| C.6 | Export of benchmark, CSV, JUnit, and HTML from the graded cells | real | `write_exports` writes `benchmark.json` via `run_plan`, plus `cells.csv`, `junit.xml`, and `review.html`, from the measured cells. The results screen still has no download button. |
-| D.1 | Create a skill and prove it by running the suite | stand-in | `analytics/workflow.rs` `demonstrate_d1` says every model reply is a frozen fixture. |
-| D.2 | Import a skill and benchmark it | stand-in | `demonstrate_d2` is the same fixture recording. Import does not start `run_plan`. |
-| D.3 | Generate an agent and test it on two endpoints | missing | No product path runs one subject against two endpoints. `demonstrate_d3` is a fixture. |
+| C.2-ab | Blind version-versus-version comparison through P12 | real | Outside demo mode, Record verdict calls `blind_compare_last`, which posts template P12 and writes `test-runs/blind.json` with `revealed: false`. `skill-hive-cli test blind` is the same call. |
+| C.3-matrix | Configurations, endpoints, models, repetitions, estimate, presets, and progress events | real | The suite screen lists `with_skill` and `without_skill`, the adapter, repetitions, the estimate `2 × 1 × repetitions`, and the Quick smoke (1) and Full benchmark (3) presets. Run returns the report's progress steps and model ids. `test pair` measures the same skill on a second endpoint. |
+| C.3-budget | Budget pause with Continue, Stop and grade, or Cancel | real | Continue, Stop and grade, and Cancel write `test-runs/control.json`. The next measured run sets `budget_usd` to 0 on stop and `cancel_after` to 0 on cancel. Continue leaves both unset. |
+| C.4-results | Results summary, heatmap, and timeline from a measured run | real | Outside demo mode, `ResultsView` reads `effectiveness/last.json` and draws one heatmap cell per measured configuration. Demo mode still renders `FIXTURE_CELLS` for the shell tests. |
+| C.4-rest | Analyst notes, trigger panel, and the cell detail sheet | real | `benchmark_notes` posts template P13 during `run_measured` and stores `analyst_notes`. The results screen lists those notes, the activation rows, and a cell sheet with transcript, timeline, outputs, grading, checks, and feedback. |
+| C.5-history | History screen fed by a measured `history.json` | real | Outside demo mode, History reads `history.iterations` and `alerts` from `effectiveness/last.json`. Baseline copies that file and errors when no measured run exists. Demo mode still renders `HISTORY_ROWS`. |
+| C.5-rules | R1–R6 evaluated when a product run finishes | real | `run_measured` calls `analytics::evaluate` on the measured slice and writes the first slice as the baseline when none is pinned. The History screen shows those alerts. |
+| C.6 | Export of benchmark, CSV, JUnit, and HTML from the graded cells | real | `write_exports` writes `benchmark.json`, `cells.csv`, `junit.xml`, and `review.html` from the measured cells. The results Export button calls `export_measured_run` and returns the files that exist. |
+| D.1 | Create a skill and prove it by running the suite | real | Accept all defaults posts P1 and P1–P13, writes `SKILL.md`, and Run suite calls `run_measured`. `demonstrate_d1` remains a frozen recording and is not this path. |
+| D.2 | Import a skill and benchmark it | real | `import_existing_skill` copies a scanned skill into the library. `skill-hive-cli test run` on that directory is the measured benchmark. `demonstrate_d2` is not this path. |
+| D.3 | Generate an agent and test it on two endpoints | real | `generate agent` without `--replay` posts P1–P13 and writes the agent. `skill-hive-cli test pair --second-url` measures that subject on the configured endpoint and a second base URL, and writes `test-runs/pair.json`. `demonstrate_d3` is not this path. |
 
 ## Part 1 §4 — provider layer
 
@@ -97,14 +87,14 @@ These exist and are not the product measurement. A later build should call them 
 |---|---|---|---|
 | 4.1 | Provider-agnostic chat interface used by the engine | real | `ChatProvider` in `providers/types.rs`. `run_plan` takes `&dyn ChatProvider`. |
 | 4.2-adapter | Anthropic Messages adapter, injectable base URL, SSE | real | `AnthropicProvider` in `providers/http.rs`. `anthropic_openai_and_ollama_answer_on_localhost` in `providers/tests.rs`. |
-| 4.2-product | The app or the CLI suite uses that adapter | real | `test measure` and `run_effectiveness_suite` construct `AnthropicProvider` and post `/v1/messages`. `test run` still uses `ScriptedProvider` or `post_local`, and that command is not the measurement. |
+| 4.2-product | The app or the CLI suite uses that adapter | real | `test run`, `test measure`, and `run_effectiveness_suite` construct `AnthropicProvider` and post `/v1/messages`. They do not call `ScriptedProvider`. |
 | 4.3-adapter | OpenAI-compatible adapter, Bearer or Azure `api-key` | real | `OpenAiProvider` in `http.rs`, same localhost test. |
-| 4.3-product | A suite or wizard call uses that adapter | real | The same measure command constructs `OpenAiProvider` when the configured provider kind is OpenAI-compatible, including Azure flavor when set. The generate wizard still does not call it. |
+| 4.3-product | A suite or wizard call uses that adapter | real | The measure command constructs `OpenAiProvider` when the configured provider kind is OpenAI-compatible, including Azure flavor when set. The generate wizard uses the same kind switch. |
 | 4.4 | Local agent CLI executor as the measurement | real | `test measure --cli-program` spawns that program with `-p` and `--output-format stream-json` and reads the Skill tool calls. The HTTP adapter remains the default measurement. |
 | 4.5-secrets | Secrets scrubbed from transcripts | real | `Transcript::push` in `engine.rs` scrubs the secret. |
-| 4.5-retry | Retries, rate limits, and cost on the calls a suite makes | real | `run_plan` and `ask` wrap the measured provider in `Middleware` with two retries, a limiter, secret scrubbing, and pricing. `test run` still does not. |
+| 4.5-retry | Retries, rate limits, and cost on the calls a suite makes | real | `run_plan` and `ask` wrap the measured provider in `Middleware` with two retries, a limiter, secret scrubbing, and pricing. `test run` goes through that path. |
 | 4.6-probe | Probe a provider and report the stages | real | `probe_provider` in `providers/probe.rs`, tested on localhost. |
-| 4.6-screen | The endpoints screen runs that probe and stores the key in the OS keychain | stand-in | `EndpointsView.tsx` lists the stage names and keeps the secret in the page store. `providers_probe_live` POSTs `{"id","model"}` and refuses vendor hosts. |
+| 4.6-screen | The endpoints screen runs that probe and stores the key in the OS keychain | real | Save key calls `set_provider_secret`, which uses `store_provider_secret`. Run probe calls `probe_provider`. The price list is `endpoint_prices`, from `Pricing::anthropic_defaults`. `providers test` and `providers probe --live` use that probe. `providers probe --offline` is the named offline probe and is not a measured run. |
 
 ## Part 1 §5 — test execution engine
 
@@ -112,26 +102,26 @@ These exist and are not the product measurement. A later build should call them 
 |---|---|---|---|
 | 5.1 | A product run expands a plan and persists `runs`, `run_cases`, and `usage_ledger` | real | `test measure` calls `run_plan` with the live adapter. The measured test opens `hive.db` and asserts those three tables are non-empty. |
 | 5.2 | Isolated working directories, removed after the cell | real | The sandbox is per cell. `testing/tests.rs` covers deletion. |
-| 5.3 | Tool loop jailed to the cell (`write_file`, `read_file`, `bash`, `list_dir`) | real | `engine.rs` tool loop. On the product path the model deciding the tool calls is scripted. |
+| 5.3 | Tool loop jailed to the cell (`write_file`, `read_file`, `bash`, `list_dir`) | real | `engine.rs` jails `write_file`, `read_file`, `bash`, and `list_dir` to the cell. `test run` asks the configured adapter which tool to call. |
 | 5.4 | Transcript and tool-call metrics | real | `transcript.jsonl` and `outputs/metrics.json` are written by `run_plan`. |
 | 5.5 | Grading, aggregation, cancellation, and persistence of a live run | real | The measured run grades through the adapter, aggregates `benchmark.json`, and persists the run. Cancellation is the engine token; `test measure` does not expose a cancel button. |
-| 5.6 | Seeded runs and record/replay | real | `Plan.seed` is part of `run_plan`. `middleware.rs` record-then-replay is tested. The scripted CLI run uses seed 4 and does not go through that middleware. |
+| 5.6 | Seeded runs and record/replay | real | `Plan.seed` is part of `run_plan`. `test run --mode replay` reads the last measured `last.json`. `middleware.rs` record-then-replay is tested on the adapter. |
 
 ## Part 4 §5.3 — new screens
 
 | id | requirement | status | evidence |
 |---|---|---|---|
-| 5.3-agents | Agents library with search, tags, import, and the description budget | stand-in | `AgentsView.tsx` lists agents. The budget meter and import sheet from the spec are not on the screen. Demo mode seeds cards. |
-| 5.3-skill-editor | Skill editor | real | `/skills/:id/edit` renders `SkillEditor`. The file tree from the spec is still missing (A.1-tree). |
+| 5.3-agents | Agents library with search, tags, import, and the description budget | real | `AgentsView.tsx` filters by name and tag, imports with a collision sheet, and shows the description budget. Demo mode still seeds cards for the shell tests. |
+| 5.3-skill-editor | Skill editor | real | `/skills/:id/edit` renders `SkillEditor`, including the file tree in A.1-tree. |
 | 5.3-agent-editor | Agent editor | real | `/agents/:id/edit` renders `AgentEditor`. |
-| 5.3-generate | Five-step wizard that calls a provider | stand-in | `GenerateWizard.tsx` has the five steps. Accept all defaults calls `save_generated_draft`, which does not call a provider. The interview step stays empty until that click. |
-| 5.3-suite | Suite screen that starts a measured run | missing | Run suite is a link to `/runs/run-fixture`. The Effectiveness link opens the report; it does not start `test measure`. |
-| 5.3-matrix | Run matrix and live progress grid | missing | No matrix panel and no `test-run-progress` events. |
-| 5.3-results | Results screen of a measured run, including export | stand-in | `ResultsView.tsx` uses demo cells or a log excerpt. `/effectiveness` reads `effectiveness/last.json` and does not export the graded cells. |
-| 5.3-cell | Cell sheet with transcript, timeline, outputs, grading, checks, and feedback | missing | Not implemented. |
-| 5.3-compare | Compare screen, blind until the verdict, then unblinded from the run | stand-in | Demo cards, then `record_compare_verdict`. Live mode says "No comparison yet." until that command returns. |
-| 5.3-history | History with the measured chain, a trend, and regression alerts | stand-in | Demo rows or the canned baseline chain. No trend and no R1–R6 alerts. |
-| 5.3-endpoints | Endpoint catalog with a live probe, prices, and a keychain secret | stand-in | `EndpointsView.tsx` plus the page store. See 4.6-screen. |
+| 5.3-generate | Five-step wizard that calls a provider | real | `GenerateWizard.tsx` has the five steps. Continue posts P1. Accept all defaults posts P1–P13 through `save_generated_draft`. |
+| 5.3-suite | Suite screen that starts a measured run | real | Run suite saves the draft and calls `run_effectiveness_suite`, which calls `run_measured`. |
+| 5.3-matrix | Run matrix and live progress grid | real | The suite screen shows the configuration line, the preset, the estimate, and the progress steps returned by the measured run. |
+| 5.3-results | Results screen of a measured run, including export | real | Outside demo mode the heatmap reads `effectiveness/last.json`. Export calls `export_measured_run`. |
+| 5.3-cell | Cell sheet with transcript, timeline, outputs, grading, checks, and feedback | real | Opening a heatmap cell shows `cell-sheet` with those six sections and the measured pass rate. |
+| 5.3-compare | Compare screen, blind until the verdict, then unblinded from the run | real | The cards stay sealed until Record verdict. Outside demo mode that click posts P12, then `record_compare_verdict` stores the person's verdict. |
+| 5.3-history | History with the measured chain, a trend, and regression alerts | real | Outside demo mode the table, the trend line, and `history-alerts` come from the measured report. |
+| 5.3-endpoints | Endpoint catalog with a live probe, prices, and a keychain secret | real | See 4.6-screen. The screen lists the seven probe stages, runs `probe_provider`, shows `endpoint_prices`, and stores the key with `store_provider_secret`. |
 
 ## Additions beyond PLAN.md
 
@@ -144,12 +134,12 @@ These requirements are not in PLAN.md and they are not in the 63 rows above. `te
 | L3 | Library Interference Report: snapshot, overlap, re-run, bisect, rewrite re-test, install warning | built |
 | L4 | Per-model results with a configurable pass bar, flagging strong-model-only descriptions | built |
 | L5 | Optional hand-labelled gold set that calibrates the grader | built |
-| L6 | Per-skill Effectiveness Radar, with an overlay of two skills, versions, or library contexts | partial |
+| L6 | Per-skill Effectiveness Radar, with an overlay of two skills, versions, or library contexts | built |
 | L7 | Influence map: installed skills as a node graph of who steals whose queries | built |
-| L8 | Competition leaderboard ranked on firing the right queries and graded task quality | partial |
+| L8 | Competition leaderboard ranked on firing the right queries and graded task quality | built |
 | L9 | Beginner-facing grade, plain-language verdicts, and accessible charts | built |
 
-L6 draws one skill's axes and names the weakest one. It does not overlay a second skill, version, or context. L8 ranks the rows it is given; one `test measure` supplies the candidate only. L3 writes the library snapshot, imports it under the run's `context/` directory, compares it with the previous snapshot, bisects the distractors that still hijack, and warns when a saved `fired alone` query regresses. `apply_description` still refuses until the caller says the re-test restored `fired alone`.
+L6 draws the candidate's axes and a dashed overlay for the first sibling or distractor returned by `score_peers`. L8 ranks that same library in one `test measure`: the candidate's quality is the `with_skill` pass rate, and each peer's quality is its `fired alone` rate on the shared trigger queries, because a sibling may have no `evals.json`. L3 writes the library snapshot, imports it under the run's `context/` directory, compares it with the previous snapshot, bisects the distractors that still hijack, and warns when a saved `fired alone` query regresses. `apply_description` still refuses until the caller says the re-test restored `fired alone`.
 
 ### L1 — Library context
 

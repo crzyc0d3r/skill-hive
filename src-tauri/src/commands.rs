@@ -1831,6 +1831,39 @@ pub fn export_agent_draft(id: String, text: String) -> Result<String, AppError> 
 }
 
 #[tauri::command]
+pub fn interview_for_goal(goal: String) -> Result<String, AppError> {
+    let goal = goal.trim();
+    if goal.is_empty() {
+        return Err(AppError::invalid_input("A goal is required"));
+    }
+    let (provider, model, secret) = generation_provider()?;
+    let parsed = hive_core::testing::interview_goal(provider.as_ref(), &model, goal, &secret)
+        .map_err(AppError::io)?;
+    let questions = parsed
+        .get("questions")
+        .cloned()
+        .unwrap_or(serde_json::json!([]));
+    serde_json::to_string(&questions).map_err(AppError::io)
+}
+
+#[tauri::command]
+pub fn endpoint_prices() -> Result<String, AppError> {
+    let rows: Vec<serde_json::Value> = hive_core::providers::seed_models()
+        .iter()
+        .filter_map(|model| {
+            hive_core::providers::Pricing::anthropic_defaults(model).map(|price| {
+                serde_json::json!({
+                    "model": model,
+                    "input_per_mtok": price.input_per_mtok,
+                    "output_per_mtok": price.output_per_mtok,
+                })
+            })
+        })
+        .collect();
+    serde_json::to_string(&rows).map_err(AppError::io)
+}
+
+#[tauri::command]
 pub fn save_generated_draft(goal: String) -> Result<String, AppError> {
     let goal = goal.trim();
     if goal.is_empty() {
@@ -1842,36 +1875,82 @@ pub fn save_generated_draft(goal: String) -> Result<String, AppError> {
     } else {
         name
     };
-    let root = central_repo::base_dir().join("generations");
-    let mut session = hive_core::generation::GenerationSession::start(
-        &root,
-        None,
-        hive_core::generation::Kind::Skill,
-        goal,
-        &name,
-        hive_core::authoring::Profile::Portable,
-    )
-    .map_err(AppError::io)?;
-    session
-        .run_review(&hive_core::generation::skill_envelope(&name, false))
-        .map_err(|err| AppError::io(format!("{err:?}")))?;
-    let saved = session
-        .accept()
-        .map_err(|err| AppError::io(format!("{err:?}")))?;
     let dir = authoring_root("generate", "draft");
     std::fs::create_dir_all(&dir)?;
-    let from = saved.join("SKILL.md");
     let dest = dir.join("SKILL.md");
-    if from.is_file() {
-        std::fs::copy(&from, &dest)?;
-    } else {
-        return Err(AppError::io("generation did not write SKILL.md"));
-    }
+    let drafted = match generation_provider() {
+        Ok((provider, model, secret)) => hive_core::testing::send_templates(
+            provider.as_ref(),
+            &model,
+            &name,
+            goal,
+            "skill",
+            &secret,
+        )
+        .map_err(AppError::io)?,
+        Err(err) => return Err(err),
+    };
+    let body = format!("---\nname: {name}\ndescription: {goal}\n---\n\n{goal}\n\n{drafted}\n");
+    std::fs::write(&dest, body)?;
     let text = std::fs::read_to_string(&dest)?;
     if !text.contains(goal) && !text.contains(&name) {
         return Err(AppError::io("generated draft did not keep the goal"));
     }
     Ok(dest.to_string_lossy().to_string())
+}
+
+fn generation_provider(
+) -> Result<(Box<dyn hive_core::providers::ChatProvider>, String, String), AppError> {
+    let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
+        .map_err(AppError::db)?;
+    let Some(row) = rows
+        .into_iter()
+        .find(|row| row.base_url.as_ref().is_some_and(|url| !url.is_empty()))
+    else {
+        return Err(AppError::invalid_input(
+            "live generation is unavailable without a vendor API key",
+        ));
+    };
+    let api_key = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            hive_core::providers::load_provider_secret(
+                &row.id,
+                &central_repo::base_dir().join("provider-secrets"),
+            )
+            .ok()
+        });
+    let Some(api_key) = api_key else {
+        return Err(AppError::invalid_input(
+            "live generation is unavailable without a vendor API key",
+        ));
+    };
+    let secret = hive_core::providers::SecretString::new(api_key.clone());
+    let model = row
+        .default_model
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "claude-sonnet-5-5".to_string());
+    let url = row.base_url.unwrap_or_default();
+    let provider: Box<dyn hive_core::providers::ChatProvider> = match row.kind {
+        hive_core::providers::ProviderKind::OpenaiCompat => {
+            Box::new(hive_core::providers::OpenAiProvider::new(
+                "generator",
+                url,
+                hive_core::providers::Flavor::Openai,
+                secret,
+            ))
+        }
+        hive_core::providers::ProviderKind::Anthropic => Box::new(
+            hive_core::providers::AnthropicProvider::new("generator", url, secret),
+        ),
+        hive_core::providers::ProviderKind::LocalCli => {
+            return Err(AppError::invalid_input(
+                "live generation is unavailable without a vendor API key",
+            ));
+        }
+    };
+    Ok((provider, model, api_key))
 }
 
 #[tauri::command]
@@ -1886,6 +1965,17 @@ pub fn apply_optimized_description(description: String) -> Result<String, AppErr
     } else {
         text
     };
+    let optimization = dir.join("optimization.json");
+    if optimization.is_file() {
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&optimization).unwrap_or_default())
+                .unwrap_or(serde_json::Value::Null);
+        if saved.get("restored").and_then(|value| value.as_bool()) == Some(false) {
+            return Err(AppError::invalid_input(
+                "held-out score regressed, so the description stays unapplied",
+            ));
+        }
+    }
     apply_optimized(&dir, description).map_err(AppError::io)?;
     let suite_dir = authoring_root("suite", "optimized");
     std::fs::create_dir_all(&suite_dir)?;
@@ -1934,7 +2024,11 @@ pub fn get_effectiveness_report() -> Result<String, AppError> {
 }
 
 #[tauri::command]
-pub fn run_effectiveness_suite(skill_path: String) -> Result<String, AppError> {
+pub fn run_effectiveness_suite(
+    skill_path: String,
+    adapter: Option<String>,
+    repetitions: Option<u32>,
+) -> Result<String, AppError> {
     let skill = PathBuf::from(skill_path.trim());
     if !skill.join("SKILL.md").is_file() {
         return Err(AppError::invalid_input(
@@ -2005,8 +2099,8 @@ pub fn run_effectiveness_suite(skill_path: String) -> Result<String, AppError> {
             id: model,
             strong: true,
         }],
-        adapter: "emulated".into(),
-        repetitions: 1,
+        adapter: adapter.unwrap_or_else(|| "emulated".to_string()),
+        repetitions: repetitions.unwrap_or(3),
         threshold: 0.5,
         pass_bar: 0.5,
         distractors: Vec::new(),
@@ -2023,6 +2117,272 @@ pub fn run_effectiveness_suite(skill_path: String) -> Result<String, AppError> {
 }
 
 #[tauri::command]
+pub fn optimize_skill_description(
+    skill_path: String,
+    rounds: Option<u32>,
+) -> Result<String, AppError> {
+    let skill = PathBuf::from(skill_path.trim());
+    if !skill.join("SKILL.md").is_file() {
+        return Err(AppError::invalid_input(
+            "the skill directory has no SKILL.md",
+        ));
+    }
+    let endpoint = measured_endpoint()?;
+    let model = endpoint.model;
+    let secret = endpoint.secret;
+    let url = endpoint.url;
+    let kind = endpoint.kind;
+    let root = central_repo::base_dir().join("test-runs");
+    std::fs::create_dir_all(&root)?;
+    let saved = hive_core::testing::optimize_descriptions(
+        &hive_core::testing::MeasureRequest {
+            skill_dir: skill,
+            workspace: root.join("workspace"),
+            db_path: root.join("hive.db"),
+            base_url: url,
+            api_key: secret,
+            kind,
+            flavor: None,
+            models: vec![hive_core::testing::ModelChoice {
+                id: model,
+                strong: true,
+            }],
+            adapter: "emulated".into(),
+            repetitions: 1,
+            threshold: 0.5,
+            pass_bar: 0.5,
+            distractors: Vec::new(),
+            seed: 7,
+            cli_program: None,
+            cli_prefix: Vec::new(),
+        },
+        rounds.unwrap_or(5),
+    )
+    .map_err(AppError::io)?;
+    Ok(saved.to_string())
+}
+
+#[tauri::command]
+pub fn blind_compare_last(
+    prompt: String,
+    output_a: String,
+    output_b: String,
+) -> Result<String, AppError> {
+    let endpoint = measured_endpoint()?;
+    let provider = endpoint.provider;
+    let model = endpoint.model;
+    let secret = endpoint.secret;
+    let compared = hive_core::testing::blind_compare(&hive_core::testing::BlindRequest {
+        provider: provider.as_ref(),
+        model: &model,
+        prompt: &prompt,
+        output_a: &output_a,
+        output_b: &output_b,
+        sealed_a: "with_skill",
+        sealed_b: "without_skill",
+        secret: &secret,
+    })
+    .map_err(AppError::io)?;
+    let root = central_repo::base_dir().join("test-runs");
+    std::fs::create_dir_all(&root)?;
+    std::fs::write(
+        root.join("blind.json"),
+        serde_json::to_string(&compared).unwrap_or_default(),
+    )?;
+    Ok(compared.to_string())
+}
+
+#[tauri::command]
+pub fn control_measured_run(action: String) -> Result<String, AppError> {
+    let action = match action.as_str() {
+        "continue" | "stop" | "cancel" => action,
+        _ => {
+            return Err(AppError::invalid_input(
+                "action must be continue, stop, or cancel",
+            ))
+        }
+    };
+    let root = central_repo::base_dir().join("test-runs");
+    std::fs::create_dir_all(&root)?;
+    let path = root.join("control.json");
+    let body = serde_json::json!({"action": action}).to_string();
+    std::fs::write(&path, &body)?;
+    let workspace = root.join("workspace");
+    if workspace.is_dir() {
+        std::fs::write(workspace.join("control.json"), &body)?;
+    }
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn export_measured_run() -> Result<String, AppError> {
+    let workspace = central_repo::base_dir().join("test-runs").join("workspace");
+    let names = ["benchmark.json", "cells.csv", "junit.xml", "review.html"];
+    let present: Vec<&str> = names
+        .into_iter()
+        .filter(|name| workspace.join(name).is_file())
+        .collect();
+    if present.is_empty() {
+        return Err(AppError::invalid_input("export needs a measured run"));
+    }
+    Ok(serde_json::json!({"files": present}).to_string())
+}
+
+#[tauri::command]
+pub fn save_suite_draft(
+    skill_path: String,
+    prompt: String,
+    query: String,
+    check: String,
+) -> Result<String, AppError> {
+    let skill = PathBuf::from(skill_path.trim());
+    std::fs::create_dir_all(&skill)?;
+    if !skill.join("SKILL.md").is_file() {
+        let name = skill
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("skill");
+        std::fs::write(
+            skill.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {prompt}\n---\n"),
+        )?;
+    }
+    let name = skill
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("skill");
+    save_suite(
+        &skill,
+        &Suite {
+            skill_name: name.into(),
+            evals: vec![SuiteCase {
+                id: 1,
+                prompt: prompt.clone(),
+                expected_output: prompt.clone(),
+                files: Vec::new(),
+                expectations: vec![check.clone()],
+            }],
+            triggers: vec![TriggerRow {
+                query,
+                should_trigger: true,
+                rationale: None,
+            }],
+            checks: vec![CheckSpec {
+                id: "case".into(),
+                expectation: check.clone(),
+                kind: "text".into(),
+                path: "SKILL.md".into(),
+                pattern: None,
+            }],
+        },
+    )
+    .map_err(|err| AppError::io(err.to_string()))?;
+    Ok(skill
+        .join("evals")
+        .join("evals.json")
+        .to_string_lossy()
+        .to_string())
+}
+
+#[tauri::command]
+pub fn probe_endpoint(id: String) -> Result<String, AppError> {
+    let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
+        .map_err(AppError::db)?;
+    let Some(config) = rows.into_iter().find(|row| row.id == id.trim()) else {
+        return Err(AppError::invalid_input("unknown provider"));
+    };
+    let secret = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            hive_core::providers::load_provider_secret(
+                &config.id,
+                &central_repo::base_dir().join("provider-secrets"),
+            )
+            .ok()
+        })
+        .ok_or_else(|| AppError::invalid_input("probe needs a stored provider secret"))?;
+    let report = hive_core::providers::probe_provider(
+        &config,
+        &hive_core::providers::SecretString::new(secret),
+        &hive_core::providers::CancellationToken::new(),
+    );
+    serde_json::to_string(&report).map_err(AppError::io)
+}
+
+struct MeasuredEndpoint {
+    provider: Box<dyn hive_core::providers::ChatProvider>,
+    model: String,
+    secret: String,
+    url: String,
+    kind: String,
+}
+
+fn measured_endpoint() -> Result<MeasuredEndpoint, AppError> {
+    let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
+        .map_err(AppError::db)?;
+    let Some(row) = rows
+        .into_iter()
+        .find(|row| row.base_url.as_ref().is_some_and(|url| !url.is_empty()))
+    else {
+        return Err(AppError::invalid_input(
+            "add a provider with a base URL before measuring",
+        ));
+    };
+    let kind = match row.kind {
+        hive_core::providers::ProviderKind::OpenaiCompat => "openai",
+        hive_core::providers::ProviderKind::Anthropic => "anthropic",
+        hive_core::providers::ProviderKind::LocalCli => {
+            return Err(AppError::invalid_input(
+                "measuring needs an Anthropic or OpenAI adapter",
+            ));
+        }
+    };
+    let api_key = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            hive_core::providers::load_provider_secret(
+                &row.id,
+                &central_repo::base_dir().join("provider-secrets"),
+            )
+            .ok()
+        })
+        .ok_or_else(|| {
+            AppError::invalid_input(
+                "measuring needs SKILL_HIVE_API_KEY or a stored provider secret",
+            )
+        })?;
+    let secret = hive_core::providers::SecretString::new(api_key.clone());
+    let model = row
+        .default_model
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "claude-sonnet-5-5".to_string());
+    let url = row.base_url.clone().unwrap_or_default();
+    let provider: Box<dyn hive_core::providers::ChatProvider> = if kind == "openai" {
+        Box::new(hive_core::providers::OpenAiProvider::new(
+            "measured",
+            url.clone(),
+            hive_core::providers::Flavor::Openai,
+            secret,
+        ))
+    } else {
+        Box::new(hive_core::providers::AnthropicProvider::new(
+            "measured",
+            url.clone(),
+            secret,
+        ))
+    };
+    Ok(MeasuredEndpoint {
+        provider,
+        model,
+        secret: api_key,
+        url,
+        kind: kind.to_string(),
+    })
+}
+
+#[tauri::command]
 pub fn record_compare_verdict(id: String, verdict: String) -> Result<String, AppError> {
     store_verdict(&central_repo::db_path(), id.trim(), verdict.trim()).map_err(AppError::db)
 }
@@ -2034,69 +2394,73 @@ pub fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
     } else {
         skill_name.trim()
     };
-    let last = central_repo::base_dir().join("test-runs").join("last.json");
+    let last = central_repo::base_dir()
+        .join("effectiveness")
+        .join("last.json");
     let measured = std::fs::read_to_string(&last)
         .ok()
-        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
-    let cells = measured
-        .as_ref()
-        .and_then(|value| value.get("cells"))
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0);
-    let passed = measured
-        .as_ref()
-        .and_then(|value| value.get("passed"))
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0);
-    let rate = if cells == 0 {
-        0.0
-    } else {
-        (passed as f64 / cells as f64).clamp(0.0, 1.0)
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .filter(|value| value.get("run_id").and_then(|item| item.as_str()).is_some());
+    let Some(measured) = measured else {
+        return Err(AppError::invalid_input(
+            "baseline needs a measured run. A canned history chain is not written.",
+        ));
     };
-    let version = measured
-        .as_ref()
-        .and_then(|value| value.get("run_id"))
-        .and_then(|value| value.as_str())
-        .filter(|value| !value.is_empty())
-        .unwrap_or("measured")
-        .to_string();
     let path = authoring_root("history", name).join("history.json");
-    let measured_row = cells > 0;
-    let entries = if measured_row {
-        vec![HistoryEntry {
-            version,
-            parent: None,
-            expectation_pass_rate: rate,
-            grading_result: "baseline".into(),
-            is_current_best: true,
-        }]
-    } else {
-        vec![
-            HistoryEntry {
-                version: "v1".into(),
-                parent: None,
-                expectation_pass_rate: 0.92,
-                grading_result: "baseline".into(),
-                is_current_best: false,
-            },
-            HistoryEntry {
-                version: "v2".into(),
-                parent: Some("v1".into()),
-                expectation_pass_rate: 0.97,
-                grading_result: "won".into(),
-                is_current_best: false,
-            },
-            HistoryEntry {
-                version: "v2-optimized".into(),
-                parent: Some("v2".into()),
-                expectation_pass_rate: 0.97,
-                grading_result: "tie".into(),
-                is_current_best: true,
-            },
-        ]
-    };
+    let entries = history_entries(&measured);
     let value = write_history(&path, name, &entries).map_err(AppError::internal)?;
     Ok(value.to_string())
+}
+
+fn history_entries(measured: &serde_json::Value) -> Vec<HistoryEntry> {
+    let rows = measured
+        .get("history")
+        .and_then(|value| value.get("iterations"))
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if !rows.is_empty() {
+        return rows
+            .iter()
+            .filter_map(|row| {
+                Some(HistoryEntry {
+                    version: row.get("version")?.as_str()?.to_string(),
+                    parent: row
+                        .get("parent")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_string),
+                    expectation_pass_rate: row
+                        .get("expectation_pass_rate")
+                        .and_then(|value| value.as_f64())
+                        .unwrap_or(0.0),
+                    grading_result: row
+                        .get("grading_result")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("baseline")
+                        .to_string(),
+                    is_current_best: row
+                        .get("is_current_best")
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false),
+                })
+            })
+            .collect();
+    }
+    let rate = measured
+        .get("with_rate")
+        .and_then(|value| value.as_f64())
+        .unwrap_or(0.0);
+    vec![HistoryEntry {
+        version: measured
+            .get("run_id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("measured")
+            .to_string(),
+        parent: None,
+        expectation_pass_rate: rate,
+        grading_result: "baseline".into(),
+        is_current_best: true,
+    }]
 }
 
 #[tauri::command]

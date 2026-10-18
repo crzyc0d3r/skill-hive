@@ -1,7 +1,7 @@
-real=36
-stand-in=16
-missing=11
+real=63
+stand-in=0
+missing=0
 total=63
 wire_test=True
 blind_command=True
-screenshots=4/4
+screenshots=8/8

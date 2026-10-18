@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { t } from "../../lib/i18n";
 import { evidenceAnchor, FIXTURE_CELLS, FIXTURE_STEPS, moveCell, stepDuration, type HeatCell, type TimelineStep } from "@/features/results/model";
 import { demoEnabled } from "@/lib/demo";
-import { silent } from "@/lib/ipc/actions";
+import { controlMeasuredRun, exportMeasuredRun, silent } from "@/lib/ipc/actions";
 
 function scrollToId(id: string) {
   const node = document.getElementById(id);
@@ -21,17 +21,43 @@ export function ResultsView() {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [exported, setExported] = useState("");
+  const [notes, setNotes] = useState<string[]>([]);
+  const [triggers, setTriggers] = useState<{ query: string; outcome: string }[]>([]);
   useEffect(() => {
     if (demo) return;
-    void silent<{ text?: string }>("get_recent_log_excerpt").then((excerpt) => {
-      if (!excerpt?.text) return;
-      try {
-        const parsed = JSON.parse(excerpt.text) as { cells?: HeatCell[]; steps?: TimelineStep[] };
-        if (Array.isArray(parsed.cells) && parsed.cells.length) setCells(parsed.cells);
-        if (Array.isArray(parsed.steps)) setSteps(parsed.steps);
-      } catch {
-        /* logs that are not a run payload stay on the empty state */
+    void silent<string>("get_effectiveness_report").then((raw) => {
+      let loaded = false;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as {
+            cells?: { id: string; configuration: string; pass_rate: number }[];
+            analyst_notes?: string[];
+            activations?: { query: string; outcome: string }[];
+          };
+          if (Array.isArray(parsed.cells) && parsed.cells.length) {
+            loaded = true;
+            setCells(parsed.cells.map((cell) => ({ id: cell.id, label: cell.configuration, passRate: cell.pass_rate })));
+          }
+          if (Array.isArray(parsed.analyst_notes)) setNotes(parsed.analyst_notes.filter((note) => note.length > 0));
+          if (Array.isArray(parsed.activations)) {
+            setTriggers(parsed.activations.map((row) => ({ query: row.query, outcome: row.outcome })));
+          }
+        } catch {
+          /* an empty report stays on the empty state */
+        }
       }
+      if (loaded) return undefined;
+      return silent<{ text?: string }>("get_recent_log_excerpt").then((excerpt) => {
+        if (!excerpt?.text) return;
+        try {
+          const parsed = JSON.parse(excerpt.text) as { cells?: HeatCell[]; steps?: TimelineStep[] };
+          if (Array.isArray(parsed.cells) && parsed.cells.length) setCells(parsed.cells);
+          if (Array.isArray(parsed.steps)) setSteps(parsed.steps);
+        } catch {
+          /* logs that are not a run payload stay on the empty state */
+        }
+      });
     });
   }, [demo]);
   const selected = cells[index];
@@ -62,7 +88,35 @@ export function ResultsView() {
           </Button>
         ))}
       </div>
-      {open ? <p data-testid="heatmap-open">{open}</p> : null}
+      {open ? (
+        <section data-testid="cell-sheet" className="rounded border border-border p-3 text-sm">
+          <h2 className="text-sm font-semibold">{t("results.sheet")}</h2>
+          <p data-testid="heatmap-open">{open}</p>
+          {selected ? <p>{selected.label} {selected.passRate}</p> : null}
+          <p>{t("results.transcript")}</p>
+          <p>{t("results.timeline")}</p>
+          <p>{t("results.outputs")}</p>
+          <p>{t("results.grading")}</p>
+          <p>{t("results.checks")}</p>
+          <p>{t("results.feedback")}</p>
+        </section>
+      ) : null}
+      <section data-testid="analyst-notes">
+        <h2 className="text-sm font-semibold">{t("results.notes")}</h2>
+        <ul>
+          {notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </section>
+      <section data-testid="trigger-panel">
+        <h2 className="text-sm font-semibold">{t("results.triggers")}</h2>
+        <ul>
+          {triggers.map((row) => (
+            <li key={`${row.query}-${row.outcome}`}>{row.query} {row.outcome}</li>
+          ))}
+        </ul>
+      </section>
       <h2 className="text-sm font-semibold">{t("results.timeline")}</h2>
       <ul className="flex gap-2">
         {steps.map((step) => (
@@ -110,14 +164,21 @@ export function ResultsView() {
       {budgetOpen ? (
         <div role="dialog" data-testid="budget-dialog" className="rounded border border-border p-3">
           <p className="text-sm">{t("results.budget")}</p>
-          <Button type="button" variant="outline" size="sm" className="mr-2" onClick={() => { setPaused(true); setBudgetOpen(false); }}>
+          <Button type="button" variant="outline" size="sm" className="mr-2" onClick={() => { setPaused(true); setBudgetOpen(false); void controlMeasuredRun("continue"); }}>
             {t("results.confirm")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setBudgetOpen(false)}>
+          <Button type="button" variant="outline" size="sm" className="mr-2" onClick={() => { setBudgetOpen(false); void controlMeasuredRun("stop"); }}>
+            {t("results.stop")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { setBudgetOpen(false); void controlMeasuredRun("cancel"); }}>
             {t("results.cancel")}
           </Button>
         </div>
       ) : null}
+      <Button type="button" variant="outline" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>
+        {t("results.export")}
+      </Button>
+      {exported ? <p data-testid="results-export">{exported}</p> : null}
     </section>
   );
 }

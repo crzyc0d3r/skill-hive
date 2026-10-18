@@ -69,6 +69,7 @@ export interface EffectivenessReport {
   activations: Activation[];
   conflicts?: ConflictCell[];
   interference?: Interference;
+  overlay?: { name: string; axes: AxisScore[] };
 }
 
 export const SAMPLE_REPORT: EffectivenessReport = {
@@ -115,6 +116,19 @@ export const SAMPLE_REPORT: EffectivenessReport = {
     bisect: ["culprit"],
     warnings: [{ query_id: "q2", before: "fired_alone", after: "hijacked", suspect: "culprit" }],
     changed: ["culprit"],
+  },
+  overlay: {
+    name: "culprit",
+    axes: [
+      { name: "Trigger pass rate", value: 20 },
+      { name: "Negative-query pass rate", value: 40 },
+      { name: "Survival in a crowded library", value: 10 },
+      { name: "With-skill task pass rate", value: 30 },
+      { name: "Value added over without_skill", value: 15 },
+      { name: "Consistency", value: 25 },
+      { name: "Weak-model performance", value: 10 },
+      { name: "Efficiency", value: 35 },
+    ],
   },
 };
 

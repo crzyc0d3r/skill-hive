@@ -69,6 +69,11 @@ export function EffectivenessView() {
     .map((axis, index) => (axis.value == null ? null : radarPoint(index, axes.length, axis.value)))
     .filter((point): point is { x: number; y: number } => point != null);
   const polygon = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const overlayAxes = report.overlay?.axes ?? [];
+  const overlayPoints = overlayAxes
+    .map((axis, index) => (axis.value == null ? null : radarPoint(index, overlayAxes.length, axis.value)))
+    .filter((point): point is { x: number; y: number } => point != null);
+  const overlayPolygon = overlayPoints.map((point) => `${point.x},${point.y}`).join(" ");
 
   return (
     <section data-testid="effectiveness" className="min-w-0 space-y-4">
@@ -89,8 +94,12 @@ export function EffectivenessView() {
           <section>
             <h2 className="text-sm font-semibold">{t("effect.radar")}</h2>
             <p>{t("effect.caption.radar", { axis: report.weakest_axis })}</p>
+            {report.overlay?.name ? <p>{t("effect.overlay")}: {report.overlay.name}</p> : null}
             <svg role="img" aria-label={t("effect.caption.radar", { axis: report.weakest_axis })} viewBox="0 0 200 200" className="h-48 w-48">
               <polygon points={polygon} fill="none" stroke="currentColor" strokeWidth="2" />
+              {overlayPolygon ? (
+                <polygon data-testid="effect-overlay" points={overlayPolygon} fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+              ) : null}
               {points.map((point, index) => (
                 <circle key={axes[index]?.name ?? index} cx={point.x} cy={point.y} r="3" fill="currentColor" />
               ))}

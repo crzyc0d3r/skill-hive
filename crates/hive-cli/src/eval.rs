@@ -5,10 +5,10 @@ use std::path::Path;
 
 use hive_core::analytics::{export_workspace, ExportCell, ExportSlice};
 use hive_core::library::central_repo;
-use hive_core::providers::{load_provider_secret, RunMode, ScriptedProvider};
+use hive_core::providers::load_provider_secret;
 use hive_core::testing::{
-    run_measured, run_plan, save_suite, write_default_suite, CheckSpec, MeasureRequest,
-    ModelChoice, Plan, Suite, SuiteCase,
+    optimize_descriptions, run_measured, save_suite, write_default_suite, CheckSpec,
+    MeasureRequest, ModelChoice, Suite, SuiteCase,
 };
 use serde_json::{json, Value};
 
@@ -76,81 +76,41 @@ fn register_suite(name: &str, skill: &Path) -> Result<(), Fail> {
     )
     .map_err(|err| Fail::other(err.to_string()))
 }
-pub fn test_run(skill: &Path, mode: &str) -> Result<Value, Fail> {
-    if mode != "replay" {
-        if let Some(url) = crate::providers::local_base_url() {
-            return test_run_live(skill, mode, &url);
-        }
+pub fn test_run(
+    skill: &Path,
+    mode: &str,
+    repetitions: u32,
+    adapter: Option<&str>,
+) -> Result<Value, Fail> {
+    if mode == "replay" {
+        return replay_measured();
     }
-    if mode == "live" {
-        return Err(Fail::other(
-            "only offline and replay modes are available without an API key",
-        ));
+    let mut report = test_measure(skill, repetitions, None, adapter)?;
+    if let Some(object) = report.as_object_mut() {
+        object.insert("command".into(), json!("test.run"));
     }
-    test_run_scripted(skill)
+    Ok(report)
 }
 
-fn test_run_live(skill: &Path, mode: &str, url: &str) -> Result<Value, Fail> {
-    let root = central_repo::base_dir().join("test-runs");
-    fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
-    let body = json!({
-        "skill": skill.display().to_string(),
-        "mode": mode
-    })
-    .to_string();
-    let response = crate::providers::post_local(url, &body).map_err(Fail::other)?;
-    fs::write(root.join("last.json"), &response).map_err(|err| Fail::other(err.to_string()))?;
-    let parsed: Value = serde_json::from_str(&response).unwrap_or(Value::Null);
-    let status = parsed
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or("passed");
+fn replay_measured() -> Result<Value, Fail> {
+    let path = central_repo::base_dir().join("test-runs").join("last.json");
+    let raw = fs::read_to_string(&path).map_err(|_| {
+        Fail::other("replay needs a recorded measured run from the configured adapter")
+    })?;
+    let parsed: Value = serde_json::from_str(&raw).unwrap_or(Value::Null);
     let run_id = parsed
         .get("run_id")
         .and_then(Value::as_str)
-        .unwrap_or("live");
-    Ok(json!({"command": "test.run", "status": status, "run_id": run_id}))
+        .unwrap_or("measured");
+    Ok(json!({"command": "test.run", "status": "replay", "run_id": run_id}))
 }
 
-fn test_run_scripted(skill: &Path) -> Result<Value, Fail> {
-    let root = central_repo::base_dir().join("test-runs");
-    fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
-    let spec = Plan {
-        skill_dir: skill.to_path_buf(),
-        workspace: root.join("workspace"),
-        db_path: root.join("hive.db"),
-        mode: RunMode::Live,
-        seed: 4,
-        repetitions: 1,
-        budget_usd: None,
-        cancel_after: None,
-        crash_after: None,
-        recordings: root.join("recordings"),
-        personal_skills: None,
-        secret: String::new(),
-        usd_per_cell: None,
-        model: "fixture-model".into(),
-        kind: "scripted".into(),
-    };
-    let report = run_plan(&spec, &ScriptedProvider::new("offline"))
-        .map_err(|err| Fail::other(err.to_string()))?;
-    let passed = report
-        .cells
-        .iter()
-        .filter(|cell| cell.status == "passed" || cell.status == "executed")
-        .count();
-    fs::write(
-        root.join("last.json"),
-        json!({"run_id": report.run_id, "status": report.status, "cells": report.cells.len(), "passed": passed}).to_string(),
-    )
-    .map_err(|err| Fail::other(err.to_string()))?;
-    Ok(json!({"command": "test.run", "status": report.status, "run_id": report.run_id}))
-}
-pub fn test_measure(
+fn measure_request(
     skill: &Path,
     repetitions: u32,
     cli_program: Option<&Path>,
-) -> Result<Value, Fail> {
+    adapter: Option<&str>,
+) -> Result<MeasureRequest, Fail> {
     let target = crate::providers::measure_target().map_err(Fail::other)?;
     if target.kind == "local_cli" {
         return Err(Fail::other(
@@ -180,9 +140,15 @@ pub fn test_measure(
         write_default_suite(skill, name, &format!("Complete this task: {name}"))
             .map_err(Fail::other)?;
     }
+    let adapter_name = adapter.unwrap_or("emulated");
+    if adapter_name == "claude-code" && cli_program.is_none() {
+        return Err(Fail::other(
+            "claude-code mode needs --cli-program. A Claude Code binary is not bundled",
+        ));
+    }
     let root = central_repo::base_dir().join("test-runs");
     fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
-    let report = run_measured(&MeasureRequest {
+    Ok(MeasureRequest {
         skill_dir: skill.to_path_buf(),
         workspace: root.join("workspace"),
         db_path: root.join("hive.db"),
@@ -194,7 +160,7 @@ pub fn test_measure(
             id: target.model.clone(),
             strong: true,
         }],
-        adapter: "emulated".into(),
+        adapter: adapter_name.to_string(),
         repetitions,
         threshold: 0.5,
         pass_bar: 0.5,
@@ -203,7 +169,17 @@ pub fn test_measure(
         cli_program: cli_program.map(Path::to_path_buf),
         cli_prefix: Vec::new(),
     })
-    .map_err(Fail::other)?;
+}
+
+pub fn test_measure(
+    skill: &Path,
+    repetitions: u32,
+    cli_program: Option<&Path>,
+    adapter: Option<&str>,
+) -> Result<Value, Fail> {
+    let root = central_repo::base_dir().join("test-runs");
+    let report = run_measured(&measure_request(skill, repetitions, cli_program, adapter)?)
+        .map_err(Fail::other)?;
     let text = serde_json::to_string(&report).map_err(|err| Fail::other(err.to_string()))?;
     fs::write(root.join("last.json"), &text).map_err(|err| Fail::other(err.to_string()))?;
     let saved = central_repo::base_dir().join("effectiveness");
@@ -215,6 +191,40 @@ pub fn test_measure(
         "run_id": report["run_id"],
         "grade": report["grade"],
         "verdict": report["verdict"],
+    }))
+}
+
+pub fn test_optimize(skill: &Path, rounds: u32) -> Result<Value, Fail> {
+    let request = measure_request(skill, 1, None, Some("emulated"))?;
+    let saved = optimize_descriptions(&request, rounds).map_err(Fail::other)?;
+    Ok(json!({
+        "command": "test.optimize",
+        "applied": false,
+        "selected": saved["selected"],
+        "held_out": saved["held_out"],
+        "restored": saved["restored"],
+    }))
+}
+
+pub fn test_pair(skill: &Path, second_url: &str) -> Result<Value, Fail> {
+    let first = test_measure(skill, 1, None, Some("emulated"))?;
+    let mut request = measure_request(skill, 1, None, Some("emulated"))?;
+    request.base_url = second_url.to_string();
+    request.workspace = central_repo::base_dir()
+        .join("test-runs")
+        .join("workspace-b");
+    let second = run_measured(&request).map_err(Fail::other)?;
+    let root = central_repo::base_dir().join("test-runs");
+    fs::write(
+        root.join("pair.json"),
+        json!({"first": first["run_id"], "second": second["run_id"], "endpoints": 2}).to_string(),
+    )
+    .map_err(|err| Fail::other(err.to_string()))?;
+    Ok(json!({
+        "command": "test.pair",
+        "status": "done",
+        "run_id": second["run_id"],
+        "endpoints": 2,
     }))
 }
 
@@ -282,7 +292,15 @@ pub fn test_show() -> Result<Value, Fail> {
     let path = central_repo::base_dir().join("test-runs").join("last.json");
     let raw = fs::read_to_string(&path).map_err(|err| Fail::other(err.to_string()))?;
     let parsed: Value = serde_json::from_str(&raw).map_err(|err| Fail::other(err.to_string()))?;
-    Ok(json!({"command": "test.show", "status": parsed["status"], "run_id": parsed["run_id"]}))
+    let status = parsed["status"]
+        .as_str()
+        .unwrap_or(if parsed.get("grade").is_some() {
+            "done"
+        } else {
+            "idle"
+        });
+    let run_id = parsed["run_id"].as_str().unwrap_or("");
+    Ok(json!({"command": "test.show", "status": status, "run_id": run_id}))
 }
 
 pub fn test_suites() -> Result<Value, Fail> {

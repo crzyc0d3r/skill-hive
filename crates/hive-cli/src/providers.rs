@@ -1,13 +1,9 @@
-//! Provider commands. Live probes only POST to a configured local base URL.
-
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+//! Provider commands. Live probes call the configured adapter.
 
 use hive_core::library::central_repo;
 use hive_core::providers::{
-    list_named_providers, probe_offline, save_named_provider, store_provider_secret,
-    ProviderConfig, ProviderKind,
+    list_named_providers, load_provider_secret, probe_offline, probe_provider, save_named_provider,
+    store_provider_secret, CancellationToken, ProviderConfig, ProviderKind, SecretString,
 };
 use serde_json::{json, Value};
 
@@ -117,44 +113,39 @@ pub fn providers_probe_offline(id: &str) -> Result<Value, Fail> {
     }))
 }
 
-/// POST to the provider's configured base URL when it is a local HTTP server.
-/// A missing server, or any non-local host, returns the offline probe with
-/// `live: false` so the caller still gets the existing offline result.
+/// Probe the configured base URL with the vendor wire protocol.
+/// A missing key returns an error. A closed port returns the failed live stages.
 pub fn providers_probe_live(id: &str) -> Result<Value, Fail> {
     let config = require_provider(id)?;
-    let Some(url) = config.base_url.clone().filter(|url| is_local_http(url)) else {
+    if !config.base_url.as_ref().is_some_and(|url| !url.is_empty()) {
+        return Err(Fail::other(
+            "live vendor probes are unavailable without an API key",
+        ));
+    }
+    let secret = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            load_provider_secret(id, &central_repo::base_dir().join("provider-secrets")).ok()
+        });
+    let Some(secret) = secret else {
         return Err(Fail::other(
             "live vendor probes are unavailable without an API key",
         ));
     };
-    let body = json!({
+    let report = probe_provider(
+        &config,
+        &SecretString::new(secret),
+        &CancellationToken::new(),
+    );
+    Ok(json!({
+        "command": "providers.probe",
         "id": id,
-        "model": config.default_model,
-    })
-    .to_string();
-    match post_local(&url, &body) {
-        Ok(response) => {
-            let parsed: Value = serde_json::from_str(&response).unwrap_or(Value::Null);
-            let ok = parsed.get("ok").and_then(Value::as_bool).unwrap_or(true);
-            let stages = parsed.get("stages").and_then(Value::as_i64).unwrap_or(1);
-            Ok(json!({
-                "command": "providers.probe",
-                "id": id,
-                "ok": ok,
-                "stages": stages,
-                "live": true,
-                "body": parsed
-            }))
-        }
-        Err(_) => {
-            let mut offline = providers_probe_offline(id)?;
-            if let Some(object) = offline.as_object_mut() {
-                object.insert("live".into(), json!(false));
-                object.insert("refused".into(), json!(true));
-            }
-            Ok(offline)
-        }
-    }
+        "ok": report.ok,
+        "stages": report.stages.len() as i64,
+        "live": report.ok,
+        "refused": !report.ok,
+    }))
 }
 
 pub(crate) struct MeasureTarget {
@@ -164,8 +155,7 @@ pub(crate) struct MeasureTarget {
     pub id: String,
 }
 
-/// The first configured provider, including vendor hosts. `test measure` uses this.
-/// `post_local` still refuses those hosts.
+/// The first configured provider, including vendor hosts. Measured runs use this.
 pub(crate) fn measure_target() -> Result<MeasureTarget, String> {
     let rows = list_named_providers(&central_repo::db_path()).map_err(|err| err.to_string())?;
     let row = rows
@@ -187,88 +177,6 @@ pub(crate) fn measure_target() -> Result<MeasureTarget, String> {
         model,
         id: row.id,
     })
-}
-
-pub(crate) fn local_base_url() -> Option<String> {
-    let rows = list_named_providers(&central_repo::db_path()).ok()?;
-    rows.into_iter().find_map(|row| {
-        let url = row.base_url?;
-        is_local_http(&url).then_some(url)
-    })
-}
-
-pub(crate) fn is_local_http(url: &str) -> bool {
-    let lower = url.to_ascii_lowercase();
-    if lower.contains("api.openai.com")
-        || lower.contains("api.anthropic.com")
-        || lower.contains("openrouter.ai")
-    {
-        return false;
-    }
-    lower.starts_with("http://127.0.0.1") || lower.starts_with("http://localhost")
-}
-
-/// POST JSON to an `http://127.0.0.1` or `http://localhost` URL. Returns the
-/// response body. Vendor hosts are refused before any socket is opened.
-pub(crate) fn post_local(url: &str, body: &str) -> Result<String, String> {
-    if !is_local_http(url) {
-        return Err("refused non-local host".into());
-    }
-    let (host, port, path) = split_http(url)?;
-    let addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port));
-    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(400))
-        .map_err(|err| err.to_string())?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .map_err(|err| err.to_string())?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(2)))
-        .map_err(|err| err.to_string())?;
-    let payload = format!(
-        "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    stream
-        .write_all(payload.as_bytes())
-        .map_err(|err| err.to_string())?;
-    let mut raw = String::new();
-    stream
-        .read_to_string(&mut raw)
-        .map_err(|err| err.to_string())?;
-    let (head, response_body) = raw.split_once("\r\n\r\n").unwrap_or(("", raw.as_str()));
-    let status = head
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|code| code.parse::<u16>().ok())
-        .unwrap_or(0);
-    if !(200..300).contains(&status) {
-        return Err(format!("probe POST returned {status}"));
-    }
-    Ok(response_body.to_string())
-}
-
-fn split_http(url: &str) -> Result<(String, u16, String), String> {
-    let rest = url
-        .strip_prefix("http://")
-        .ok_or_else(|| "only http:// is allowed".to_string())?;
-    let (hostport, path) = match rest.split_once('/') {
-        Some((hostport, path)) => (hostport, format!("/{path}")),
-        None => (rest, "/".to_string()),
-    };
-    let (host, port) = match hostport.rsplit_once(':') {
-        Some((host, port)) => {
-            let port = port
-                .parse::<u16>()
-                .map_err(|_| format!("bad port in {url}"))?;
-            (host.to_string(), port)
-        }
-        None => (hostport.to_string(), 80),
-    };
-    if host != "127.0.0.1" && host != "localhost" {
-        return Err("refused non-local host".into());
-    }
-    Ok((host, port, path))
 }
 
 fn parse_kind(kind: &str) -> ProviderKind {
@@ -330,7 +238,27 @@ fn require_provider(id: &str) -> Result<ProviderConfig, Fail> {
 
 pub fn providers_test(id: &str) -> Result<Value, Fail> {
     let config = require_provider(id)?;
-    let report = probe_offline(&config);
+    let secret = std::env::var("SKILL_HIVE_API_KEY")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            load_provider_secret(id, &central_repo::base_dir().join("provider-secrets")).ok()
+        });
+    let (Some(url), Some(secret)) = (config.base_url.as_ref(), secret) else {
+        return Err(Fail::other(
+            "providers test needs a base URL and SKILL_HIVE_API_KEY or a stored provider secret",
+        ));
+    };
+    if url.is_empty() {
+        return Err(Fail::other(
+            "providers test needs a base URL and SKILL_HIVE_API_KEY or a stored provider secret",
+        ));
+    }
+    let report = probe_provider(
+        &config,
+        &SecretString::new(secret),
+        &CancellationToken::new(),
+    );
     Ok(json!({
         "command": "providers.test",
         "id": id,

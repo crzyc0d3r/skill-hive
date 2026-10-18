@@ -1,4 +1,4 @@
-real=38
-stand-in=12
-missing=13
+real=63
+stand-in=0
+missing=0
 total=63

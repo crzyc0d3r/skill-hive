@@ -15,11 +15,11 @@ export function CompareView() {
         <div className="grid gap-3 md:grid-cols-2">
           <Card className="gap-2 rounded-lg border-border px-4 py-4 shadow-none">
             <h2 className="text-sm font-medium">{revealed ? "security-reviewer v2" : t("compare.outputA")}</h2>
-            <p className="text-sm text-muted-foreground">Findings list the seeded vulnerability.</p>
+            <p className="text-sm text-muted-foreground">{t("compare.sealed")}</p>
           </Card>
           <Card className="gap-2 rounded-lg border-border px-4 py-4 shadow-none">
             <h2 className="text-sm font-medium">{revealed ? "security-reviewer v1" : t("compare.outputB")}</h2>
-            <p className="text-sm text-muted-foreground">No findings.</p>
+            <p className="text-sm text-muted-foreground">{t("compare.sealed")}</p>
           </Card>
         </div>
       ) : wizard.compareText ? (
