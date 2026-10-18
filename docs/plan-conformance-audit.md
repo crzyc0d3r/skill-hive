@@ -27,7 +27,7 @@ These are not implemented as product runs. They are the list to design before bu
 - An improve loop that re-runs after a rewrite and writes `history.json` from those rates, plus regression rules R1–R6 against a pinned baseline.
 - The generate wizard calling a provider for the interview and the draft. `save_generated_draft` reviews a local envelope.
 - Results, compare, history, and export screens reading that run. Today the screens read demo rows or an empty state.
-- The library-interference additions below: trigger runs in a library context, a conflict matrix, a machine-to-machine interference report, per-model pass bars, and an optional gold set for the grader. None of that is in PLAN.md, and none of it is on `main`.
+- The additions below: library-context triggers, the conflict matrix, the interference report, per-model pass bars, a grader gold set, the effectiveness radar, the influence map, the competition leaderboard, and the beginner-facing grade. None of that is in PLAN.md, and none of it is on `main`.
 
 A live call to `https://api.anthropic.com` or `https://api.openai.com` still needs that vendor's key. The reference `claude -p` measurement needs the Claude Code CLI. Live skills.sh downloads and GitHub device-flow completion need network access and a user. None of those are reasons to treat the stand-ins below as done.
 
@@ -136,7 +136,7 @@ These exist and are not the product measurement. A later build should call them 
 
 ## Additions beyond PLAN.md
 
-These five requirements are not in PLAN.md. They are not in the 63 rows above. On `main` every one of them is absent: `run_trigger_set` scores streams the caller already recorded, and it does not know which other skills were installed. Nothing exports a library snapshot, nothing bisects a library, and nothing stores a hand-labelled gold set. This section is the proposed design. It is not built.
+These requirements are not in PLAN.md. They are not in the 63 rows above. On `main` every one of them is absent: `run_trigger_set` scores streams the caller already recorded, and it does not know which other skills were installed. Nothing exports a library snapshot, nothing bisects a library, nothing stores a hand-labelled gold set, and no screen draws a radar, an influence map, or a leaderboard. This section is the proposed design. It is not built.
 
 | id | addition | on main |
 |---|---|---|
@@ -145,6 +145,10 @@ These five requirements are not in PLAN.md. They are not in the 63 rows above. O
 | L3 | Library Interference Report: snapshot, overlap, re-run, bisect, rewrite re-test, install warning | not built |
 | L4 | Per-model results with a configurable pass bar, flagging strong-model-only descriptions | not built |
 | L5 | Optional hand-labelled gold set that calibrates the grader | not built |
+| L6 | Per-skill Effectiveness Radar, with an overlay of two skills, versions, or library contexts | not built |
+| L7 | Influence map: installed skills as a node graph of who steals whose queries | not built |
+| L8 | Competition leaderboard ranked on firing the right queries and graded task quality | not built |
+| L9 | Beginner-facing grade, plain-language verdicts, and accessible charts | not built |
 
 ### L1 — Library context
 
@@ -215,3 +219,57 @@ Optional file `evals/gold.json` next to `evals.json`. Each row is a hand label: 
 When the file is present, the grader's verdicts and L1's outcomes on those rows are compared with the labels. The report shows agreement and the disagreements, with the transcript link. Disagreement does not change the suite's pass rate. It tells the user the grader and the labels diverged, which is the calibration. When the file is absent, the run records that calibration was not requested and does not invent labels.
 
 A gold row that names a culprit is wrong if the activation list's culprit differs, even when both say `hijacked`. That keeps the calibration on the same ordered list L1 stored.
+
+### L6 — Effectiveness Radar
+
+One chart per skill. Eight axes, each drawn from a run that already happened. The chart does not call a model. A missing run leaves that axis off the polygon and the caption says which run is missing, so a gap is not drawn as zero.
+
+| axis | score |
+|---|---|
+| Trigger pass rate | Positive queries whose `fired alone` rate meets the L1 threshold, times 100. |
+| Negative-query pass rate | Negative queries where the candidate stays absent, times 100. |
+| Survival in a crowded library | `fired alone` rate inside the library context divided by the same rate when the skill is alone, times 100, capped at 100. The alone run is L3's first context. |
+| With-skill task pass rate | Expectation pass rate of `with_skill`, times 100. |
+| Value added over `without_skill` | `50 + 50 * (with_rate - without_rate)`, clamped to 0–100. Fifty is a tie. Above fifty the skill helps. Below fifty it hurts. The caption also prints the signed delta. |
+| Consistency | `100 * (1 - min(stddev, 1))` of the pass rate across repetitions. Low variance scores high. |
+| Weak-model performance | Pass rate on the models the user did not mark strong in L4, times 100. When every selected model is marked strong, this axis is omitted. |
+| Efficiency | The lesser of `baseline_tokens / with_tokens` and `baseline_time / with_time`, times 100, capped at 100. The baseline is the `without_skill` cell of the same eval. Spending more than the baseline lowers the score. |
+
+The overlay draws two polygons on the same axes. The user picks one of three pairs: two skills, two versions of one skill (`content_hash` from the snapshot), or the same skill under machine A's library and machine B's library. Both series are listed in the legend with the letter grade from L9.
+
+### L7 — Influence map
+
+Nodes are the enabled installed skills. An arrow from A to B means A steals B's queries: L2's `stole` count for that pair is greater than zero. Thickness is the steal rate, `stole / B's queries`. Node size is queries won: the number of that skill's own positive queries whose outcome was `fired alone` in the selected context. Node color is the effectiveness score from L6, the mean of the axes that were present.
+
+Color is not the only encoding. Each node also shows its letter grade and its numeric score. Each arrow's thickness is also printed as a percentage on focus.
+
+Choosing an arrow opens the stolen queries for that pair. The list is the query ids L2 already stored, each linked to the transcript of the run that recorded the activation. The same list is the table fallback: source, target, steal rate, queries won, grade, and the transcript link. Arrow keys move between nodes, and Enter opens the selected arrow's queries.
+
+### L8 — Competition leaderboard
+
+An explicit run, not a side effect of install. Every enabled skill takes a turn as the candidate. The other enabled skills are its distractors, which is L1's library context. The query set is the same for every candidate: the user's shared realistic queries, plus each skill's own saved positive queries so a skill is also scored on the questions it claims. The user can limit the run to a tag or a project.
+
+Two numbers are stored per skill. Fires-on-right-queries is the trigger pass rate on that shared set. Graded task quality is the `with_skill` expectation pass rate on the same prompts. The rank score is the product of the two, so a skill that fires often and does the task poorly ranks below a skill that does both. Ties break on value added (L6), then on efficiency. The table shows both factors next to the rank, not the product alone.
+
+### L9 — Beginner-facing layer
+
+The first thing on every results surface is a letter grade and one sentence. The detail, including the radar, the map, and the per-query tables, is one click or one Enter key further down.
+
+The grade is the mean of the L6 axes that were present. A is 90–100, B is 80–89, C is 70–79, D is 60–69, and F is below 60. The letter is always visible. Color repeats the letter and is never the only signal. A missing axis does not lower the grade by being treated as zero. The caption names the axes that were left out.
+
+Each grade comes with one recommended action, chosen from the worst axis:
+
+| what the runs showed | verdict | action |
+|---|---|---|
+| Hijacked inside this project's library | Other skills are answering this skill's questions. | Disable the culprit for this project, or rewrite the description. Then re-test. |
+| Fired with others | The description is also calling other skills. | Rewrite the description. Then re-test. |
+| None on positive queries | The description is not firing. | Rewrite the description. Then re-test. |
+| Strong-model only | This skill clears the bar on the stronger model and misses it on a weaker one. | Re-test on the model you actually use. |
+| Value added below 50 | The skill did not beat the same task without it. | Disable it for this project, or re-test. |
+| Install changed another skill's outcome | Installing this skill changed an existing skill's answers. | Disable it for this project, or rewrite the skill that regressed. Then re-test. |
+
+Disable for this project writes a project-scoped exclusion. It does not delete the library copy. Rewrite opens the description field with the L3 suggestion when one exists. Re-test starts the same contexts that produced the verdict.
+
+Every chart, including the radar, the influence map, the leaderboard, the conflict matrix, and the bisect, has a one-line caption that starts with "What this means:". The radar's caption names the weakest axis. The map's caption names the thickest arrow. The leaderboard's caption names the skill that ranks first and the factor that held the second skill down.
+
+A control labelled "Show as table" is on every chart and does not replace the caption. The table is available before any drawing, including when the chart cannot be drawn. Series in an overlay are distinguished by dash pattern and marker shape as well as color. Focus order follows the reading order of the table.
