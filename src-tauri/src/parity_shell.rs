@@ -32,6 +32,10 @@ pub struct LogExcerpt {
     pub text: String,
 }
 
+pub fn open_folder(path: &std::path::Path) -> Result<(), AppError> {
+    open_path(path)
+}
+
 fn open_path(path: &std::path::Path) -> Result<(), AppError> {
     #[cfg(target_os = "windows")]
     let mut command = std::process::Command::new("explorer");

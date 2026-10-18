@@ -97,6 +97,8 @@ export const getCentralRepoPath = () => command<string>("get_central_repo_path")
 export const setCentralRepoPath = (path: string) => command<string>("set_central_repo_path", { path });
 export const checkAllSkillUpdates = () => command<number>("check_all_skill_updates");
 export const checkSkillUpdate = (skillId: string) => command<string>("check_skill_update", { skillId });
+export const applyAvailableSkillUpdates = () => command<number>("apply_available_skill_updates");
+export const installManageSkills = () => command<{ id: string; name: string }>("install_manage_skills");
 export const gitBackupStatus = () => command<BackupStatus>("git_backup_status");
 export const gitBackupSync = (message?: string) => command<SnapshotRow>("git_backup_sync", { message: message ?? null });
 export const gitBackupRestore = (tag: string) => command<string>("git_backup_restore_version", { tag });

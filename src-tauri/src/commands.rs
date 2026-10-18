@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,10 +19,10 @@ use hive_core::db::skill_store::{
 use hive_core::deploy::scenario_service as membership;
 use hive_core::deploy::tool_adapters::{all_tool_adapters, CustomToolDef, ToolCategory};
 use hive_core::deploy::tool_service::{self, CustomAdd};
-use hive_core::generation::write_files;
 use hive_core::library::central_repo;
 use hive_core::library::marketplace::{self, fetch_https};
 use hive_core::library::scanner::{self, ScannedSkill};
+use hive_core::library::skill_check;
 use hive_core::library::skill_metadata::{read_skill_document, sanitize_skill_name};
 use hive_core::providers::{
     clear_git_token, clear_provider_secret, has_git_token, store_git_token, store_provider_secret,
@@ -82,6 +81,8 @@ pub struct ManagedSkill {
     pub source_body: String,
     pub agents: Vec<String>,
     pub files: Vec<SkillFile>,
+    pub updated_at: i64,
+    pub update_status: String,
 }
 
 #[derive(Serialize)]
@@ -197,6 +198,8 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
             }],
             body,
             agents,
+            updated_at: skill.updated_at,
+            update_status: skill.update_status.clone(),
         });
     }
     skills.sort_by(|left, right| left.name.cmp(&right.name));
@@ -956,16 +959,54 @@ pub fn set_central_repo_path(path: String) -> Result<String, AppError> {
         .map_err(|err| AppError::io(err.to_string()))
 }
 
+fn source_dir(skill: &SkillRecord) -> Option<PathBuf> {
+    let raw = skill
+        .source_ref_resolved
+        .as_deref()
+        .or(skill.source_ref.as_deref())
+        .filter(|value| !value.trim().is_empty())?;
+    let path = PathBuf::from(raw.trim());
+    if path.is_file() {
+        path.parent().map(Path::to_path_buf)
+    } else {
+        Some(path)
+    }
+}
+
+fn remember_check(store: &SkillStore, skill: &SkillRecord) -> Result<String, AppError> {
+    let (status, detail) =
+        skill_check::classify_dirs(Path::new(&skill.central_path), source_dir(skill).as_deref());
+    store
+        .update_skill_check_state(&skill.id, None, &status, detail.as_deref())
+        .map_err(db)?;
+    Ok(status)
+}
+
+fn apply_engine_preference(store: &SkillStore) {
+    let engine = store
+        .get_setting("git_backup_engine")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let proxy = store.get_setting("proxy_url").ok().flatten();
+    hive_core::core::git2_engine::set_preference(engine == "git2", proxy);
+}
+
+pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
+    let skills = store.get_all_skills().map_err(db)?;
+    let mut available = 0u32;
+    for skill in &skills {
+        let status = remember_check(store, skill)?;
+        if status == "update_available" || status == "pending_removals" {
+            available += 1;
+        }
+    }
+    Ok(available)
+}
+
 #[tauri::command]
 pub fn check_all_skill_updates(store: State<'_, Arc<SkillStore>>) -> Result<u32, AppError> {
-    let store = store.inner();
-    let skills = store.get_all_skills().map_err(db)?;
-    for skill in &skills {
-        store
-            .update_skill_check_state(&skill.id, None, "current", None)
-            .map_err(db)?;
-    }
-    Ok(skills.len() as u32)
+    check_updates_in(store.inner())
 }
 
 #[tauri::command]
@@ -973,15 +1014,92 @@ pub fn check_skill_update(
     skill_id: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    store
-        .inner()
-        .update_skill_check_state(&skill_id, None, "current", None)
-        .map_err(db)?;
-    Ok("current".into())
+    let store = store.inner();
+    let skill = store
+        .get_skill_by_id(skill_id.trim())
+        .map_err(db)?
+        .ok_or_else(|| AppError::not_found("Skill not found"))?;
+    remember_check(store, &skill)
 }
 
 #[tauri::command]
-pub fn git_backup_status() -> Result<BackupStatusDto, AppError> {
+pub fn apply_available_skill_updates(store: State<'_, Arc<SkillStore>>) -> Result<u32, AppError> {
+    let store = store.inner();
+    let skills = store.get_all_skills().map_err(db)?;
+    let mut applied = 0u32;
+    for skill in skills {
+        let status = remember_check(store, &skill)?;
+        if status != "update_available" {
+            continue;
+        }
+        let Some(source) = source_dir(&skill) else {
+            continue;
+        };
+        if !source.join("SKILL.md").is_file() && !source.is_dir() {
+            continue;
+        }
+        copy_source_tree(&source, Path::new(&skill.central_path))?;
+        let _ = remember_check(store, &skill);
+        applied += 1;
+    }
+    Ok(applied)
+}
+
+fn copy_source_tree(source: &Path, dest: &Path) -> Result<(), AppError> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(source).map_err(AppError::io)? {
+        let entry = entry.map_err(AppError::io)?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == ".git" || name == ".skill-hive" {
+            continue;
+        }
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if from.is_dir() {
+            copy_source_tree(&from, &to)?;
+        } else if from.is_file() {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn install_manage_skills(store: State<'_, Arc<SkillStore>>) -> Result<InstalledDto, AppError> {
+    let store = store.inner();
+    if let Some(existing) = store
+        .get_all_skills()
+        .map_err(db)?
+        .into_iter()
+        .find(|skill| skill.name == "manage-skills")
+    {
+        return Ok(installed_dto(existing.name, existing.id));
+    }
+    let dir = central_repo::base_dir()
+        .join("sources")
+        .join("manage-skills");
+    std::fs::create_dir_all(&dir)?;
+    let document = dir.join("SKILL.md");
+    if !document.is_file() {
+        std::fs::write(
+            &document,
+            "---\nname: manage-skills\ndescription: Install, update, and remove skills from the Skill Hive library.\n---\n# manage-skills\nUse the library to install and update skills for the connected agents.\n",
+        )?;
+    }
+    let installed =
+        installer::install_from_local(&dir, None).map_err(|err| AppError::io(err.to_string()))?;
+    persist_install(
+        store,
+        &installed,
+        "local",
+        Some(dir.to_string_lossy().to_string()),
+    )
+}
+
+#[tauri::command]
+pub fn git_backup_status(store: State<'_, Arc<SkillStore>>) -> Result<BackupStatusDto, AppError> {
+    apply_engine_preference(store.inner());
     let status =
         git_backup::get_status(&backup_repo()).map_err(|err| AppError::git(err.to_string()))?;
     Ok(BackupStatusDto {
@@ -1476,14 +1594,46 @@ pub fn export_agent_draft(id: String, text: String) -> Result<String, AppError> 
 
 #[tauri::command]
 pub fn save_generated_draft(goal: String) -> Result<String, AppError> {
+    let goal = goal.trim();
+    if goal.is_empty() {
+        return Err(AppError::invalid_input("A goal is required"));
+    }
+    let name = sanitize_skill_name(goal);
+    let name = if name.is_empty() {
+        "generated".to_string()
+    } else {
+        name
+    };
+    let root = central_repo::base_dir().join("generations");
+    let mut session = hive_core::generation::GenerationSession::start(
+        &root,
+        None,
+        hive_core::generation::Kind::Skill,
+        goal,
+        &name,
+        hive_core::authoring::Profile::Portable,
+    )
+    .map_err(AppError::io)?;
+    session
+        .run_review(&hive_core::generation::skill_envelope(&name, false))
+        .map_err(|err| AppError::io(format!("{err:?}")))?;
+    let saved = session
+        .accept()
+        .map_err(|err| AppError::io(format!("{err:?}")))?;
     let dir = authoring_root("generate", "draft");
-    let mut files = BTreeMap::new();
-    files.insert(
-        "SKILL.md".into(),
-        format!("---\nname: generated\ndescription: draft\n---\n{goal}\n"),
-    );
-    write_files(&dir, &files).map_err(AppError::io)?;
-    Ok(dir.join("SKILL.md").to_string_lossy().to_string())
+    std::fs::create_dir_all(&dir)?;
+    let from = saved.join("SKILL.md");
+    let dest = dir.join("SKILL.md");
+    if from.is_file() {
+        std::fs::copy(&from, &dest)?;
+    } else {
+        return Err(AppError::io("generation did not write SKILL.md"));
+    }
+    let text = std::fs::read_to_string(&dest)?;
+    if !text.contains(goal) && !text.contains(&name) {
+        return Err(AppError::io("generated draft did not keep the goal"));
+    }
+    Ok(dest.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -1546,11 +1696,44 @@ pub fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
     } else {
         skill_name.trim()
     };
+    let last = central_repo::base_dir().join("test-runs").join("last.json");
+    let measured = std::fs::read_to_string(&last)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    let cells = measured
+        .as_ref()
+        .and_then(|value| value.get("cells"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let passed = measured
+        .as_ref()
+        .and_then(|value| value.get("passed"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let rate = if cells == 0 {
+        0.0
+    } else {
+        (passed as f64 / cells as f64).clamp(0.0, 1.0)
+    };
+    let version = measured
+        .as_ref()
+        .and_then(|value| value.get("run_id"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("measured")
+        .to_string();
     let path = authoring_root("history", name).join("history.json");
-    write_history(
-        &path,
-        name,
-        &[
+    let measured_row = cells > 0;
+    let entries = if measured_row {
+        vec![HistoryEntry {
+            version,
+            parent: None,
+            expectation_pass_rate: rate,
+            grading_result: "baseline".into(),
+            is_current_best: true,
+        }]
+    } else {
+        vec![
             HistoryEntry {
                 version: "v1".into(),
                 parent: None,
@@ -1572,10 +1755,10 @@ pub fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
                 grading_result: "tie".into(),
                 is_current_best: true,
             },
-        ],
-    )
-    .map_err(AppError::internal)?;
-    Ok(path.to_string_lossy().to_string())
+        ]
+    };
+    let value = write_history(&path, name, &entries).map_err(AppError::internal)?;
+    Ok(value.to_string())
 }
 
 #[tauri::command]
@@ -2211,6 +2394,59 @@ mod tests {
         assert!(pairs
             .iter()
             .any(|(id, name)| id == "preset-notes" && name == "Notes"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn check_updates_records_a_changed_source_in_the_database() {
+        use hive_core::db::skill_store::{SkillRecord, SkillStore};
+
+        let root = std::env::temp_dir().join(format!("skill-hive-update-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let central = root.join("central");
+        let source = root.join("source");
+        fs::create_dir_all(&central).unwrap();
+        fs::create_dir_all(&source).unwrap();
+        fs::write(central.join("SKILL.md"), "---\nname: notes\n---\nold\n").unwrap();
+        fs::write(source.join("SKILL.md"), "---\nname: notes\n---\nnew\n").unwrap();
+        let store = SkillStore::new(&root.join("hive.db")).unwrap();
+        store
+            .insert_skill(&SkillRecord {
+                id: "notes".into(),
+                name: "notes".into(),
+                description: None,
+                source_type: "local".into(),
+                source_ref: Some(source.to_string_lossy().to_string()),
+                source_ref_resolved: None,
+                source_subpath: None,
+                source_branch: None,
+                source_revision: None,
+                remote_revision: None,
+                central_path: central.to_string_lossy().to_string(),
+                content_hash: None,
+                enabled: true,
+                created_at: 1,
+                updated_at: 1,
+                status: "managed".into(),
+                update_status: "unknown".into(),
+                last_checked_at: None,
+                last_check_error: None,
+            })
+            .unwrap();
+        assert_eq!(super::check_updates_in(&store).unwrap(), 1);
+        let row = store.get_skill_by_id("notes").unwrap().unwrap();
+        assert_eq!(row.update_status, "update_available");
+        fs::copy(source.join("SKILL.md"), central.join("SKILL.md")).unwrap();
+        assert_eq!(super::check_updates_in(&store).unwrap(), 0);
+        assert_eq!(
+            store
+                .get_skill_by_id("notes")
+                .unwrap()
+                .unwrap()
+                .update_status,
+            "current"
+        );
         let _ = fs::remove_dir_all(root);
     }
 }

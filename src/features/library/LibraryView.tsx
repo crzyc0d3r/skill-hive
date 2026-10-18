@@ -7,6 +7,7 @@ import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type Sk
 import { windowRows } from "@/lib/perf";
 import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
+import { checkSkillUpdate, silent } from "@/lib/ipc/actions";
 import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
@@ -67,6 +68,7 @@ export function LibraryView({
   const [selected, setSelected] = useState<string[]>([]);
   const [selecting, setSelecting] = useState(false);
   const [openId, setOpenId] = useState<string | null>(initialId ?? null);
+  const [placements, setPlacements] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
     if (initialId) setOpenId(initialId);
   }, [initialId]);
@@ -76,7 +78,7 @@ export function LibraryView({
   const [syncOpen, setSyncOpen] = useState(false);
   const [tagDraft, setTagDraft] = useState<Record<string, string>>({});
   const [menuId, setMenuId] = useState<string | null>(null);
-  const [checked, setChecked] = useState<string | null>(null);
+  const [checked, setChecked] = useState<{ name: string; status: string } | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [batchTag, setBatchTag] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
@@ -125,7 +127,7 @@ export function LibraryView({
         </div>
         <div className="ml-auto flex items-center gap-1">
           <GitStatusButton />
-          <UpdateFlow />
+          <UpdateFlow skills={skills} />
           <Button type="button" size="icon-sm" variant={layout === "grid" ? "secondary" : "ghost"} aria-label={t("library.view.grid")} title={t("library.view.grid")} onClick={() => setLayout("grid")}>
             <LayoutGridIcon aria-hidden="true" />
           </Button>
@@ -217,7 +219,12 @@ export function LibraryView({
         })}
       </ol>
       <p className="sr-only">{presetName}: {members.join(", ")}</p>
-      {checked ? <p role="status">{t("library.checked")} {checked}</p> : null}
+      {checked ? (
+        <p role="status">
+          <span>{t("library.checked")} {checked.name}</span>
+          {checked.status ? <span> {checked.status}</span> : null}
+        </p>
+      ) : null}
       {selected.length > 0 ? (
         <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
           <span className="font-mono text-xs text-muted-foreground">{selected.length}</span>
@@ -286,7 +293,8 @@ export function LibraryView({
                   <DropdownMenuContent align="end" className="w-44">
                     <Link to={`/skills/${skill.id}/edit`} className={menuItem}>{t("library.menu.edit")}</Link>
                     <Link to={`/skills/${skill.id}/tests`} className={menuItem} aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
-                    <button type="button" className={menuItem} onClick={() => setChecked(skill.name)}>{t("library.menu.check")}</button>
+                    <button type="button" className={menuItem} onClick={() => { setChecked({ name: skill.name, status: "" }); void checkSkillUpdate(skill.id).then((status) => setChecked({ name: skill.name, status: status || "" })); }}>{t("library.menu.check")}</button>
+                    <button type="button" className={menuItem} onClick={() => { void silent("reimport_local_skill", { skillId: skill.id }); }}>{t("library.menu.update")}</button>
                     <button type="button" className={cn(menuItem, "text-destructive")} onClick={() => onDeleteSkills([skill.id])}>{t("library.menu.delete")}</button>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -343,12 +351,15 @@ export function LibraryView({
                   {memberIds.includes(skill.id) ? <span className="truncate text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
                 <div className="flex gap-1" data-testid={`sync-dots-${skill.id}`}>
-                  {skill.agents.map((agent) => (
-                    <span key={agent} data-filled="true" title={agent} className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                      <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
-                      {agentLabel(agent)}
-                    </span>
-                  ))}
+                  {["claude_code", "codex"].map((agent) => {
+                    const filled = skill.agents.includes(agent);
+                    return (
+                      <button key={agent} type="button" data-filled={filled ? "true" : "false"} title={agent} className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" onClick={() => onToggleAgent(skill.id, agent)}>
+                        <span className={cn("size-1.5 rounded-full", filled ? "bg-primary" : "bg-muted-foreground/40")} aria-hidden="true" />
+                        {agentLabel(agent)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </Card>
@@ -374,8 +385,20 @@ export function LibraryView({
           {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
           {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.body}</pre> : null}
           {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.sourceBody}</pre> : null}
+          {tab === "local" ? (
+            <div className="mt-3">
+              <p className="text-xs text-muted-foreground">{open.source} · {open.updateStatus ?? t("library.checked")}</p>
+              <ul className="mt-2 text-sm">
+                <li>{t("library.detail.source")}: {open.source}</li>
+              </ul>
+            </div>
+          ) : null}
           {tab === "diff" ? (
             <>
+              <div data-testid="side-by-side" className="mt-2 grid gap-2 md:grid-cols-2">
+                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{open.body}</pre>
+                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{open.sourceBody}</pre>
+              </div>
               <ul data-testid="diff-view" className="mt-2 font-mono text-sm">
                 {lcsDiff(open.body, open.sourceBody).map((row, index) => (
                   <li key={`${row.kind}-${index}`} data-kind={row.kind}>
@@ -395,7 +418,16 @@ export function LibraryView({
               </ul>
             </>
           ) : null}
-          <p className="mt-3 text-sm text-muted-foreground">{t("library.detail.projects")}</p>
+          <div className="mt-3 text-sm">
+            <button type="button" className="text-muted-foreground" onClick={() => { void silent<{ id: string; name: string }[]>("get_projects").then((rows) => setPlacements(rows ?? [])); }}>{t("library.detail.projects")}</button>
+            <ul>
+              {placements.map((project) => (
+                <li key={project.id}>
+                  <button type="button" onClick={() => { if (open) void silent("export_skill_to_project", { id: project.id, skillId: open.id, agent: "claude_code" }); }}>{project.name}</button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </aside>
       ) : null}
     </Screen>

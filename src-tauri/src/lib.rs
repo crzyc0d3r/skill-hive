@@ -56,8 +56,20 @@ fn log_startup_event(label: String, elapsed_ms: u64) {
 }
 
 #[tauri::command]
-fn check_app_update() -> &'static str {
-    "notify-only"
+fn check_app_update() -> String {
+    let local = env!("CARGO_PKG_VERSION");
+    let from_env = std::env::var("SKILL_HIVE_RELEASE_TAG").ok();
+    let from_file = std::fs::read_to_string(central_repo::base_dir().join("app-release.txt")).ok();
+    let remote = from_env.or(from_file).or_else(|| {
+        if std::env::var_os("SKILL_HIVE_SKIP_RELEASE_CHECK").is_some() {
+            return None;
+        }
+        let url = std::env::var("SKILL_HIVE_RELEASES_URL").unwrap_or_else(|_| {
+            "https://api.github.com/repos/crzyc0d3r/skill-hive/releases/latest".into()
+        });
+        hive_core::updater::fetch_latest_release_tag(&url).ok()
+    });
+    hive_core::updater::classify_release(local, remote.as_deref())
 }
 
 #[tauri::command]
@@ -280,6 +292,15 @@ pub fn run() {
             }
             let store = Arc::new(SkillStore::new(&db).map_err(box_err)?);
             app.manage(store.clone());
+            if store
+                .get_setting("auto_update_interval")
+                .ok()
+                .flatten()
+                .as_deref()
+                == Some("daily")
+            {
+                let _ = commands::check_updates_in(&store);
+            }
             start_file_watcher(Arc::new(TauriNotifier(app.handle().clone())), store);
             if let Ok(dir) = app.path().app_log_dir() {
                 hive_core::util::panic_log::install_panic_hook(dir);
@@ -336,6 +357,8 @@ pub fn run() {
             commands::set_central_repo_path,
             commands::check_all_skill_updates,
             commands::check_skill_update,
+            commands::apply_available_skill_updates,
+            commands::install_manage_skills,
             commands::git_backup_status,
             commands::git_backup_list_versions,
             commands::git_backup_sync,

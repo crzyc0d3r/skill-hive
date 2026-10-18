@@ -70,14 +70,35 @@ pub fn generate_agent(name: &str, replay: bool) -> Result<Value, Fail> {
 }
 pub fn generate_evals(name: &str, replay: bool) -> Result<Value, Fail> {
     refuse_live(replay)?;
+    let root = central_repo::base_dir().join("generations").join(name);
+    fs::create_dir_all(root.join("evals")).map_err(|err| Fail::other(err.to_string()))?;
+    let skill_text = fs::read_to_string(root.join("SKILL.md")).unwrap_or_default();
+    let mut seeds: Vec<String> = skill_text
+        .split_whitespace()
+        .map(|word| {
+            word.trim_matches(|ch: char| !ch.is_ascii_alphanumeric())
+                .to_string()
+        })
+        .filter(|word| word.len() > 2)
+        .collect();
+    if seeds.is_empty() {
+        seeds.push(name.to_string());
+    }
     let mut rows = Vec::new();
-    for index in 0..16 {
+    while rows.len() < 16 {
+        let seed = &seeds[rows.len() % seeds.len()];
         rows.push(json!({
-            "query": format!("recorded query {index} for {name}"),
-            "should_trigger": index < 8
+            "query": format!("{seed} {name}"),
+            "should_trigger": rows.len() < 8
         }));
+        if rows.len() == seeds.len() * 2 && seeds.len() < 8 {
+            seeds.push(format!("{name}-{}", rows.len()));
+        }
     }
     let parsed = draft_trigger_set(&Value::Array(rows).to_string()).map_err(Fail::other)?;
+    let document = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| "[]".into());
+    fs::write(root.join("evals").join("trigger.json"), document)
+        .map_err(|err| Fail::other(err.to_string()))?;
     Ok(json!({
         "command": "generate.evals",
         "name": name,

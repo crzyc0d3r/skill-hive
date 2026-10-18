@@ -10,6 +10,7 @@ pub mod installer;
 pub mod marketplace;
 pub mod projects;
 pub mod scanner;
+pub mod skill_check;
 pub mod skill_metadata;
 pub mod sync_metadata;
 pub mod updates;

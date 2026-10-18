@@ -11,6 +11,7 @@ import {
 } from "@/features/project/model";
 import { setProjectSkills } from "@/features/project/store";
 import { addProject, pullProjectCenter, setSkillsEnabled, silent, syncSkillToTool } from "@/lib/ipc/actions";
+import type { SkillCard } from "@/features/library/model";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -24,6 +25,10 @@ const FIXTURE: ProjectSkill = {
 export function ProjectView() {
   const [linked, setLinked] = useState(false);
   const [skill, setSkill] = useState<ProjectSkill>(FIXTURE);
+  const [tab, setTab] = useState<"local" | "diff" | "center">("local");
+  const [library, setLibrary] = useState<SkillCard[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [agents, setAgents] = useState<string[]>(["claude_code"]);
   const update = (next: ProjectSkill) => {
     setSkill(next);
     setProjectSkills([next]);
@@ -74,10 +79,28 @@ export function ProjectView() {
             {t("workspace.delete")}
           </Button>
           <div className="flex gap-2">
-            <span>{t("library.detail.local")}</span>
-            <span>{t("library.detail.diff")}</span>
-            <span>{t("workspace.detail.center")}</span>
+            <Button type="button" size="sm" variant={tab === "local" ? "secondary" : "outline"} onClick={() => setTab("local")}>{t("library.detail.local")}</Button>
+            <Button type="button" size="sm" variant={tab === "diff" ? "secondary" : "outline"} onClick={() => setTab("diff")}>{t("library.detail.diff")}</Button>
+            <Button type="button" size="sm" variant={tab === "center" ? "secondary" : "outline"} onClick={() => setTab("center")}>{t("workspace.detail.center")}</Button>
           </div>
+          {tab === "local" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.local}</pre> : null}
+          {tab === "center" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.center}</pre> : null}
+          {tab === "diff" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.local}{"\n"}{skill.center}</pre> : null}
+          <div className="flex flex-wrap gap-2">
+            {["claude_code", "codex"].map((agent) => (
+              <Button key={agent} type="button" size="sm" aria-pressed={agents.includes(agent)} variant={agents.includes(agent) ? "secondary" : "outline"} onClick={() => setAgents((current) => current.includes(agent) ? current.filter((item) => item !== agent) : [...current, agent])}>{agent}</Button>
+            ))}
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(true); void silent<SkillCard[]>("get_managed_skills").then((rows) => setLibrary(rows ?? [])); }}>{t("project.fromLibrary")}</Button>
+          {adding ? (
+            <ul data-testid="add-from-library">
+              {library.map((row) => (
+                <li key={row.id}>
+                  <button type="button" onClick={() => { for (const agent of agents) void silent("export_skill_to_project", { id: "fixture", skillId: row.id, agent }); setAdding(false); }}>{row.name}</button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Card>
       ) : null}
     </section>

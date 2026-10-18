@@ -51,7 +51,27 @@ fn build_menu(
         .map(|(id, name)| (id.as_str(), name.as_str()))
         .collect();
     let skill_count = store.get_all_skills().map(|rows| rows.len()).unwrap_or(0);
-    let model = build_tray_menu_from_data(skill_count, 0, &borrowed);
+    let update_count = store
+        .get_all_skills()
+        .map(|rows| {
+            rows.iter()
+                .filter(|skill| {
+                    skill.update_status == "update_available"
+                        || skill.update_status == "pending_removals"
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    let agent_count = store
+        .get_all_targets()
+        .map(|rows| {
+            let mut tools: Vec<String> = rows.into_iter().map(|row| row.tool).collect();
+            tools.sort();
+            tools.dedup();
+            tools.len()
+        })
+        .unwrap_or(0);
+    let model = build_tray_menu_from_data(skill_count, update_count, agent_count, &borrowed);
     let status = MenuItem::with_id(app, "status", label(&model, "status"), false, None::<&str>)?;
     let updates = MenuItem::with_id(app, "updates", label(&model, "updates"), true, None::<&str>)?;
     let mut preset_items: Vec<MenuItem<tauri::Wry>> = Vec::new();
@@ -99,6 +119,35 @@ fn on_menu(app: &tauri::AppHandle, id: &str) {
         }
         return;
     }
+    if id == "updates" {
+        let _ = app.emit("open-updates", "/my-skills");
+    }
+    if id == "check" {
+        if let Some(store) = app.try_state::<Arc<SkillStore>>() {
+            let skills = store.get_all_skills().unwrap_or_default();
+            let mut available = 0u32;
+            for skill in &skills {
+                let source = skill.source_ref.as_deref().map(std::path::PathBuf::from);
+                let (status, detail) = hive_core::library::skill_check::classify_dirs(
+                    std::path::Path::new(&skill.central_path),
+                    source.as_deref(),
+                );
+                let _ = store.update_skill_check_state(&skill.id, None, &status, detail.as_deref());
+                if status == "update_available" || status == "pending_removals" {
+                    available += 1;
+                }
+            }
+            let path = hive_core::library::central_repo::base_dir().join("tray-check.json");
+            let _ = std::fs::write(path, format!("{{\"available\":{available}}}"));
+            let _ = refresh(app);
+        }
+        let _ = app.emit("open-updates", "/my-skills");
+    }
+    if id == "folder" {
+        let path = hive_core::library::central_repo::skills_dir();
+        let _ = std::fs::create_dir_all(&path);
+        let _ = crate::parity_shell::open_folder(&path);
+    }
     if matches!(id, "open" | "check" | "folder" | "updates") {
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.show();
@@ -143,6 +192,7 @@ pub fn install(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>>
     let menu = build_menu(app, store.inner())?;
     let _tray = TrayIconBuilder::with_id("hive")
         .icon(icon)
+        .tooltip("Skill Hive")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| on_menu(app, event.id.as_ref()))

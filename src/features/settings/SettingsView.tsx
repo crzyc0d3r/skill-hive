@@ -62,6 +62,10 @@ export function SettingsView({
   const [closeChoice, setCloseChoice] = useState("ask");
   const [trayOn, setTrayOn] = useState(true);
   const [autoApply, setAutoApply] = useState(false);
+  const [authMethod, setAuthMethod] = useState("device");
+  const [mergeEngine, setMergeEngine] = useState("object");
+  const [checkTtl, setCheckTtl] = useState("60");
+  const [gitEngine, setGitEngine] = useState("git");
   const [exported, setExported] = useState(false);
   const [diagnosticsPath, setDiagnosticsPath] = useState("");
   const [restartArmed, setRestartArmed] = useState(false);
@@ -171,24 +175,28 @@ export function SettingsView({
           {notice ? <p role="status">{notice}</p> : null}
           <div className="mt-4 space-y-2 text-sm">
             <p>{t("settings.close")}</p>
-            <Button type="button" aria-pressed={closeChoice === "ask"} variant="outline" size="sm" onClick={() => { setCloseChoice("ask"); void writeSetting("close_behavior", "ask"); }}>{t("close.dialog")}</Button>
-            <Button type="button" aria-pressed={closeChoice === "minimize"} variant="outline" size="sm" className="ml-2" onClick={() => { const next = trayOn ? "minimize" : "ask"; setCloseChoice(next); void writeSetting("close_behavior", next); }}>{t("settings.close.minimize")}</Button>
-            <Button type="button" aria-pressed={closeChoice === "quit"} variant="outline" size="sm" className="ml-2" onClick={() => { setCloseChoice("quit"); void writeSetting("close_behavior", "quit"); }}>{t("settings.close.quit")}</Button>
+            <Button type="button" aria-pressed={closeChoice === "ask"} variant="outline" size="sm" onClick={() => { setCloseChoice("ask"); void writeSetting("close_behavior", "ask"); void writeSetting("closeBehaviour", "ask"); }}>{t("close.dialog")}</Button>
+            <Button type="button" aria-pressed={closeChoice === "minimize"} variant="outline" size="sm" className="ml-2" onClick={() => { const next = trayOn ? "minimize" : "ask"; setCloseChoice(next); void writeSetting("close_behavior", next); void writeSetting("closeBehaviour", next); }}>{t("settings.close.minimize")}</Button>
+            <Button type="button" aria-pressed={closeChoice === "quit"} variant="outline" size="sm" className="ml-2" onClick={() => { setCloseChoice("quit"); void writeSetting("close_behavior", "quit"); void writeSetting("closeBehaviour", "quit"); }}>{t("settings.close.quit")}</Button>
             <label className="mt-2 block">
-              <input type="checkbox" checked={trayOn} onChange={(event) => { setTrayOn(event.target.checked); void writeSetting("tray", event.target.checked ? "1" : "0"); }} /> {t("settings.tray")}
+              <input type="checkbox" checked={trayOn} onChange={(event) => { setTrayOn(event.target.checked); void writeSetting("tray", event.target.checked ? "1" : "0"); void writeSetting("trayIcon", event.target.checked ? "on" : "off"); }} /> {t("settings.tray")}
             </label>
             <p>{t("settings.autoUpdate")}</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => setAutoApply(false)}>{t("settings.autoUpdate.off")}</Button>
-            <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => setAutoApply(true)}>{t("settings.autoUpdate.daily")}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setAutoApply(false); void writeSetting("auto_update_interval", "off"); void writeSetting("auto_update_apply", "0"); }}>{t("settings.autoUpdate.off")}</Button>
+            <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { setAutoApply(true); void writeSetting("auto_update_interval", "daily"); }}>{t("settings.autoUpdate.daily")}</Button>
             <label className="mt-2 block">
-              <input type="checkbox" checked={autoApply} onChange={(event) => setAutoApply(event.target.checked)} /> {t("settings.autoUpdate.apply")}
+              <input type="checkbox" checked={autoApply} onChange={(event) => { setAutoApply(event.target.checked); void writeSetting("auto_update_apply", event.target.checked ? "1" : "0"); }} /> {t("settings.autoUpdate.apply")}
+            </label>
+            <label className="mt-2 block">
+              {t("settings.ttl")}
+              <Input aria-label={t("settings.ttl")} value={checkTtl} onChange={(event) => setCheckTtl(event.target.value)} onBlur={() => { const minutes = Number(checkTtl); if (Number.isFinite(minutes) && minutes > 0) void writeSetting("update_check_ttl_minutes", String(Math.round(minutes))); }} className="mt-1 h-8 max-w-32" />
             </label>
             <div>
               <label className="block">
                 {t("settings.proxy")}
                 <Input aria-label={t("settings.proxy")} value={proxy} onChange={(event) => setProxy(event.target.value)} className="h-8 ml-2" />
               </label>
-              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { const ok = proxyOk(proxy); setProxyNote(ok ? t("settings.proxy.save") : t("settings.proxy.invalid")); if (ok) void writeSetting("proxy", proxy.trim()); }}>{t("settings.proxy.save")}</Button>
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { const ok = proxyOk(proxy); setProxyNote(ok ? t("settings.proxy.save") : t("settings.proxy.invalid")); if (ok) { void writeSetting("proxy_url", proxy.trim()); void writeSetting("proxy", proxy.trim()); } }}>{t("settings.proxy.save")}</Button>
               {proxyNote ? <p role="status">{proxyNote}</p> : null}
             </div>
           </div>
@@ -259,7 +267,17 @@ export function SettingsView({
             <Input aria-label={t("backup.remote")} className="h-8 ml-2" onBlur={(event) => { if (event.target.value.trim()) void gitBackupSetRemote(event.target.value.trim()); }} />
           </label>
           <Button type="button" variant="outline" size="sm" onClick={() => void gitBackupRemoveRemote()}>{t("backup.disconnect")}</Button>
-          <Button type="button" disabled variant="outline" size="sm" className="ml-2">{t("settings.engine.libgit2")}</Button>
+          <Button type="button" aria-pressed={gitEngine === "git2"} variant="outline" size="sm" className="ml-2" onClick={() => { setGitEngine("git2"); void writeSetting("git_backup_engine", "git2"); }}>{t("settings.engine.libgit2")}</Button>
+          <Button type="button" aria-pressed={gitEngine === "git"} variant="outline" size="sm" className="ml-2" onClick={() => { setGitEngine("git"); void writeSetting("git_backup_engine", "git"); }}>{t("settings.engine.git")}</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" aria-pressed={authMethod === "device"} variant="outline" size="sm" onClick={() => { setAuthMethod("device"); void writeSetting("github_auth_method", "device"); }}>{t("settings.auth.device")}</Button>
+            <Button type="button" aria-pressed={authMethod === "pat"} variant="outline" size="sm" onClick={() => { setAuthMethod("pat"); void writeSetting("github_auth_method", "pat"); }}>{t("settings.auth.pat")}</Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span>{t("settings.merge")}</span>
+            <Button type="button" aria-pressed={mergeEngine === "object"} variant="outline" size="sm" onClick={() => { setMergeEngine("object"); void writeSetting("merge_engine", "object"); }}>{t("settings.merge.object")}</Button>
+            <Button type="button" aria-pressed={mergeEngine === "system"} variant="outline" size="sm" onClick={() => { setMergeEngine("system"); void writeSetting("merge_engine", "system"); }}>{t("settings.engine.git")}</Button>
+          </div>
           <p className="text-muted-foreground">{t("settings.engine.note")}</p>
         </div>
       ) : null}

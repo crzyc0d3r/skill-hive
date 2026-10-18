@@ -155,7 +155,7 @@ export function BackupView() {
         <Input aria-label={t("backup.advanced")} className="ml-2 h-8 w-56" value={remote} onChange={(event) => setRemote(event.target.value)} />
       </label>
       <p className="mt-2 text-sm text-muted-foreground">{t("settings.engine.note")}</p>
-      <Button type="button" disabled variant="outline" size="sm">{t("settings.engine.libgit2")}</Button>
+      <Button type="button" variant="outline" size="sm" onClick={() => { void silent("set_settings", { key: "git_backup_engine", value: "git2" }); }}>{t("settings.engine.libgit2")}</Button>
       <label className="mt-3 block text-sm">
         {t("backup.device")}
         <Input aria-label={t("backup.device")} className="ml-2 h-8 w-56" value={device} onChange={(event) => setDevice(event.target.value)}

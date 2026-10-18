@@ -16,6 +16,8 @@ export interface SkillCard {
   agents: string[];
   files?: SkillFile[];
   draft?: boolean;
+  updatedAt?: number;
+  updateStatus?: string;
 }
 
 export type LibraryFilter = "all" | "enabled" | "available";

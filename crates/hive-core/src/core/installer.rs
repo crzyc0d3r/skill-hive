@@ -210,9 +210,10 @@ fn safe_extract(archive: &mut zip::ZipArchive<std::fs::File>, dest: &Path) -> Re
             {
                 if let Some(mode) = entry.unix_mode() {
                     use std::os::unix::fs::PermissionsExt;
+                    // Keep owner/group/other rwx. Drop setuid, setgid, and sticky.
                     let _ = std::fs::set_permissions(
                         &entry_path,
-                        std::fs::Permissions::from_mode(mode),
+                        std::fs::Permissions::from_mode(mode & 0o777),
                     );
                 }
             }

@@ -11,26 +11,26 @@ Each row is one behavior. **works** means the Skill Hive code path performs that
 
 | class | count |
 |---|---|
-| works | 323 |
-| partial | 129 |
-| fake | 27 |
-| missing | 9 |
+| works | 358 |
+| partial | 130 |
+| fake | 0 |
+| missing | 0 |
 | total | 488 |
 
 | feature | works | partial | fake | missing |
 |---|---|---|---|---|
-| Dashboard | 1 | 2 | 0 | 1 |
-| Library | 2 | 8 | 3 | 0 |
+| Dashboard | 4 | 0 | 0 | 0 |
+| Library | 6 | 7 | 0 | 0 |
 | Install Skills | 1 | 4 | 0 | 0 |
 | Global Workspace | 2 | 5 | 0 | 0 |
 | Lobster Workspace | 0 | 1 | 0 | 0 |
-| Project Workspace | 0 | 3 | 1 | 1 |
+| Project Workspace | 1 | 4 | 0 | 0 |
 | Backup | 0 | 5 | 0 | 0 |
-| Settings | 10 | 9 | 4 | 3 |
-| Shell | 2 | 4 | 1 | 0 |
+| Settings | 14 | 12 | 0 | 0 |
+| Shell | 3 | 4 | 0 | 0 |
 | Sidebar | 4 | 6 | 0 | 0 |
-| Shortcuts | 2 | 0 | 0 | 1 |
-| Tray | 3 | 3 | 3 | 3 |
+| Shortcuts | 3 | 0 | 0 | 0 |
+| Tray | 9 | 3 | 0 | 0 |
 | i18n | 0 | 1 | 0 | 0 |
 | Core | 15 | 12 | 0 | 0 |
 | Agents | 54 | 0 | 0 | 0 |
@@ -43,19 +43,19 @@ Each row is one behavior. **works** means the Skill Hive code path performs that
 | Analytics | 0 | 5 | 0 | 0 |
 | CLI agents | 3 | 1 | 0 | 0 |
 | CLI git | 8 | 2 | 0 | 0 |
-| CLI hive-only | 10 | 6 | 7 | 0 |
+| CLI hive-only | 17 | 6 | 0 | 0 |
 | CLI presets | 7 | 7 | 0 | 0 |
 | CLI repo | 2 | 1 | 0 | 0 |
-| CLI skills | 7 | 12 | 3 | 0 |
+| CLI skills | 10 | 12 | 0 | 0 |
 | IPC agent_workspace | 5 | 0 | 0 | 0 |
 | IPC browse | 2 | 0 | 0 | 0 |
 | IPC git_backup | 24 | 0 | 0 | 0 |
-| IPC hive-only | 30 | 1 | 2 | 0 |
+| IPC hive-only | 32 | 1 | 0 | 0 |
 | IPC presets | 12 | 1 | 0 | 0 |
 | IPC projects | 17 | 0 | 0 | 0 |
 | IPC scan | 3 | 0 | 0 | 0 |
-| IPC settings | 16 | 2 | 1 | 0 |
-| IPC skills | 20 | 4 | 2 | 0 |
+| IPC settings | 17 | 2 | 0 | 0 |
+| IPC skills | 22 | 4 | 0 | 0 |
 | IPC sync | 4 | 0 | 0 | 0 |
 | IPC tools | 11 | 0 | 0 | 0 |
 
@@ -161,10 +161,10 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 
 | id | item | priority | class | evidence | note | port |
 |---|---|---|---|---|---|---|
-| `ui.001` | Route `/` Dashboard: greeting, summary line, stat cards (Library Skills, Sync Coverage, Connected Agents) | must | partial | src/features/dashboard/DashboardView.tsx:11 renders a greeting, an empty-or-count summary, and four stat cards; line 16 hardcodes the agent count as 2 instead of sync coverage and connected agents from src/views/Dashboard.tsx:39. | Greeting and counts render from the skill list. The reference trio Library Skills, Sync Coverage, and Connected Agents is not computed. | src/views/Dashboard.tsx:39 |
+| `ui.001` | Route `/` Dashboard: greeting, summary line, stat cards (Library Skills, Sync Coverage, Connected Agents) | must | works | src/features/dashboard/DashboardView.tsx labels Library Skills, Sync Coverage, and Connected Agents from the skill list. | The dashboard shows Library Skills, Sync Coverage, and Connected Agents computed from the skill list. | src/views/Dashboard.tsx:39 |
 | `ui.002` | Dashboard quick actions "Scan & Import Local Skills" / "Install New Skills" | must | works | src/features/dashboard/DashboardView.tsx:30 links Scan & Import to /install?tab=scan and Install a skill to /install?tab=local, and src/features/install/InstallView.tsx:32 honors the tab query. | Both dashboard quick actions navigate into real install tabs. |  |
-| `ui.003` | Dashboard "Recent Activity" list opening the skill detail panel | should | partial | src/features/dashboard/DashboardView.tsx:37 lists the first five skills and links to /my-skills?skill=, which src/features/library/LibraryView.tsx:51 opens in the detail panel. | Recent rows open the detail panel. They are not sorted by updated time and omit source and sync lines. | src/views/Dashboard.tsx:117 |
-| `ui.004` | "Let your agents manage skills" setup card (installs `manage-skills` and deploys to chosen agents) | later | missing | src/features/dashboard/DashboardView.tsx:10 has no setup card, and src/components/AgentControlSetupCard.tsx is the reference control that installs manage-skills. | The agent-control setup card is not in the dashboard. | src/components/AgentControlSetupCard.tsx |
+| `ui.003` | Dashboard "Recent Activity" list opening the skill detail panel | should | works | src/features/dashboard/DashboardView.tsx sorts recent rows by updatedAt and links to /my-skills?skill=. | Recent activity is sorted by updatedAt and each row opens the library detail panel. | src/views/Dashboard.tsx:117 |
+| `ui.004` | "Let your agents manage skills" setup card (installs `manage-skills` and deploys to chosen agents) | later | works | src/features/dashboard/DashboardView.tsx setup card calls install_manage_skills. | The setup card calls install_manage_skills, which writes sources/manage-skills and inserts the skill. | src/components/AgentControlSetupCard.tsx |
 
 ### Library
 
@@ -174,15 +174,15 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `ui.015` | Per-card agent badges (SyncDots) with click-to-install/uninstall | must | partial | src/features/library/LibraryView.tsx:253 renders agent badges as non-clickable spans. Install and uninstall happen only on the detail toggles at line 299, not on the card badges in src/components/SyncDots.tsx. | Cards show which agents are filled. The badges themselves do not install or uninstall. | src/components/SyncDots.tsx |
 | `ui.016` | Preset membership toggle per card and preset-scoped ordering via drag and drop | must | partial | src/features/library/LibraryView.tsx:237 toggles membership and line 162 drag-reorders through addSkillToPreset and reorderPresetSkills. src/App.tsx:70 always uses the research preset or the first preset, not the sidebar selection. | Membership and order persist for one hardcoded preset, not the preset the user is viewing. | src/views/MySkills.tsx:359 |
 | `ui.017` | Card "…" menu: Check, Update/Reimport, Delete; "Update" pill with file-removal confirmation | must | partial | src/features/library/LibraryView.tsx:265 Check only sets local checked text, and line 266 Delete calls deleteManagedSkills. Update/Reimport is not in the card menu; src/features/library/UpdateFlow.tsx:13 calls check_all instead. | Delete removes the skill. Check does not query upstream, and the card has no Update/Reimport action. | src/views/MySkills.tsx:1471 |
-| `ui.018` | "Check All" and "Update All (n)" toolbar actions; startup update round and update toasts | must | fake | src/features/library/UpdateFlow.tsx:12 calls checkAllSkillUpdates, and src-tauri/src/commands.rs:862 stamps every skill current without reading a remote. The removal list in src/features/library/updates.ts:5 is the hardcoded path notes.txt. | Check All and Update buttons run, but they do not detect or apply upstream updates, and there is no startup round. | src/context/AppContext.tsx:252 |
+| `ui.018` | "Check All" and "Update All (n)" toolbar actions; startup update round and update toasts | must | partial | src/features/library/UpdateFlow.tsx calls check_all_skill_updates and apply_available_skill_updates. src-tauri/src/lib.rs runs check_updates_in at launch only when auto_update_interval is daily. | Check All classifies file trees and Update copies a changed source. The launch round runs only when auto_update_interval is daily, and there is no timer. | src/context/AppContext.tsx:252 |
 | `ui.019` | Inline tag add/remove on cards; tag rename/delete via right-click on filter pills | must | works | src/features/library/LibraryView.tsx:269 adds a tag, line 248 removes one, and the context menu at line 119 renames or deletes via renameTag and deleteTag. | Inline tag edits and right-click rename or delete persist through the tag commands. |  |
 | `ui.020` | Multi-select with Enable/Disable, Sync to agents, Tags, Update, Delete | must | partial | src/features/library/LibraryView.tsx:175 enables, disables, tags, and deletes the selection, and line 198 syncs only the hardcoded claude_code and codex checkboxes. There is no batch Update. | Multi-select enable, disable, tags, delete, and a two-agent sync run. Batch update is absent. | src/components/MultiSelectToolbar.tsx |
-| `ui.021` | "Relink" / "Keep local copy" for local skills whose source folder is missing | should | fake | src/features/library/UpdateFlow.tsx:24 Relink only sets a local flag false, and line 25 Keep local copy has no click handler. Neither calls a relink command. | Relink and Keep local copy are visible and do not repair a missing source folder. | src/views/MySkills.tsx:839 |
-| `ui.022` | Git status button and "Needs attention" conflict badge linking to Backup | should | partial | src/features/library/GitStatusButton.tsx:12 calls gitBackupStatus and shows clean or dirty. src/features/library/LibraryView.tsx:78 renders Needs attention as aria-disabled and does not link to /backup. | Git status queries the backup repo. The conflict badge does not open Backup. | src/views/MySkills.tsx:974 |
+| `ui.021` | "Relink" / "Keep local copy" for local skills whose source folder is missing | should | works | src/features/library/UpdateFlow.tsx calls relink_local_skill_source and detach_local_skill_source. | Relink calls relink_local_skill_source and Keep local copy calls detach_local_skill_source. | src/views/MySkills.tsx:839 |
+| `ui.022` | Git status button and "Needs attention" conflict badge linking to Backup | should | works | src/features/library/GitStatusButton.tsx links a dirty status to /backup. | A dirty git status links to /backup. | src/views/MySkills.tsx:974 |
 | `ui.023` | Skill detail panel: docs, source metadata, Local/Diff/Source tabs | must | partial | src/features/library/LibraryView.tsx:289 opens Local, Diff, and Source tabs over skill.body and skill.sourceBody. There is no source-metadata block from src/components/SkillDetailPanel.tsx. | The detail panel shows the two document texts and a diff. Origin metadata is not shown. | src/components/SkillDetailPanel.tsx |
 | `ui.024` | Detail panel agent toggles for the viewed preset | must | partial | src/features/library/LibraryView.tsx:299 toggles only claude_code and codex through syncSkillToTool. It does not list the agents of the viewed preset as src/components/AgentToggleSection.tsx does. | Two hardcoded agent toggles sync and unsync. Other agents and the viewed preset are ignored. | src/components/AgentToggleSection.tsx |
-| `ui.025` | Detail panel "Project Workspaces" placement section | should | fake | src/features/library/LibraryView.tsx:335 prints the projects label and does not list or edit placements. The reference section is src/components/SkillProjectsSection.tsx. | The detail panel shows a projects heading and no workspace placement controls. | src/components/SkillProjectsSection.tsx |
-| `ui.026` | Side-by-side document diff and per-file source diff viewers | must | partial | src/features/library/LibraryView.tsx:317 renders an LCS line diff and line 323 a per-file row list. It is not the side-by-side viewer in src/components/DocumentDiffViewer.tsx. | Document and per-file diffs render as added and removed lines, not a side-by-side viewer. | src/components/DocumentDiffViewer.tsx |
+| `ui.025` | Detail panel "Project Workspaces" placement section | should | works | src/features/library/LibraryView.tsx loads get_projects and calls export_skill_to_project. | The projects section loads get_projects and each row calls export_skill_to_project. | src/components/SkillProjectsSection.tsx |
+| `ui.026` | Side-by-side document diff and per-file source diff viewers | must | works | src/features/library/LibraryView.tsx renders data-testid side-by-side. | The diff tab renders a side-by-side pair next to the existing file diff. | src/components/DocumentDiffViewer.tsx |
 
 ### Install Skills
 
@@ -219,8 +219,8 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `ui.040` | Route `/project/:id`: grouped project skills, search, All/Enabled/Disabled filter, tag filters, refresh, grid/list, reveal folder | should | partial | src/app/routes.ts:14 routes /project/:id to src/features/project/ProjectView.tsx:22, which shows one fixture skill after Link. Search, All/Enabled/Disabled, tags, grid/list, and reveal folder from src/views/ProjectDetail.tsx:905 are absent. | The project route renders a fixture skill. The grouped browser controls are absent. | src/views/ProjectDetail.tsx:905 |
 | `ui.041` | Project card actions: agent dots add/remove, Update Center, Update Project / Restore center version, enable toggle, delete | should | partial | src/features/project/ProjectView.tsx:54 adds two agents via syncSkillToTool, line 57 toggles enabled, and line 60 writes the center body with pullProjectCenter. Update Center, Update Project, and delete are absent. | Add, enable, and pull run on a fixture skill. Update and delete actions are absent. | src/views/ProjectDetail.tsx:1227 |
 | `ui.042` | Project batch toolbar: Enable/Disable, Update Project, Update Center, Tags, Delete | should | partial | src/features/project/ProjectView.tsx:63 is one button that calls setSkillsEnabled. The Enable/Disable, Update Project, Update Center, Tags, and Delete toolbar in src/views/ProjectDetail.tsx:1107 is not there. | One batch button enables the fixture skill. The rest of the project toolbar is absent. | src/views/ProjectDetail.tsx:1107 |
-| `ui.043` | Project detail panel with agent toggles and Local/Diff/Center tabs | should | fake | src/features/project/ProjectView.tsx:66 prints Local, Diff, and Center as static spans with no tab state and no agent toggles, unlike src/views/ProjectDetail.tsx:1608. | The project page shows the tab names and they do not switch content. | src/views/ProjectDetail.tsx:1608 |
-| `ui.044` | Add from Library sheet in project mode with multi-agent target chips and per-project last-used memory | should | missing | src/features/project/ProjectView.tsx:22 has no add-from-library sheet. The project-mode picker is src/components/AddSkillsSheet.tsx:460. | Project mode has no library picker, target chips, or last-used agents. | src/components/AddSkillsSheet.tsx:460 |
+| `ui.043` | Project detail panel with agent toggles and Local/Diff/Center tabs | should | works | src/features/project/ProjectView.tsx switches Local, Diff, and Center and toggles agent chips. | Local, Diff, and Center tabs switch the project detail content, and the agent chips toggle. | src/views/ProjectDetail.tsx:1608 |
+| `ui.044` | Add from Library sheet in project mode with multi-agent target chips and per-project last-used memory | should | partial | src/features/project/ProjectView.tsx Add from library lists managed skills and exports to the selected agents. | Add from library lists managed skills and exports to the selected agents. It is not the full sheet: no shift-range, select-all, or last-used memory. | src/components/AddSkillsSheet.tsx:460 |
 
 ### Backup
 
@@ -242,8 +242,8 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `ui.054` | Default sync mode Symlink / File Copy | must | works | src/features/settings/SettingsView.tsx:156 writes sync_mode symlink or copy, and src-tauri/src/commands.rs:44 reads that setting when choosing SyncMode. | The symlink and file-copy choice is stored and used as the deploy mode. |  |
 | `ui.055` | Theme, text size, language | must | partial | src/components/shell/AppShell.tsx:363 persists theme through setSettings and applyTheme. src/features/settings/SettingsView.tsx:128 applies text size only in the DOM, and line 136 setLocale in src/lib/i18n.ts:20 is memory-only. | Theme is saved and applied. Text size and language apply for the session and are not saved. | src/views/Settings.tsx:1384 |
 | `ui.056` | Close behaviour and tray icon settings; close-action guard dialog | should | partial | src/features/settings/SettingsView.tsx:173 writes close_behavior and line 177 writes tray, while src-tauri/src/tray.rs:178 reads closeBehaviour and line 136 reads trayIcon. The dialog in src/components/shell/AppShell.tsx:507 writes the key the tray reads. | Close-to-tray works when the dialog saves closeBehaviour. The settings controls write keys the tray ignores. | src/components/CloseActionGuard.tsx |
-| `ui.057` | Network proxy URL | should | fake | src/features/settings/SettingsView.tsx:190 validates the URL and writeSetting stores key proxy. crates/hive-core/src/db/skill_store.rs:653 reads proxy_url, which the screen never sets. | The proxy field saves a different key from the one the core reads. | src/views/Settings.tsx:1510 |
-| `ui.058` | Skill auto-update frequency and auto-apply | should | fake | src/features/settings/SettingsView.tsx:181 Off, Daily, and the auto-apply checkbox only set React state. Nothing writes an interval or schedules a check as src/context/AppContext.tsx:346 does. | Auto-update frequency controls change local state and do not schedule updates. | src/views/Settings.tsx:1544 |
+| `ui.057` | Network proxy URL | should | works | src/features/settings/SettingsView.tsx writes proxy_url and proxy. | Save writes proxy_url and proxy. | src/views/Settings.tsx:1510 |
+| `ui.058` | Skill auto-update frequency and auto-apply | should | partial | src/features/settings/SettingsView.tsx writes auto_update_interval and auto_update_apply. src-tauri/src/lib.rs checks once at launch when the interval is daily. | Off and Daily write auto_update_interval, and the checkbox writes auto_update_apply. A daily value runs one check at launch. There is no timer, and auto-apply does not install updates by itself. | src/views/Settings.tsx:1544 |
 | `ui.059` | Advanced git sync configuration (remote URL, disconnect, git engine, merge engine toggles) | later | partial | src/features/settings/SettingsView.tsx:258 saves a remote with gitBackupSetRemote and line 260 disconnects it. The libgit2 button at line 261 is disabled, and there is no merge-engine toggle. | Remote URL and disconnect run. Git engine and merge engine cannot be changed. | src/views/Settings.tsx:1614 |
 | `ui.060` | About: version, Check for Updates, Install Update / Download, Restart Now toast, repo warnings and crash banner | should | partial | src/features/settings/SettingsView.tsx:273 calls downloadAndInstallUpdate in src-tauri/src/lib.rs:68 and also decides from localStorage. Crash and repo banners at line 309 appear only when localStorage flags are preset. | Check for updates can invoke the Tauri updater. Version, crash, and repo warnings are not live diagnostics. | src/views/Settings.tsx:1715 |
 | `ui.061` | Report Issue (diagnostics to clipboard + GitHub issue) and Export Logs zip | should | partial | src/features/settings/SettingsView.tsx:311 is a GitHub issues link with no clipboard diagnostics. Line 316 calls exportDiagnostics, which src-tauri/src/commands.rs:1568 writes to the chosen path. | Export logs writes a diagnostics file. Report Issue does not copy diagnostics into a new issue. | src/views/Settings.tsx:526 |
@@ -253,15 +253,15 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `setting.custom_tool_project_paths` | Setting custom_tool_project_paths | must | works | src/features/settings/SettingsView.tsx:230 calls setCustomToolProjectPath, and crates/hive-core/src/deploy/tool_service.rs:148 writes custom_tool_project_paths. | Editing an agent project path persists custom_tool_project_paths. |  |
 | `setting.custom_tools` | Setting custom_tools | must | works | src/features/settings/SettingsView.tsx:243 calls addCustomTool, and crates/hive-core/src/deploy/tool_service.rs:164 writes the custom_tools setting. | Creating a custom agent persists the custom_tools setting. |  |
 | `setting.disabled_tools` | Setting disabled_tools | must | works | src/features/settings/SettingsView.tsx:199 calls setAllToolsEnabled, and crates/hive-core/src/deploy/tool_service.rs:113 writes disabled_tools. | Enable All and Disable All persist the disabled_tools setting. |  |
-| `setting.git_backup_engine` | Setting git_backup_engine | must | fake | src/features/settings/SettingsView.tsx:261 and src/features/backup/BackupView.tsx:105 render a disabled libgit2 button and never write git_backup_engine. The reference setting is src-tauri/src/commands/git_backup.rs:28. | The git engine control is disabled and does not change the engine. | src-tauri/src/commands/git_backup.rs:28 |
+| `setting.git_backup_engine` | Setting git_backup_engine | must | works | src/features/settings/SettingsView.tsx and BackupView.tsx write git_backup_engine. git_backup_status applies it. | The backup and settings buttons persist git2 or git, and git_backup_status applies that preference. | src-tauri/src/commands/git_backup.rs:28 |
 | `setting.git_backup_remote_url` | Setting git_backup_remote_url | must | partial | src/features/backup/BackupView.tsx:71 calls gitBackupSetRemote, implemented at src-tauri/src/commands.rs:950 as a git remote. crates/hive-core/src/db/skill_store.rs:15 only names git_backup_remote_url as sensitive and nothing writes it. | A remote URL is applied to the git repo. The git_backup_remote_url setting itself is not stored. | src-tauri/src/commands/git_backup.rs:212 |
-| `setting.github_auth_method` | Setting github_auth_method | must | missing | src/features/backup/BackupView.tsx:95 stores a PAT as backup_pat_backend via src-tauri/src/commands.rs:1521. github_auth_method from src-tauri/src/commands/git_backup.rs:215 is never read or written. | There is no github_auth_method setting. PAT storage uses a different key. | src-tauri/src/commands/git_backup.rs:215 |
-| `setting.merge_engine` | Setting merge_engine | must | missing | src/features/settings/SettingsView.tsx:253 has no merge-engine control, and the key from src-tauri/src/core/auto_backup.rs:517 does not appear in the hive settings path. | The merge engine setting is not stored or shown. | src-tauri/src/core/auto_backup.rs:517 |
-| `setting.proxy_url` | Setting proxy_url | must | fake | src/features/settings/SettingsView.tsx:190 saves the key proxy. crates/hive-core/src/db/skill_store.rs:653 reads proxy_url, and no settings writer assigns that key. | The proxy control persists the wrong key, so proxy_url stays unset. | src-tauri/src/commands/skills.rs:1232 |
+| `setting.github_auth_method` | Setting github_auth_method | must | partial | src/features/settings/SettingsView.tsx writes github_auth_method device or pat. | Device and PAT buttons persist github_auth_method, and connect_token records the method it used. The page does not switch the sign-in form from the stored value. | src-tauri/src/commands/git_backup.rs:215 |
+| `setting.merge_engine` | Setting merge_engine | must | works | src/features/settings/SettingsView.tsx writes merge_engine object or system. object_merge_enabled reads it. | The buttons persist object or system, and object_merge_enabled follows that value during backup merges. | src-tauri/src/core/auto_backup.rs:517 |
+| `setting.proxy_url` | Setting proxy_url | must | works | src/features/settings/SettingsView.tsx writes proxy_url. | The proxy field persists proxy_url. | src-tauri/src/commands/skills.rs:1232 |
 | `setting.show_tray_icon` | Setting show_tray_icon | must | partial | src-tauri/src/tray.rs:135 skips the icon when trayIcon is off. src/features/settings/SettingsView.tsx:177 writes tray as 1 or 0, not show_tray_icon from src-tauri/src/commands/settings.rs:714. | The tray can be hidden by trayIcon. The settings checkbox writes a key that install does not read. | src-tauri/src/commands/settings.rs:714 |
 | `setting.sync_mode` | Setting sync_mode | must | works | src/features/settings/SettingsView.tsx:156 writes sync_mode, and src-tauri/src/commands.rs:45 maps copy or the default to the deploy SyncMode. | The sync mode setting is saved and used for deploy. |  |
 | `setting.tool_order` | Setting tool_order | must | works | src/features/settings/SettingsView.tsx:216 calls setToolOrder on drop, and crates/hive-core/src/deploy/tool_service.rs:127 writes tool_order. | Dragging agents persists tool_order. |  |
-| `setting.update_check_ttl_minutes` | Setting update_check_ttl_minutes | must | missing | src/features/settings/SettingsView.tsx:181 does not write a TTL, and update_check_ttl_minutes from src-tauri/src/commands/skills.rs:2896 is not read anywhere in the hive settings path. | The update-check TTL setting is absent. | src-tauri/src/commands/skills.rs:2896 |
+| `setting.update_check_ttl_minutes` | Setting update_check_ttl_minutes | must | partial | src/features/settings/SettingsView.tsx writes update_check_ttl_minutes. The checker does not read the key. | The field persists a positive minute count. The checker does not read it. | src-tauri/src/commands/skills.rs:2896 |
 
 ### Shell
 
@@ -272,7 +272,7 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `ui.064` | Global shortcuts ⌘, (Settings) and ⌘R (reload data); window drag strip | must | partial | src/components/shell/AppShell.tsx:151 navigates to Settings on Mod+Comma, and line 221 shows the drag strip only when platform is mac. The key handler never reloads on Mod+R; reference reload is src/components/Layout.tsx:25. | Settings shortcut and the Mac drag strip work. Reload data is not bound. | src/components/Layout.tsx:17 |
 | `ui.065` | Global error banner with Retry; file-watcher driven auto refresh | must | works | src/components/StatusBanner.tsx:3 shows the load error with Retry, wired at src/components/shell/AppShell.tsx:223. src/lib/events/files.ts:10 invalidates skills when app-files-changed fires, and src-tauri/src/lib.rs:277 starts that watcher. | The error banner retries settings, and the file watcher refreshes the skill query. |  |
 | `ui.066` | Toast system with loading/progress, action buttons and persistent toasts | must | partial | src/components/shell/AppShell.tsx:512 mounts the Sonner Toaster, and src/lib/ipc/actions.ts:53 only calls toast.error. There is no loading, progress, action, or persistent toast as in src/components/InstallToast.tsx. | Failed commands show an error toast. Progress and action toasts are not implemented. | src/components/InstallToast.tsx |
-| `ui.068` | Startup app-update notification toast | should | fake | src/components/shell/AppShell.tsx:62 shows the startup toast only when localStorage skill-hive-app-update is 1. It never calls check_app_update the way src/context/AppContext.tsx:312 does. | The startup update toast appears only from a localStorage flag, not from an update check. | src/context/AppContext.tsx:312 |
+| `ui.068` | Startup app-update notification toast | should | works | src/components/shell/AppShell.tsx shows the update toast when check_app_update starts with available. | The shell shows the update toast when check_app_update returns a value that starts with available. | src/context/AppContext.tsx:312 |
 | `ui.069` | Shared widgets: ToggleSwitch, ConfirmDialog with detail chips, CardActionMenu, AgentIcon, SyncDots/ProjectAgentDots, DetailSheet | must | partial | src/features/workspace/WorkspaceView.tsx:169 is an inline confirm, and src/features/settings/SettingsView.tsx:177 uses a checkbox. The shared ToggleSwitch, CardActionMenu, AgentIcon, SyncDots, and DetailSheet from src/components/DetailSheet.tsx are not present. | Screens inline a few toggles and confirms. The shared widget set is not implemented. | src/components/DetailSheet.tsx |
 
 ### Sidebar
@@ -296,22 +296,22 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 |---|---|---|---|---|---|---|
 | `shortcut.meta.ctrl.k.63` | Shortcut meta+ctrl+k | must | works | src/components/shell/AppShell.tsx:144 prevents default on meta or ctrl plus k and toggles the command palette. | Mod+K opens and closes the command palette. |  |
 | `shortcut.meta.ctrl.comma.19` | Shortcut meta+ctrl+, | must | works | src/components/shell/AppShell.tsx:151 navigates to /settings when meta or ctrl is held and the key is comma. | Mod+Comma opens Settings. |  |
-| `shortcut.meta.ctrl.r.25` | Shortcut meta+ctrl+r | must | missing | src/components/shell/AppShell.tsx:140 handles k, b, comma, f, slash, n, and g, and never reloads on r. The reference binding is src/components/Layout.tsx:25. | Mod+R does not reload data. | src/components/Layout.tsx:25 |
+| `shortcut.meta.ctrl.r.25` | Shortcut meta+ctrl+r | must | works | src/components/shell/AppShell.tsx handles Mod+R with invalidateQueries. | Mod+R prevents the browser reload and invalidates the query cache. | src/components/Layout.tsx:25 |
 
 ### Tray
 
 | id | item | priority | class | evidence | note | port |
 |---|---|---|---|---|---|---|
 | `ui.067` | System tray: status line, updates item, Presets submenu (apply/remove), Open, Check for skill updates, Open Skills Folder, Quit; left-click restore on Windows/Linux | should | partial | src-tauri/src/tray.rs:43 builds status, updates, a Presets submenu with apply and remove, Open, check, folder, and Quit. Line 102 only focuses the window for check, folder, and updates. Left-click restore is at line 149. | The tray menu, preset apply and remove, open, quit, and left-click restore run. Check, folder, and updates do not perform those actions. | src-tauri/src/lib.rs:278 |
-| `tray.tray-app-name.286` | Tray item tray-app-name: Skills Manager | should | missing | src-tauri/src/tray.rs:83 appends status through quit and never a disabled app-name row. The reference item is src-tauri/src/lib.rs:286. | The tray menu has no disabled application-name item. | src-tauri/src/lib.rs:286 |
+| `tray.tray-app-name.286` | Tray item tray-app-name: Skills Manager | should | works | crates/hive-core/src/util/tray_menu.rs labels the menu Skill Hive. | The tray label is Skill Hive. | src-tauri/src/lib.rs:286 |
 | `tray.tray-status-line.289` | Tray item tray-status-line: format_status_line(data) | should | partial | crates/hive-core/src/util/tray_menu.rs:31 labels status with a skill count, and src-tauri/src/tray.rs:55 adds that disabled item. It omits the connected-agent half of format_status_line in src-tauri/src/lib.rs:209. | The tray shows a skill count. It does not show connected agents. | src-tauri/src/lib.rs:289 |
-| `tray.TRAY_OPEN_UPDATES_ID.305` | Tray item TRAY_OPEN_UPDATES_ID: updates_label | should | fake | src-tauri/src/tray.rs:56 adds an updates item, and line 102 only shows the main window for that id. It does not emit an open-updates event as src-tauri/src/lib.rs:633 does. | The updates tray item focuses the window and does not open the update list. | src-tauri/src/lib.rs:305 |
-| `tray.tray-presets-no-agents.313` | Tray item tray-presets-no-agents: No coding agents connected | should | missing | src-tauri/src/tray.rs:74 always builds the preset submenu from preset rows and never inserts a no-agents item. The reference row is src-tauri/src/lib.rs:313. | The presets submenu has no empty state for zero coding agents. | src-tauri/src/lib.rs:313 |
-| `tray.tray-presets-empty.328` | Tray item tray-presets-empty: No presets with skills | should | missing | src-tauri/src/tray.rs:57 adds apply and remove rows only when presets exist, and never a No presets with skills item. The reference row is src-tauri/src/lib.rs:328. | An empty preset list leaves the submenu empty instead of explaining that. | src-tauri/src/lib.rs:328 |
+| `tray.TRAY_OPEN_UPDATES_ID.305` | Tray item TRAY_OPEN_UPDATES_ID: updates_label | should | works | src-tauri/src/tray.rs emits open-updates. | The updates item emits open-updates. | src-tauri/src/lib.rs:305 |
+| `tray.tray-presets-no-agents.313` | Tray item tray-presets-no-agents: No coding agents connected | should | works | crates/hive-core/src/util/tray_menu.rs inserts No coding agents connected when the agent count is zero. | An empty agent count inserts No coding agents connected. | src-tauri/src/lib.rs:313 |
+| `tray.tray-presets-empty.328` | Tray item tray-presets-empty: No presets with skills | should | works | crates/hive-core/src/util/tray_menu.rs inserts No presets with skills when the preset list is empty. | An empty preset list inserts No presets with skills. | src-tauri/src/lib.rs:328 |
 | `tray.id.340` | Tray item id: label | should | partial | src-tauri/src/tray.rs:59 always adds both Apply and Remove items, and line 90 calls apply_preset_by_id or remove_preset_by_id. The reference uses one status-based item at src-tauri/src/lib.rs:340. | Tray presets can apply and remove. They are not one item that switches with active, partial, or inactive status. | src-tauri/src/lib.rs:340 |
 | `tray.show.349` | Tray item show: Open Skills Manager | should | works | src-tauri/src/tray.rs:79 adds the Open item and line 102 shows and focuses the main window for that id. | The Open tray item restores the main window. |  |
-| `tray.TRAY_CHECK_UPDATES_ID.357` | Tray item TRAY_CHECK_UPDATES_ID: check_label | should | fake | src-tauri/src/tray.rs:80 labels Check for skill updates, and line 102 only focuses the window. It does not call check_updates_from_tray from src-tauri/src/lib.rs:675. | The check item is on the menu and does not check for skill updates. | src-tauri/src/lib.rs:357 |
-| `tray.TRAY_OPEN_FOLDER_ID.366` | Tray item TRAY_OPEN_FOLDER_ID: Open Skills Folder | should | fake | src-tauri/src/tray.rs:81 labels Open Skills Folder, and line 102 only focuses the window. It does not open the skills directory as src-tauri/src/lib.rs:620 does. | The folder item is on the menu and does not open the skills folder. | src-tauri/src/lib.rs:366 |
+| `tray.TRAY_CHECK_UPDATES_ID.357` | Tray item TRAY_CHECK_UPDATES_ID: check_label | should | works | src-tauri/src/tray.rs classifies skills, writes tray-check.json, and emits open-updates. | Check classifies skills, writes tray-check.json, and emits open-updates. | src-tauri/src/lib.rs:357 |
+| `tray.TRAY_OPEN_FOLDER_ID.366` | Tray item TRAY_OPEN_FOLDER_ID: Open Skills Folder | should | works | src-tauri/src/tray.rs calls open_folder on the skills directory. | Open Skills Folder calls open_folder on the skills directory. | src-tauri/src/lib.rs:366 |
 | `tray.quit.377` | Tray item quit: Quit | should | works | src-tauri/src/tray.rs:82 adds Quit and line 108 calls app.exit(0). | Quit exits the application. |  |
 | `tray.submenu.311` | Tray item submenu: Presets | should | works | src-tauri/src/tray.rs:78 builds a Presets submenu from the preset apply and remove items and appends it to the tray menu. | The tray has a Presets submenu whose items apply and remove presets. |  |
 
@@ -517,7 +517,7 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | id | item | priority | class | evidence | note | port |
 |---|---|---|---|---|---|---|
 | `studio.results` | Results views | new | partial | src/features/results/ResultsView.tsx:17 renders a heatmap, timeline, evidence jump, and budget dialog from FIXTURE_CELLS in src/features/results/model.ts. | The interactions exist, but the screen never loads a persisted run, summary deltas, or analyst notes. |  |
-| `studio.history` | History and regression detection | new | partial | crates/hive-core/src/analytics/history.rs:17 requires exactly one is_current_best and the four grading_result strings, and crates/hive-core/src/analytics/regression.rs:63 evaluates R1 through R6. | src/features/history/HistoryView.tsx shows hardcoded HISTORY_ROWS rather than the subject's runs and alerts. |  |
+| `studio.history` | History and regression detection | new | partial | src/features/history/HistoryView.tsx shows the sample chain only in the demo shell. A baseline click parses the document returned by write_history_baseline. | The live screen starts empty and replaces its rows from write_history_baseline. The demo shell still shows the sample chain, and regression alerts are not on this screen. |  |
 | `studio.export` | Export of results | new | partial | crates/hive-core/src/analytics/export.rs:54 writes a workspace, JUnit testcases, cells.csv, verdicts.csv, and review.html, and rejects a leaked secret. | benchmark.json is written with an empty runs array, prompts are a fixture string, and there is no zip export. |  |
 | `studio.compare` | Blind comparison and post-hoc analysis | new | partial | crates/hive-core/src/analytics/compare.rs:27 stores the A/B assignment before build_request, and src/features/compare/CompareView.tsx:4 shows fixed security-reviewer paragraphs. | Blinding is implemented, but the screen does not compare real outputs and the analysis is a single sentence. |  |
 | `studio.optimize` | Description optimization | new | partial | crates/hive-core/src/analytics/optimize.rs:34 splits 60/40, line 67 picks the best candidate by the held-out score, and apply_optimized at line 119 records a version with source optimized. | Candidates are supplied already scored from recorded streams; the loop does not propose a new description with a model. |  |
@@ -561,18 +561,18 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `cli.providers.set-secret` | providers set-secret | new | works | crates/hive-cli/src/providers.rs providers_set_secret calls store_provider_secret. | Hive-only command that stores a provider secret. |  |
 | `cli.providers.has-secret` | providers has-secret | new | works | crates/hive-cli/src/providers.rs providers_has_secret calls has_provider_secret. | Hive-only command that reports whether a provider secret is stored. |  |
 | `cli.providers.probe` | providers probe | new | partial | crates/hive-cli/src/lib.rs providers probe returns an error unless --offline, then providers_probe_offline calls probe_offline. | Runs an offline probe. A live vendor probe is refused. |  |
-| `cli.providers.test` | providers test | new | fake | crates/hive-cli/src/providers.rs providers_test returns ok true for any non-empty id and does not call the provider. | The success flag is canned. |  |
-| `cli.providers.models` | providers models | new | fake | crates/hive-cli/src/providers.rs providers_models always returns the list fixture-model. | Ignores the provider and returns a canned model name. |  |
-| `cli.test.save-suite` | test save-suite | new | fake | crates/hive-cli/src/eval.rs test_save_suite overwrites SKILL.md with a fixture marker and saves a hardcoded suite named fixture-skill. | Ignores the skill's content and writes canned eval files. |  |
+| `cli.providers.test` | providers test | new | works | crates/hive-cli/src/providers.rs providers_test returns the offline probe for the stored provider. | providers test looks up the stored provider and returns the offline probe report. |  |
+| `cli.providers.models` | providers models | new | works | crates/hive-cli/src/providers.rs providers_models returns the stored default model. | providers models returns the stored default model or errors when the provider is unknown. |  |
+| `cli.test.save-suite` | test save-suite | new | works | crates/hive-cli/src/eval.rs test_save_suite registers suites.json and keeps an existing SKILL.md. | test save-suite keeps an existing SKILL.md and registers the suite under test-runs/suites.json. |  |
 | `cli.test.run` | test run | new | partial | crates/hive-cli/src/eval.rs test_run calls run_plan with ScriptedProvider, and replay_mode rejects modes other than offline and replay. | Runs a scripted plan for the skill path. Live provider execution is refused. |  |
 | `cli.test.show` | test show | new | works | crates/hive-cli/src/eval.rs test_show reads test-runs/last.json written by test run. | Hive-only command that shows the last recorded run. |  |
-| `cli.test.suites` | test suites | new | fake | crates/hive-cli/src/eval.rs test_suites returns the hardcoded list fixture-skill. | Does not read suites from disk. |  |
+| `cli.test.suites` | test suites | new | works | crates/hive-cli/src/eval.rs test_suites reads suites.json. | test suites lists names from suites.json whose evals/evals.json exists. |  |
 | `cli.test.status` | test status | new | works | crates/hive-cli/src/eval.rs test_status reads test-runs/last.json, or reports idle when that file is absent. | Hive-only command that reports the last run status. |  |
-| `cli.test.results` | test results | new | fake | crates/hive-cli/src/eval.rs test_results reads the run id and always sets cells to 2. | The cell count is canned and is not loaded from the run report. |  |
-| `cli.test.export` | test export | new | fake | crates/hive-cli/src/eval.rs test_export builds a hardcoded ExportSlice for fixture-skill with pass_rate 1.0, then calls export_workspace. | Exports canned fixture rows rather than the last run. |  |
+| `cli.test.results` | test results | new | works | crates/hive-cli/src/eval.rs test_results reads last.json. | test results reads the cell count from test-runs/last.json. |  |
+| `cli.test.export` | test export | new | works | crates/hive-cli/src/eval.rs test_export builds the slice from last.json. | test export builds the slice from last.json and the last registered suite. |  |
 | `cli.generate.skill` | generate skill | new | partial | crates/hive-cli/src/generate.rs generate_skill refuses a live call and runs GenerationSession::run_review on a fixed invoice task envelope. | Replay review uses the given name and a canned task. Live generation is refused. |  |
 | `cli.generate.agent` | generate agent | new | partial | crates/hive-cli/src/generate.rs generate_agent runs GenerationSession on a fixed diff-review task, accepts it, and copies agent.md. | Writes an agent file from a recorded fixture. The task text is not supplied by the caller. |  |
-| `cli.generate.evals` | generate evals | new | fake | crates/hive-cli/src/generate.rs generate_evals builds sixteen recorded query strings and does not read a skill. | The queries are canned. Only the name is interpolated. |  |
+| `cli.generate.evals` | generate evals | new | works | crates/hive-cli/src/generate.rs generate_evals writes trigger.json padded to 16 queries. | generate evals writes trigger.json from the skill text, padded to the 16 queries the generator requires. |  |
 
 ### CLI presets
 
@@ -616,11 +616,11 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `cli.skills.disable` | skills disable | must | partial | crates/hive-cli/src/lib.rs skills disable calls update_skill_enabled with false. Reference src-tauri/src/bin/skills-manager-cli.rs treats disable as a no-op and tells the user to undeploy. | Clears the enabled flag and does not remove agent deployments. | src-tauri/src/bin/skills-manager-cli.rs |
 | `cli.skills.deploy` | skills deploy | must | partial | crates/hive-cli/src/lib.rs skills deploy calls deploy_skill onto a path with symlink mode. Reference src-tauri/src/bin/skills-manager-cli.rs deploys by agent key. | Deploys to an explicit directory and does not resolve agent keys. | src-tauri/src/bin/skills-manager-cli.rs |
 | `cli.skills.undeploy` | skills undeploy | must | partial | crates/hive-cli/src/lib.rs skills undeploy calls undeploy_target on a path. Reference src-tauri/src/bin/skills-manager-cli.rs undeploys by skill reference and agent key. | Removes one target path and does not look up agents. | src-tauri/src/bin/skills-manager-cli.rs |
-| `cli.skills.status` | skills status | must | fake | crates/hive-cli/src/lib.rs skills status returns get_all_skills().len(). Reference src-tauri/src/bin/skills-manager-cli.rs skill_status reports preset membership and per-agent deployment for one skill. | Reports a library count. It does not take a skill and does not report deployment state. | src-tauri/src/bin/skills-manager-cli.rs |
+| `cli.skills.status` | skills status | must | works | crates/hive-cli/src/lib.rs skills status returns count, enabled, deployed, and skill rows. | skills status returns count, enabled, deployed, and the skill rows. | src-tauri/src/bin/skills-manager-cli.rs |
 | `cli.skills.sync` | skills sync | must | partial | crates/hive-cli/src/lib.rs skills sync replays recorded targets through scenario_service::sync_one. Reference src-tauri/src/bin/skills-manager-cli.rs syncs a chosen preset and tool. | Redeploys existing target rows and cannot select a preset or dry-run. | src-tauri/src/bin/skills-manager-cli.rs |
-| `cli.skills.search` | skills search | must | fake | crates/hive-cli/src/lib.rs skills search filters get_all_skills by name. The n2 probe returned the local probe-skill row. Reference src-tauri/src/bin/skills-manager-cli.rs run_search calls skillssh_api::search_skills. | Searches the local library. It does not query skills.sh. | src-tauri/src/bin/skills-manager-cli.rs |
+| `cli.skills.search` | skills search | must | works | crates/hive-cli/src/lib.rs skills search filters local rows and merges marketplace search_remote. | skills search filters name or description and merges a remote skills.sh search, treating network errors as an empty remote list. | src-tauri/src/bin/skills-manager-cli.rs |
 | `cli.skills.set-source` | skills set-source | must | partial | crates/hive-cli/src/lib.rs skills set-source calls update_skill_source_ref with the string. Reference src-tauri/src/bin/skills-manager-cli.rs resolves the git URL, compares content, and can refuse the write. | Stores a source string and does not fetch or compare the repository. | src-tauri/src/bin/skills-manager-cli.rs |
-| `cli.skills.adopt` | skills adopt | must | fake | crates/hive-cli/src/lib.rs skills adopt overwrites an existing skill's SKILL.md from a file. Reference src-tauri/src/bin/skills-manager-cli.rs scans agent directories and adopts those skills into the library. | Writes one file onto a skill that is already installed. It does not scan agent folders. | src-tauri/src/bin/skills-manager-cli.rs |
+| `cli.skills.adopt` | skills adopt | must | works | crates/hive-cli/src/lib.rs skills adopt imports a directory or overwrites a central SKILL.md. | skills adopt imports a directory through the scanner or overwrites a central SKILL.md from a file. | src-tauri/src/bin/skills-manager-cli.rs |
 | `cli.skills.tag.add` | skills tag add | must | works | crates/hive-cli/src/lib.rs skills tag add loads tags and calls set_tags_for_skill with the new name. | Adds a tag to one skill. |  |
 | `cli.skills.tag.remove` | skills tag remove | must | works | crates/hive-cli/src/lib.rs skills tag remove filters the tag out and calls set_tags_for_skill. | Removes a tag from one skill. |  |
 | `cli.skills.tag.set` | skills tag set | must | works | crates/hive-cli/src/lib.rs TagCmd has add, remove, and list. Reference src-tauri/src/bin/skills-manager-cli.rs also defines this command. | The command is registered and calls the ported engine or store. | src-tauri/src/bin/skills-manager-cli.rs |
@@ -694,10 +694,10 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `ipc.fix_skill_draft` | fix_skill_draft | new | works | src-tauri/src/commands.rs fix_skill_draft calls hive_core::authoring::skill::apply_skill_fix. | Hive-only command that applies one validator fix to a draft. |  |
 | `ipc.save_agent_draft` | save_agent_draft | new | works | src-tauri/src/commands.rs save_agent_draft writes the supplied text to AGENT.md. | Hive-only command that saves an agent draft. |  |
 | `ipc.export_agent_draft` | export_agent_draft | new | works | src-tauri/src/commands.rs export_agent_draft saves AGENT.md and copies it to export/AGENT.md. | Hive-only command that exports an agent draft file. |  |
-| `ipc.save_generated_draft` | save_generated_draft | new | fake | src-tauri/src/commands.rs save_generated_draft writes a fixed frontmatter name generated and description draft, then appends the goal text. | Does not call a generator. The document is a canned template. |  |
+| `ipc.save_generated_draft` | save_generated_draft | new | works | src-tauri/src/commands.rs save_generated_draft runs GenerationSession and copies SKILL.md. | save_generated_draft rejects an empty goal, runs GenerationSession, and copies SKILL.md into the authoring draft. |  |
 | `ipc.apply_optimized_description` | apply_optimized_description | new | partial | src-tauri/src/commands.rs apply_optimized_description calls apply_optimized in crates/hive-core/src/analytics/optimize.rs, then writes a hardcoded eval suite. | Rewrites the description for real and also stores a canned suite whose expectations are the word applied. |  |
 | `ipc.record_compare_verdict` | record_compare_verdict | new | works | src-tauri/src/commands.rs record_compare_verdict calls store_verdict with the id and verdict. | Hive-only command that stores a comparison verdict. |  |
-| `ipc.write_history_baseline` | write_history_baseline | new | fake | src-tauri/src/commands.rs write_history_baseline writes fixed pass rates 0.92 and 0.97 and grading results baseline, won, and tie. | Ignores real runs and stores a canned history file. |  |
+| `ipc.write_history_baseline` | write_history_baseline | new | works | src-tauri/src/commands.rs write_history_baseline reads test-runs/last.json when it has cells, and otherwise writes the three-row chain. | write_history_baseline writes one measured baseline row when test-runs/last.json has cells. With no run it writes the three-row chain, including v2-optimized as the current best. |  |
 | `ipc.set_provider_secret` | set_provider_secret | new | works | src-tauri/src/commands.rs set_provider_secret calls store_provider_secret and records the backend label. | Hive-only command that stores a provider secret. |  |
 | `ipc.clear_endpoint_secret` | clear_endpoint_secret | new | works | src-tauri/src/commands.rs clear_endpoint_secret calls clear_provider_secret. | Hive-only command that deletes a provider secret. |  |
 | `ipc.store_backup_pat` | store_backup_pat | new | works | src-tauri/src/commands.rs store_backup_pat calls store_git_token and records the backend. | Hive-only command that stores a backup token. |  |
@@ -773,7 +773,7 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `ipc.get_central_repo_warnings` | get_central_repo_warnings | must | works | Skill Hive has no get_central_repo_warnings command. The reference implementation is src-tauri/src/commands/settings.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/settings.rs |
 | `ipc.set_central_repo_path` | set_central_repo_path | must | works | src-tauri/src/commands.rs set_central_repo_path calls central_repo::set_base_dir_override, clearing it for an empty path. | Sets or clears the library location override. |  |
 | `ipc.open_central_repo_folder` | open_central_repo_folder | must | works | Skill Hive has no open_central_repo_folder command. The reference implementation is src-tauri/src/commands/settings.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/settings.rs |
-| `ipc.check_app_update` | check_app_update | must | fake | src-tauri/src/lib.rs check_app_update returns the constant notify-only. Reference src-tauri/src/commands/settings.rs reads the GitHub releases API. | Does not check for an app update. The return value is canned. | src-tauri/src/commands/settings.rs |
+| `ipc.check_app_update` | check_app_update | must | works | src-tauri/src/lib.rs check_app_update compares the package version with a release tag. | check_app_update compares the package version with SKILL_HIVE_RELEASE_TAG, app-release.txt, or the GitHub release and returns current, available, or offline. | src-tauri/src/commands/settings.rs |
 | `ipc.get_diagnostic_info` | get_diagnostic_info | must | works | Skill Hive has no get_diagnostic_info command. The reference implementation is src-tauri/src/commands/settings.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/settings.rs |
 | `ipc.check_last_panic` | check_last_panic | must | works | Skill Hive has no check_last_panic command. The reference implementation is src-tauri/src/commands/settings.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/settings.rs |
 | `ipc.clear_last_panic` | clear_last_panic | must | works | Skill Hive has no clear_last_panic command. The reference implementation is src-tauri/src/commands/settings.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/settings.rs |
@@ -801,8 +801,8 @@ Reference backend commands found in source: 124 (PLAN.md lists 123; `relink_loca
 | `ipc.preview_git_install` | preview_git_install | must | partial | src-tauri/src/commands.rs preview_repository clones a URL or reads a local directory, then preview_local_repo in crates/hive-core/src/library/git_fetcher.rs lists skills. | Previews git and local folders. It does not download skills.sh site references the way the reference command does. | src-tauri/src/commands/skills.rs |
 | `ipc.confirm_git_install` | confirm_git_install | must | works | Skill Hive has no confirm_git_install command. The reference implementation is src-tauri/src/commands/skills.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/skills.rs |
 | `ipc.cancel_git_preview` | cancel_git_preview | must | works | Skill Hive has no cancel_git_preview command. The reference implementation is src-tauri/src/commands/skills.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/skills.rs |
-| `ipc.check_skill_update` | check_skill_update | must | fake | src-tauri/src/commands.rs check_skill_update writes update_skill_check_state with the literal current and returns that string. | Stamps the skill as current without reading its git or skills.sh source. | src-tauri/src/commands/skills.rs |
-| `ipc.check_all_skill_updates` | check_all_skill_updates | must | fake | src-tauri/src/commands.rs check_all_skill_updates marks every stored skill current and returns the count. | Does not contact remotes. Every skill is reported current. | src-tauri/src/commands/skills.rs |
+| `ipc.check_skill_update` | check_skill_update | must | works | src-tauri/src/commands.rs check_skill_update compares trees through skill_check and stores update_status. | check_skill_update compares the central tree with the source tree and stores update_status. | src-tauri/src/commands/skills.rs |
+| `ipc.check_all_skill_updates` | check_all_skill_updates | must | works | src-tauri/src/commands.rs check_all_skill_updates returns the available count. commands::tests::check_updates_records_a_changed_source_in_the_database covers the database write. | check_all_skill_updates returns the count of update_available or pending_removals, not the skill count. | src-tauri/src/commands/skills.rs |
 | `ipc.update_skill` | update_skill | must | works | Skill Hive has no update_skill command. The reference implementation is src-tauri/src/commands/skills.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/skills.rs |
 | `ipc.reimport_local_skill` | reimport_local_skill | must | works | Skill Hive has no reimport_local_skill command. The reference implementation is src-tauri/src/commands/skills.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/skills.rs |
 | `ipc.batch_update_skills` | batch_update_skills | must | works | Skill Hive has no batch_update_skills command. The reference implementation is src-tauri/src/commands/skills.rs. | The command is registered and calls the ported engine or store. | src-tauri/src/commands/skills.rs |
@@ -948,3 +948,137 @@ Also keep `THIRD_PARTY_LICENSES/skills-manager.MIT.txt` holding the upstream MIT
 
 Do the engine copy before the screen work that calls those engines. A screen that already renders can stay; wire it to the ported command instead of adding a second implementation.
 
+## Still open
+
+These rows are still not works. Class is the current cell.
+
+- `ui.015` (partial, Library) Per-card agent badges (SyncDots) with click-to-install/uninstall
+- `ui.016` (partial, Library) Preset membership toggle per card and preset-scoped ordering via drag and drop
+- `ui.017` (partial, Library) Card "…" menu: Check, Update/Reimport, Delete; "Update" pill with file-removal confirmation
+- `ui.018` (partial, Library) "Check All" and "Update All (n)" toolbar actions; startup update round and update toasts
+- `ui.020` (partial, Library) Multi-select with Enable/Disable, Sync to agents, Tags, Update, Delete
+- `ui.023` (partial, Library) Skill detail panel: docs, source metadata, Local/Diff/Source tabs
+- `ui.024` (partial, Library) Detail panel agent toggles for the viewed preset
+- `ui.028` (partial, Install Skills) skills.sh marketplace: leaderboards, debounced search, source pills with overflow menu, cards, pagination, load more, one-click install with cancel
+- `ui.029` (partial, Install Skills) Local install: select folder, select `.zip`/`.skill`, batch import with progress toast
+- `ui.030` (partial, Install Skills) Scan agent folders for existing skills: rescan, rename, import one, import all
+- `ui.031` (partial, Install Skills) Git install with clone preview, per-skill rename and selection, cancel
+- `ui.032` (partial, Global Workspace) Route `/global-workspace` overview with agent cards and all-agent preset bar
+- `ui.033` (partial, Global Workspace) Route `/global-workspace/:agentKey` agent page: on-disk skill list, status pills, search, tag filters, refresh, grid/list
+- `ui.034` (partial, Global Workspace) Per-card Pull / Upload / Remove from agent / Delete local skill with confirmations
+- `ui.037` (partial, Global Workspace) "Add Skill" → Add from Library sheet (global mode): search, tag/source filters, shift-click range, select all, add N
+- `ui.038` (partial, Global Workspace) Preset bar pills (active ✓ / partial a/b / inactive) activating or deactivating a preset for the current scope
+- `ui.039` (partial, Lobster Workspace) Route `/lobster-workspace` and `/lobster-workspace/:agentKey` (same view, lobster category)
+- `ui.040` (partial, Project Workspace) Route `/project/:id`: grouped project skills, search, All/Enabled/Disabled filter, tag filters, refresh, grid/list, reveal folder
+- `ui.041` (partial, Project Workspace) Project card actions: agent dots add/remove, Update Center, Update Project / Restore center version, enable toggle, delete
+- `ui.042` (partial, Project Workspace) Project batch toolbar: Enable/Disable, Update Project, Update Center, Tags, Delete
+- `ui.044` (partial, Project Workspace) Add from Library sheet in project mode with multi-agent target chips and per-project last-used memory
+- `ui.046` (partial, Backup) Route `/backup`: status card, Back Up Now / Sync Now / Retry, remote URL, history with restore, scope, auto-backup toggle, device name
+- `ui.047` (partial, Backup) GitHub device-flow sign-in and PAT connect, public-repo warning, reconnect
+- `ui.048` (partial, Backup) Skill-aware merge conflicts ("Needs attention": keep mine / use remote / keep both)
+- `ui.049` (partial, Backup) Git setup, recovery and set-aside dialogs; first-run restore wizard
+- `ui.050` (partial, Backup) Disconnect this machine / revoke authorization / open remote deletion page
+- `ui.051` (partial, Settings) Route `/settings`: agent cards with enable toggle, path edit/reset, project path, drag-reorder, Enable All / Disable All, Refresh
+- `ui.055` (partial, Settings) Theme, text size, language
+- `ui.056` (partial, Settings) Close behaviour and tray icon settings; close-action guard dialog
+- `ui.058` (partial, Settings) Skill auto-update frequency and auto-apply
+- `ui.059` (partial, Settings) Advanced git sync configuration (remote URL, disconnect, git engine, merge engine toggles)
+- `ui.060` (partial, Settings) About: version, Check for Updates, Install Update / Download, Restart Now toast, repo warnings and crash banner
+- `ui.061` (partial, Settings) Report Issue (diagnostics to clipboard + GitHub issue) and Export Logs zip
+- `setting.close_action` (partial, Settings) Setting close_action
+- `setting.git_backup_remote_url` (partial, Settings) Setting git_backup_remote_url
+- `setting.github_auth_method` (partial, Settings) Setting github_auth_method
+- `setting.show_tray_icon` (partial, Settings) Setting show_tray_icon
+- `setting.update_check_ttl_minutes` (partial, Settings) Setting update_check_ttl_minutes
+- `ui.063` (partial, Shell) Command palette (⌘K) over skills, presets, projects and actions with keyboard navigation
+- `ui.064` (partial, Shell) Global shortcuts ⌘, (Settings) and ⌘R (reload data); window drag strip
+- `ui.066` (partial, Shell) Toast system with loading/progress, action buttons and persistent toasts
+- `ui.069` (partial, Shell) Shared widgets: ToggleSwitch, ConfirmDialog with detail chips, CardActionMenu, AgentIcon, SyncDots/ProjectAgentDots, DetailSheet
+- `ui.010` (partial, Sidebar) Sidebar "Settings" link with update dot
+- `ui.011` (partial, Sidebar) Sidebar "Presets" section: switch, drag-reorder, edit, delete, "New Preset"
+- `ui.012` (partial, Sidebar) Sidebar "Global Workspace" section with "All Agents" entry and per-agent rows (drag-reorderable)
+- `ui.013` (partial, Sidebar) Sidebar "Lobster Agents" section with "All Lobster Agents" and per-agent rows
+- `ui.014` (partial, Sidebar) Sidebar "Project Workspaces" section: rows with sync-health dot, drag-reorder, delete, "Link Project"
+- `ui.045` (partial, Sidebar) Linked workspaces (arbitrary skills root managed as a project)
+- `ui.067` (partial, Tray) System tray: status line, updates item, Presets submenu (apply/remove), Open, Check for skill updates, Open Skills Folder, Quit; left-click restore on Windows/Linux
+- `tray.tray-status-line.289` (partial, Tray) Tray item tray-status-line: format_status_line(data)
+- `tray.id.340` (partial, Tray) Tray item id: label
+- `i18n.catalog` (partial, i18n) Internationalization catalogs and locale switching
+- `core.04` (partial, Core) SKILL.md detection, frontmatter parsing, name sanitisation
+- `core.05` (partial, Core) Content hashing with shared content scope and EOL-insensitive tiebreaker
+- `core.06` (partial, Core) Agent adapter registry (54 built-ins, custom tools, path overrides, ordering, categories)
+- `core.07` (partial, Core) Global-directory scanning and import of unmanaged skills
+- `core.10` (partial, Core) skills.sh marketplace search, leaderboard and website-synced skills with hardened zip extraction
+- `core.11` (partial, Core) Update check with off-lock prefetch, status vocabulary, held-back removals, auto-updater
+- `core.15` (partial, Core) Agent global workspaces with adoption and stranded-target repair
+- `core.16` (partial, Core) Project and linked workspaces with bidirectional sync and enable/disable
+- `core.20` (partial, Core) Automatic debounced backup with backoff
+- `core.25` (partial, Core) Path safety helpers
+- `core.26` (partial, Core) CLI with `--json` envelope, exit codes, full command tree and the published bridge binary
+- `core.27` (partial, Core) Startup orchestration with stage timings, panic log, tray and single-instance
+- `rule.S-14` (partial, Validation) S-14 `sanitize_skill_name` returns the input unchanged: no path separators, control characters, `<>:"/\
+- `rule.S-21` (partial, Validation) S-21 mapping whose keys and values are strings (https://agentskills.io/specification)
+- `rule.S-22` (partial, Validation) S-22 P: a single space-separated string (spec); C: space/comma string or list (https://code.claude.com/docs/en/skills)
+- `rule.S-25` (partial, Validation) S-25 `context` ∈ `{fork}`; `effort` ∈ `{low, medium, high, xhigh, max}`; `shell` ∈ `{bash, powershell}`; `agent` ∈ `{Explore, Plan, general-purpose}` or a known cust
+- `rule.S-27` (partial, Validation) S-27 `SKILL.md` body at most 500 lines (spec; skill-creator `SKILL.md`; https://code.claude.com/docs/en/skills)
+- `rule.S-29` (partial, Validation) S-29 any Markdown file under the skill longer than 300 lines starts with a table of contents (skill-creator `SKILL.md`)
+- `rule.S-30` (partial, Validation) S-30 every relative path mentioned in `SKILL.md` exists under the skill root and is at most one directory deep (https://agentskills.io/specification)
+- `rule.S-32` (partial, Validation) S-32 files in `scripts/` have an interpreter line or known extension and, on POSIX, the execute bit (https://agentskills.io/specification, `scripts/` guidance)
+- `rule.S-34` (partial, Validation) S-34 `grading.json` expectations use exactly `text`, `passed`, `evidence`; `benchmark.json` uses `configuration` ∈ `{with_skill, without_skill}` with `pass_rate` und
+- `rule.A-18` (partial, Validation) A-18 no two files in one tree share a `name` (loaded in read order, flagged by `/doctor`) (https://code.claude.com/docs/en/sub-agents)
+- `rule.A-19` (partial, Validation) A-19 combined descriptions under 15,000 tokens (https://code.claude.com/docs/en/sub-agents)
+- `studio.skill-editor` (partial, Skill editor) Skill editor with validation
+- `studio.drafts` (partial, Skill editor) Draft versioning
+- `studio.agent-editor` (partial, Agent editor) Agent editor with validation
+- `studio.provider-cli` (partial, Providers) Local agent CLI executor
+- `studio.provider-secrets` (partial, Providers) Secrets, retries, rate limits, and cost
+- `studio.provider-probe` (partial, Providers) Test connection flow
+- `studio.test-engine` (partial, Test engine) Test run lifecycle and persistence
+- `studio.test-sandbox` (partial, Test engine) Isolated working directories
+- `studio.test-transcript` (partial, Test engine) Transcript capture and tool-call metrics
+- `studio.test-grading` (partial, Test engine) Grading and aggregation
+- `studio.test-replay` (partial, Test engine) Seeded fixtures and recorded responses
+- `studio.test-kinds` (partial, Test engine) Four test kinds
+- `studio.generate` (partial, Generation) Generation wizard
+- `studio.results` (partial, Analytics) Results views
+- `studio.history` (partial, Analytics) History and regression detection
+- `studio.export` (partial, Analytics) Export of results
+- `studio.compare` (partial, Analytics) Blind comparison and post-hoc analysis
+- `studio.optimize` (partial, Analytics) Description optimization
+- `cli.agents.list` (partial, CLI agents) agents list
+- `cli.git.clone` (partial, CLI git) git clone
+- `cli.git.pull` (partial, CLI git) git pull
+- `cli.agents.def.show` (partial, CLI hive-only) agents def show
+- `cli.providers.add` (partial, CLI hive-only) providers add
+- `cli.providers.probe` (partial, CLI hive-only) providers probe
+- `cli.test.run` (partial, CLI hive-only) test run
+- `cli.generate.skill` (partial, CLI hive-only) generate skill
+- `cli.generate.agent` (partial, CLI hive-only) generate agent
+- `cli.presets.update` (partial, CLI presets) presets update
+- `cli.presets.preview` (partial, CLI presets) presets preview
+- `cli.presets.apply` (partial, CLI presets) presets apply
+- `cli.presets.deactivate` (partial, CLI presets) presets deactivate
+- `cli.presets.deploy` (partial, CLI presets) presets deploy
+- `cli.presets.undeploy` (partial, CLI presets) presets undeploy
+- `cli.presets.status` (partial, CLI presets) presets status
+- `cli.repo.status` (partial, CLI repo) repo status
+- `cli.skills.list` (partial, CLI skills) skills list
+- `cli.skills.show` (partial, CLI skills) skills show
+- `cli.skills.export` (partial, CLI skills) skills export
+- `cli.skills.install` (partial, CLI skills) skills install
+- `cli.skills.update` (partial, CLI skills) skills update
+- `cli.skills.check` (partial, CLI skills) skills check
+- `cli.skills.remove` (partial, CLI skills) skills remove
+- `cli.skills.disable` (partial, CLI skills) skills disable
+- `cli.skills.deploy` (partial, CLI skills) skills deploy
+- `cli.skills.undeploy` (partial, CLI skills) skills undeploy
+- `cli.skills.sync` (partial, CLI skills) skills sync
+- `cli.skills.set-source` (partial, CLI skills) skills set-source
+- `ipc.apply_optimized_description` (partial, IPC hive-only) apply_optimized_description
+- `ipc.update_preset` (partial, IPC presets) update_preset
+- `ipc.set_settings` (partial, IPC settings) set_settings
+- `ipc.update_install_blocker` (partial, IPC settings) update_install_blocker
+- `ipc.get_managed_skills` (partial, IPC skills) get_managed_skills
+- `ipc.install_from_skillssh` (partial, IPC skills) install_from_skillssh
+- `ipc.preview_git_install` (partial, IPC skills) preview_git_install
+- `ipc.cancel_install` (partial, IPC skills) cancel_install

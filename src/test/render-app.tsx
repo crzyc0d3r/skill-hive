@@ -166,6 +166,14 @@ function handleIpc(state: IpcState, cmd: string, args: Record<string, unknown>, 
   if (cmd === "set_central_repo_path") return text("path") || "~/.skill-hive";
   if (cmd === "check_all_skill_updates") return 0;
   if (cmd === "check_skill_update") return "current";
+  if (cmd === "write_history_baseline") {
+    return JSON.stringify({
+      iterations: [
+        { version: "v1", parent: null, expectation_pass_rate: 0.75, grading_result: "baseline", is_current_best: false },
+        { version: "v2-optimized", parent: "v2", expectation_pass_rate: 0.97, grading_result: "tie", is_current_best: true },
+      ],
+    });
+  }
   return null;
 }
 
