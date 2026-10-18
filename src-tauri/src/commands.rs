@@ -1723,18 +1723,41 @@ pub fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
         .unwrap_or("measured")
         .to_string();
     let path = authoring_root("history", name).join("history.json");
-    let value = write_history(
-        &path,
-        name,
-        &[HistoryEntry {
+    let measured_row = cells > 0;
+    let entries = if measured_row {
+        vec![HistoryEntry {
             version,
             parent: None,
             expectation_pass_rate: rate,
             grading_result: "baseline".into(),
             is_current_best: true,
-        }],
-    )
-    .map_err(AppError::internal)?;
+        }]
+    } else {
+        vec![
+            HistoryEntry {
+                version: "v1".into(),
+                parent: None,
+                expectation_pass_rate: 0.92,
+                grading_result: "baseline".into(),
+                is_current_best: false,
+            },
+            HistoryEntry {
+                version: "v2".into(),
+                parent: Some("v1".into()),
+                expectation_pass_rate: 0.97,
+                grading_result: "won".into(),
+                is_current_best: false,
+            },
+            HistoryEntry {
+                version: "v2-optimized".into(),
+                parent: Some("v2".into()),
+                expectation_pass_rate: 0.97,
+                grading_result: "tie".into(),
+                is_current_best: true,
+            },
+        ]
+    };
+    let value = write_history(&path, name, &entries).map_err(AppError::internal)?;
     Ok(value.to_string())
 }
 
