@@ -271,7 +271,6 @@ try {
     }).catch(() => {});
   }
   async function click(selector) {
-    await dismissToasts();
     const id = await find(selector);
     await call("POST", `${prefix}/element/${id}/click`, {});
   }
@@ -324,7 +323,6 @@ try {
     return execFileSync(pythonBin(), ["-c", script], { encoding: "utf8" }).trim();
   }
   async function clickText(text, last = false) {
-    await dismissToasts();
     const quoted = JSON.stringify(text);
     const expression = last ? `(//button[normalize-space()=${quoted}])[last()]` : `//button[normalize-space()=${quoted}]`;
     const id = await find(expression, "xpath");
@@ -629,6 +627,7 @@ conn.commit()
   await clickText("Set aside local changes");
   await waitUntil("set aside", () => setting("backup_aside").includes(`${path.sep}aside${path.sep}`) && walkFiles(path.join(base, "aside")).some((file) => file.endsWith(`${path.sep}note.txt`)));
   await typeInto('input[aria-label="Restore remote"]', restoreBare);
+  await dismissToasts();
   await clickText("Use remote library");
   await waitUntil("first-run restore", () => readFileSync(path.join(base, "skills", "restored-marker.txt"), "utf8").includes("restored-from-remote"));
 
