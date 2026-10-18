@@ -370,8 +370,15 @@ try {
   if (!existsSync(copied)) throw new Error(`skills directory missing at ${copied}`);
   await restart();
   await click("a[href='/my-skills']");
-  const library = await call("GET", `${prefix}/source`);
-  if (!String(library.value ?? "").includes("local-skill")) throw new Error("local-skill was not listed after restart");
+  const listedDeadline = Date.now() + 15000;
+  let libraryText = "";
+  while (!libraryText.includes("local-skill")) {
+    if (Date.now() > listedDeadline) throw new Error(`local-skill was not listed after restart\n${libraryText.slice(0, 500)}`);
+    const library = await call("GET", `${prefix}/source`);
+    libraryText = String(library.value ?? "");
+    if (libraryText.includes("local-skill")) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
 
   await click("a[href='/install']");
   await click("[data-testid=tab-scan]");
