@@ -195,6 +195,19 @@ describe("ui parity invokes", () => {
     expect(new Set(exported).size).toBeGreaterThan(1);
   });
 
+  it("pulls the notes fixture after linking when the library already has skills", async () => {
+    installIpc();
+    const user = userEvent.setup();
+    renderAt("/project/fixture");
+    expect(await screen.findByText("research-notes")).toBeInTheDocument();
+    await user.click(screen.getByTestId("link-project"));
+    expect(screen.queryByText("research-notes")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Pull center" }));
+    expect(calls("pull_project_center")).toEqual([
+      expect.objectContaining({ args: expect.objectContaining({ name: "notes", body: "center v2" }) }),
+    ]);
+  });
+
   it("persists agent enablement, text size, language, the version line, and the issue link", async () => {
     installIpc();
     seedSetting("ui_text_size", "large");

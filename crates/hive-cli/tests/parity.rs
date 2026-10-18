@@ -453,7 +453,13 @@ fn test_run_uses_scripted_plan_until_a_base_url_is_set() {
     assert!(last.contains("mock-run"), "{last}");
     let hit = mock.hits.lock().unwrap().join("\n");
     assert!(hit.starts_with("POST "), "{hit}");
-    assert!(hit.contains(skill.to_str().unwrap()), "{hit}");
+    let posted = hit
+        .split("\r\n\r\n")
+        .nth(1)
+        .and_then(|body| serde_json::from_str::<Value>(body.trim()).ok())
+        .unwrap_or_else(|| panic!("request body was not JSON: {hit}"));
+    assert_eq!(posted["mode"], "offline");
+    assert_eq!(posted["skill"].as_str(), skill.to_str(), "{hit}");
 }
 
 #[test]

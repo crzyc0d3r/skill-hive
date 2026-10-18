@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { t } from "@/lib/i18n";
 import {
@@ -67,15 +67,19 @@ export function ProjectView() {
   const [picked, setPicked] = useState<string[]>([]);
   const [anchor, setAnchor] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ProjectSkill | null>(null);
+  const pinned = useRef(false);
   const skill = rows[0] ?? FIXTURE;
 
   useEffect(() => {
+    let current = true;
+    pinned.current = false;
     void silent<string | null>("get_settings", { key: "project_last_agents" }).then((value) => {
-      if (!value) return;
+      if (!current || !value) return;
       const next = value.split(",").map((item) => item.trim()).filter(Boolean);
       if (next.length) setAgents(next);
     });
     void silent<ProjectSkillRow[]>("get_project_skills", { id }).then((projectRows) => {
+      if (!current || pinned.current) return;
       if (Array.isArray(projectRows) && projectRows.length) {
         const next = projectRows.map(fromProjectRow);
         setRows(next);
@@ -84,13 +88,16 @@ export function ProjectView() {
         return;
       }
       void silent<SkillCard[]>("get_managed_skills").then((skills) => {
-        if (!Array.isArray(skills) || skills.length === 0) return;
+        if (!current || pinned.current || !Array.isArray(skills) || skills.length === 0) return;
         const next = skills.map(fromManaged);
         setRows(next);
         setProjectSkills(next);
         setLinked(true);
       });
     });
+    return () => {
+      current = false;
+    };
   }, [id]);
 
   useEffect(() => {
@@ -133,12 +140,14 @@ export function ProjectView() {
         </label>
         <div className="flex flex-wrap gap-2">
           <Button type="button" data-testid="link-project" size="sm" onClick={() => {
-              const next = rows.length ? rows : [skill];
+              pinned.current = true;
+              const next = root.trim() && rows.length ? rows : [FIXTURE];
               setRows(next);
               setLinked(true);
               setProjectSkills(next);
+              const chosen = next[0] ?? FIXTURE;
               void addProject("fixture", root);
-              void silent("add_linked_workspace", { name: skill.name, path: root || skill.name, agent: agents[0] ?? "claude_code" });
+              void silent("add_linked_workspace", { name: chosen.name, path: root || chosen.name, agent: agents[0] ?? "claude_code" });
             }}
           >
             {t("project.link")}
