@@ -1928,6 +1928,41 @@ pub fn record_compare_verdict(id: String, verdict: String) -> Result<String, App
 }
 
 #[tauri::command]
+pub fn run_effectiveness_suite(
+    base_url: String,
+    api_key: String,
+    goal: String,
+) -> Result<String, AppError> {
+    let value = hive_core::testing::run_effectiveness(
+        &central_repo::base_dir(),
+        &base_url,
+        &api_key,
+        &goal,
+    )
+    .map_err(AppError::io)?;
+    Ok(value.to_string())
+}
+
+#[tauri::command]
+pub fn get_effectiveness_report() -> Result<String, AppError> {
+    let value =
+        hive_core::testing::load_effectiveness(&central_repo::base_dir()).map_err(AppError::io)?;
+    Ok(value.to_string())
+}
+
+#[tauri::command]
+pub fn interview_generation(
+    base_url: String,
+    api_key: String,
+    goal: String,
+) -> Result<String, AppError> {
+    let value =
+        hive_core::testing::interview_goal(&central_repo::base_dir(), &base_url, &api_key, &goal)
+            .map_err(AppError::io)?;
+    Ok(value.to_string())
+}
+
+#[tauri::command]
 pub fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
     let name = if skill_name.trim().is_empty() {
         "baseline"

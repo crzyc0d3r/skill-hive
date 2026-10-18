@@ -93,6 +93,11 @@ export function setGoal(goal: string): void {
   publish();
 }
 
+export function setQuestions(questions: string[]): void {
+  wizard = { ...wizard, questions };
+  publish();
+}
+
 function takeQuestions(raw: unknown) {
   if (typeof raw !== "string") return;
   try {

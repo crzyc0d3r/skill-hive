@@ -21,9 +21,36 @@ export function ResultsView() {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [exportCsv, setExportCsv] = useState("");
+  const [exported, setExported] = useState("");
   useEffect(() => {
     if (demo) return;
-    void silent<{ text?: string }>("get_recent_log_excerpt").then((excerpt) => {
+    void (async () => {
+      const reportRaw = await silent<string>("get_effectiveness_report");
+      if (typeof reportRaw === "string" && reportRaw.trim()) {
+        try {
+          const report = JSON.parse(reportRaw) as {
+            cells?: HeatCell[];
+            steps?: TimelineStep[];
+            with_rate?: number;
+            without_rate?: number;
+            exportCsv?: string;
+          };
+          if (Array.isArray(report.cells) && report.cells.length) {
+            setCells(report.cells);
+            if (Array.isArray(report.steps)) setSteps(report.steps);
+            if (typeof report.with_rate === "number" && typeof report.without_rate === "number") {
+              setSummary(`${report.with_rate} / ${report.without_rate}`);
+            }
+            if (typeof report.exportCsv === "string") setExportCsv(report.exportCsv);
+            return;
+          }
+        } catch {
+          /* a report that is not JSON falls through to the log excerpt */
+        }
+      }
+      const excerpt = await silent<{ text?: string }>("get_recent_log_excerpt");
       if (!excerpt?.text) return;
       try {
         const parsed = JSON.parse(excerpt.text) as { cells?: HeatCell[]; steps?: TimelineStep[] };
@@ -32,13 +59,14 @@ export function ResultsView() {
       } catch {
         /* logs that are not a run payload stay on the empty state */
       }
-    });
+    })();
   }, [demo]);
   const selected = cells[index];
   return (
     <section data-testid="results" className="min-w-0 space-y-3">
       <h1 className="font-mono text-xl font-semibold">{t("results.title")}</h1>
       <p className="text-sm">{paused ? t("results.pause") : cells.length === 0 ? t("results.empty") : t("results.heatmap")}</p>
+      {summary ? <p data-testid="results-summary">{t("results.summary")} {summary}</p> : null}
       <div
         role="grid"
         tabIndex={0}
@@ -107,6 +135,12 @@ export function ResultsView() {
       <Button type="button" variant="outline" size="sm" onClick={() => setBudgetOpen(true)}>
         {t("results.budget")}
       </Button>
+      {exportCsv ? (
+        <Button type="button" variant="outline" size="sm" onClick={() => setExported(exportCsv)}>
+          {t("results.export")}
+        </Button>
+      ) : null}
+      {exported ? <pre data-testid="results-export">{exported}</pre> : null}
       {budgetOpen ? (
         <div role="dialog" data-testid="budget-dialog" className="rounded border border-border p-3">
           <p className="text-sm">{t("results.budget")}</p>

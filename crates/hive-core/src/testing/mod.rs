@@ -2,12 +2,16 @@
 
 mod aggregate;
 mod checks;
+mod effectiveness;
 mod engine;
 mod suite;
 mod trigger;
 
 pub use aggregate::{aggregate_benchmark, delta_string, Stat};
 pub use checks::{run_check, CheckResult, DeterministicCheck};
+pub use effectiveness::{
+    grading_path, history_entries, interview_goal, load_effectiveness, run_effectiveness,
+};
 pub use engine::{
     materialize_fixture, persist_step_metrics, resume_run, run_plan, run_plan_with_clock,
     run_version_comparison, select_fixture_file, CellReport, EngineClock, Plan, RunReport,

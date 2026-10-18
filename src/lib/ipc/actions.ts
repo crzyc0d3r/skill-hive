@@ -138,6 +138,11 @@ export const applyOptimizedDescription = (description: string) =>
 export const recordCompareVerdict = (id: string, verdict: string) =>
   dispatch("record_compare_verdict", { id, verdict });
 export const writeHistoryBaseline = (skillName: string) => dispatch("write_history_baseline", { skillName });
+export const runEffectivenessSuite = (baseUrl: string, apiKey: string, goal: string) =>
+  command<string>("run_effectiveness_suite", { baseUrl, apiKey, goal });
+export const getEffectivenessReport = () => silent<string>("get_effectiveness_report");
+export const interviewGeneration = (baseUrl: string, apiKey: string, goal: string) =>
+  command<string>("interview_generation", { baseUrl, apiKey, goal });
 export const setProviderSecret = (id: string, secret: string) => dispatch("set_provider_secret", { id, secret });
 export const storeBackupPat = (token: string) => dispatch("store_backup_pat", { token });
 export const revokeBackupToken = () => dispatch("revoke_backup_token");
