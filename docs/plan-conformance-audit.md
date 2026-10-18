@@ -27,6 +27,7 @@ These are not implemented as product runs. They are the list to design before bu
 - An improve loop that re-runs after a rewrite and writes `history.json` from those rates, plus regression rules R1–R6 against a pinned baseline.
 - The generate wizard calling a provider for the interview and the draft. `save_generated_draft` reviews a local envelope.
 - Results, compare, history, and export screens reading that run. Today the screens read demo rows or an empty state.
+- The library-interference additions below: trigger runs in a library context, a conflict matrix, a machine-to-machine interference report, per-model pass bars, and an optional gold set for the grader. None of that is in PLAN.md, and none of it is on `main`.
 
 A live call to `https://api.anthropic.com` or `https://api.openai.com` still needs that vendor's key. The reference `claude -p` measurement needs the Claude Code CLI. Live skills.sh downloads and GitHub device-flow completion need network access and a user. None of those are reasons to treat the stand-ins below as done.
 
@@ -132,3 +133,85 @@ These exist and are not the product measurement. A later build should call them 
 | 5.3-compare | Compare screen, blind until the verdict, then unblinded from the run | stand-in | Demo cards, then `record_compare_verdict`. Live mode says "No comparison yet." until that command returns. |
 | 5.3-history | History with the measured chain, a trend, and regression alerts | stand-in | Demo rows or the canned baseline chain. No trend and no R1–R6 alerts. |
 | 5.3-endpoints | Endpoint catalog with a live probe, prices, and a keychain secret | stand-in | `EndpointsView.tsx` plus the page store. See 4.6-screen. |
+
+## Additions beyond PLAN.md
+
+These five requirements are not in PLAN.md. They are not in the 63 rows above. On `main` every one of them is absent: `run_trigger_set` scores streams the caller already recorded, and it does not know which other skills were installed. Nothing exports a library snapshot, nothing bisects a library, and nothing stores a hand-labelled gold set. This section is the proposed design. It is not built.
+
+| id | addition | on main |
+|---|---|---|
+| L1 | Trigger runs in a library context, with an ordered activation list per adapter and the four outcomes | not built |
+| L2 | Conflict matrix of which skills steal each other's queries | not built |
+| L3 | Library Interference Report: snapshot, overlap, re-run, bisect, rewrite re-test, install warning | not built |
+| L4 | Per-model results with a configurable pass bar, flagging strong-model-only descriptions | not built |
+| L5 | Optional hand-labelled gold set that calibrates the grader | not built |
+
+### L1 — Library context
+
+A trigger run names one candidate skill and a distractor set. The distractors are the user's enabled installed skills (`skills` rows: `name`, `description`, `content_hash`, `source_type`, `source_ref`, `source_revision`) plus generated lookalikes. A lookalike is a skill whose description shares the candidate's domain and whose trigger phrases are near misses. Lookalikes are written into the run directory, not into the user's library.
+
+The run directory is a fresh project that contains only that context, so the user's real global skills do not leak in. The result for each query records the ordered list of skills that activated, the adapter that observed them, and one outcome:
+
+| outcome | rule |
+|---|---|
+| fired alone | the candidate is the only skill in the activation list |
+| fired with others | the candidate appears, and at least one other skill appears |
+| hijacked | the candidate does not appear, and another skill does. The culprit is the first other skill in the list |
+| none | the activation list is empty |
+
+The same queries run on each selected platform adapter. The ordered list is parsed from that adapter, not asked of a second model.
+
+- Claude Code: `claude -p --output-format stream-json`. Walk `tool_use` blocks in order. `Skill` counts when its input names a skill in the context. `Read` counts when the path lands inside that skill's directory. This is the same first-tool idea as `judge_stream` in `crates/hive-core/src/testing/trigger.rs`, extended from one boolean to the full ordered list.
+- Codex and Cursor-style agents: there is no `Skill` tool. A skill counts when a file read resolves to its `SKILL.md` or to a file under its directory. The adapter name is stored on the row.
+- Raw API models: the emulated runner. The system prompt lists the context in the `available_skills` shape from PLAN.md P9 and exposes a `Skill` tool plus stub tools that end the turn. Every row from this runner is labelled `emulated`. `AnthropicProvider` and `OpenAiProvider` in `providers/http.rs` are the transports. The label is required so an emulated pass is not reported as a Claude Code pass.
+
+Repetitions stay configurable. The default stays the skill-creator default of three runs and a 0.5 threshold, applied per outcome: a positive query passes only when `fired alone` is at least the threshold. `fired with others` and `hijacked` are failures for a positive query even when the candidate sometimes appears. A negative query passes when the candidate stays absent.
+
+### L2 — Conflict matrix
+
+The matrix is computed from L1's activation lists. Rows and columns are the skills in the context. For queries that belong to skill A:
+
+- `stole` counts queries where B is the culprit and A did not activate
+- `co-fired` counts queries where A and B both activated
+- `neither` counts queries where neither activated
+
+No second model call. The cell stores the query ids, so the report can open the transcript. A skill with no saved queries does not get a row until it has some.
+
+### L3 — Library Interference Report
+
+One report compares two machine snapshots and the candidate.
+
+**Snapshot.** Export and import a JSON document, one entry per enabled skill: `name`, `description`, `content_hash`, `source_type`, `source_ref`, `source_revision`. Those are the columns already on `SkillRecord` in `crates/hive-core/src/db/skill_store.rs`. The document does not include secrets, install paths that point outside the library, or file bodies. `content_hash` is the version identity, because the table has no separate version column. Import creates a named context the trigger runner can load. It does not install those skills onto the machine.
+
+**Static overlap.** Before any model call, compare descriptions and the `query` strings in each skill's `evals/trigger.json`. Flag a pair when the descriptions share a long distinctive phrase, or when one skill's trigger query is contained in the other's description. This scan is a warning list, not a verdict.
+
+**Re-run.** Each saved trigger query for the candidate is run in four contexts, on the adapters selected for the report:
+
+1. candidate alone
+2. candidate plus machine A's library
+3. candidate plus machine B's library
+4. candidate plus one suspect, repeated for each skill the overlap scan or a previous hijack named
+
+The four outcomes from L1 are stored per context. A query that is `fired alone` when the candidate is alone and `hijacked` or `fired with others` inside a library is interference.
+
+**Bisect.** When a library context breaks a query, the view searches for the smallest distractor set that still breaks it. Start from the failing set. Split it in half, re-run the failing queries on each half, and keep every half that still produces `hijacked` or `fired with others`. Stop when removing any one remaining skill restores `fired alone`. The screen shows that set and the queries it breaks. This is a search over L1 runs, not a new judge.
+
+**Rewrite re-test.** A suggestion is a replacement description. It is produced from the failing queries and the culprit names, using the description-optimization step PLAN.md already specifies (P8), once that step actually calls a provider. The suggestion is scored again in the same contexts that failed. It is not written onto the skill until the user clicks Apply, and Apply stays disabled when the re-test did not restore `fired alone` on the queries that broke.
+
+**Install warning.** After a new skill is installed, re-run the saved trigger queries of the skills already in the library, in the library context that now includes the new skill. Compare each query's outcome with the last saved outcome. Warn when a query moves from `fired alone` to `fired with others`, `hijacked`, or `none`. Name the new skill as the suspect. Do not block the install. The warning is the regression, and it links to the bisect view with the new skill pinned in the set.
+
+### L4 — Per-model pass bar
+
+L1 and the expectation run record a pass rate per model, not one rate for the whole matrix. The user sets a pass bar per suite. The default for triggers is the 0.5 threshold above. The default for expectations is the fraction of expectations that must pass.
+
+A description is flagged `strong-model only` when it meets the bar on every model the user marked strong, and misses the bar on at least one model they did not mark strong. The flag is stored on the trigger result and shown next to the description. It is not a failure by itself. A suite can require the bar on every selected model, which turns the flag into a failure.
+
+The model id and the adapter label (`claude-code`, `codex`, `cursor`, `emulated`) are both stored, so a strong-model flag is not confused with an emulated pass.
+
+### L5 — Gold set for the grader
+
+Optional file `evals/gold.json` next to `evals.json`. Each row is a hand label: a trigger query with the expected outcome (`fired alone`, `fired with others`, `hijacked`, `none`, and the culprit name when the label is `hijacked`), or an expectation id with the expected `passed` boolean. The person writes this file. The run does not generate it.
+
+When the file is present, the grader's verdicts and L1's outcomes on those rows are compared with the labels. The report shows agreement and the disagreements, with the transcript link. Disagreement does not change the suite's pass rate. It tells the user the grader and the labels diverged, which is the calibration. When the file is absent, the run records that calibration was not requested and does not invent labels.
+
+A gold row that names a culprit is wrong if the activation list's culprit differs, even when both say `hijacked`. That keeps the calibration on the same ordered list L1 stored.
