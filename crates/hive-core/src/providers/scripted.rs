@@ -54,6 +54,20 @@ impl ChatProvider for ScriptedProvider {
         sink.on_event(&StreamEvent::MessageStart {
             id: "scripted".into(),
         });
+        if request.metadata.purpose == "interview" {
+            return text_reply(
+                sink,
+                r#"{"assumed_name":"interview-skill","questions":["Which invoice date format should the CSV use?"],"skipped":[]}"#,
+                Usage::zero(),
+            );
+        }
+        if request.metadata.purpose == "optimize" {
+            return text_reply(
+                sink,
+                "Proposed description from the provider for invoice line items.",
+                Usage::zero(),
+            );
+        }
         if request.metadata.purpose == "grader" {
             let prompt = prompt_text(request);
             self.prompts.lock().expect("prompts").push(prompt);
@@ -215,7 +229,19 @@ fn grade_reply(
             "passed": passed,
             "evidence": "step 2"
         }],
-        "claims": [],
+        "claims": [{
+            "claim": "claim-from-provider",
+            "type": "process",
+            "verified": true,
+            "evidence": "step 2"
+        }],
+        "eval_feedback": {
+            "suggestions": [{
+                "assertion": "The answer file contains PINECONE",
+                "reason": "eval-feedback-from-provider"
+            }],
+            "overall": "eval-feedback-from-provider"
+        },
         "execution_metrics": {"total_tool_calls": 999},
         "timing": {"total_tokens": 1}
     });

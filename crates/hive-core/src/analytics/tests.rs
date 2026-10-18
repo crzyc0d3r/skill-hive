@@ -1,12 +1,15 @@
 use std::fs;
+use std::io::Read;
 
 use rusqlite::Connection;
+use zip::ZipArchive;
 
-use super::compare::{record_verdict, start_comparison, Side};
+use super::compare::{record_verdict, start_comparison, write_output_analysis, Side};
 use super::export::{export_workspace, CheckExport, ExpectationExport, ExportCell, ExportSlice};
-use super::history::{write_history, HistoryEntry};
+use super::history::{load_persisted_results, write_history, write_history_alerts, HistoryEntry};
 use super::optimize::{
-    apply_optimized, hit_stream, miss_stream, optimize, split_indices, Candidate, QueryScore,
+    apply_optimized, hit_stream, miss_stream, optimize, propose_description, split_indices,
+    Candidate, QueryScore,
 };
 use super::regression::{evaluate, ExpectationOutcome, RunSlice, SampleCell};
 use super::workflow::{demonstrate_d1, demonstrate_d2, demonstrate_d3};
@@ -14,6 +17,7 @@ use crate::authoring::versions::VersionSource;
 use crate::authoring::VersionStore;
 use crate::db::migrations::run_migrations;
 use crate::generation::skill_files;
+use crate::providers::ScriptedProvider;
 use crate::testing::python_bin;
 
 fn queries(pass: bool) -> Vec<QueryScore> {
@@ -333,6 +337,127 @@ fn workflows_d1_d2_and_d3_run_on_recorded_fixtures() {
     let d3 = demonstrate_d3(&tmp.path().join("d3")).unwrap();
     assert!(d3.notes[0].contains("Suggestion"));
     assert_eq!(d3.counts.unwrap().cell_rows, 2);
+}
+
+#[test]
+fn export_zip_copies_the_run_document_and_its_prompt() {
+    let tmp = tempfile::tempdir().unwrap();
+    let prompt = "PROMPT-FROM-RUN-DOCUMENT ship the ledger";
+    let document = serde_json::json!({
+        "prompt": prompt,
+        "runs": [{
+            "eval_id": 1,
+            "configuration": "with_skill",
+            "prompt": prompt,
+            "run_id": "run-from-disk"
+        }]
+    });
+    fs::write(
+        tmp.path().join("source-run.json"),
+        serde_json::to_string(&document).unwrap(),
+    )
+    .unwrap();
+    export_workspace(
+        tmp.path(),
+        &ExportSlice {
+            skill_name: "invoice-extractor".into(),
+            model: "fixture-model".into(),
+            cells: vec![export_cell(1, "with_skill", true)],
+        },
+    )
+    .unwrap();
+    let file = fs::File::open(tmp.path().join("export.zip")).unwrap();
+    let mut archive = ZipArchive::new(file).unwrap();
+    let mut benchmark = String::new();
+    archive
+        .by_name("iteration-1/benchmark.json")
+        .unwrap()
+        .read_to_string(&mut benchmark)
+        .unwrap();
+    assert!(benchmark.contains("run-from-disk"), "{benchmark}");
+    assert!(benchmark.contains(prompt), "{benchmark}");
+    let mut metadata = String::new();
+    archive
+        .by_name("iteration-1/eval-1/eval_metadata.json")
+        .unwrap()
+        .read_to_string(&mut metadata)
+        .unwrap();
+    assert!(metadata.contains(prompt), "{metadata}");
+    assert!(!metadata.contains("Recorded fixture prompt"));
+}
+
+#[test]
+fn results_loader_reads_the_persisted_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    let run = tmp.path().join("run.json");
+    let prompt = "PROMPT-LOADED-FROM-DISK for the october invoices";
+    fs::write(
+        &run,
+        serde_json::json!({
+            "run_id": "run-persisted",
+            "prompt": prompt,
+            "cells": [{"id": "cell-1", "pass_rate": 0.5}],
+            "notes": ["note-from-the-run"]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let out = tmp.path().join("results.json");
+    load_persisted_results(&run, &out).unwrap();
+    let text = fs::read_to_string(&out).unwrap();
+    assert!(text.contains(prompt), "{text}");
+    assert!(text.contains("cell-1"), "{text}");
+    assert!(text.contains("note-from-the-run"), "{text}");
+    assert!(!text.contains("Recorded fixture prompt"));
+}
+
+#[test]
+fn history_alerts_come_from_regression_rules() {
+    let tmp = tempfile::tempdir().unwrap();
+    let baseline = run_slice("base", 1.0, true, true, 1.0, true, 100.0);
+    let current = run_slice("drop", 0.5, true, true, 1.0, true, 100.0);
+    let baseline_path = tmp.path().join("baseline.json");
+    let current_path = tmp.path().join("current.json");
+    fs::write(&baseline_path, serde_json::to_string(&baseline).unwrap()).unwrap();
+    fs::write(&current_path, serde_json::to_string(&current).unwrap()).unwrap();
+    let out = tmp.path().join("alerts.json");
+    let alerts = write_history_alerts(&baseline_path, &current_path, &out).unwrap();
+    assert!(alerts.iter().any(|alert| alert.rule == "R1"));
+    let text = fs::read_to_string(&out).unwrap();
+    assert!(text.contains("\"R1\""), "{text}");
+}
+
+#[test]
+fn compare_analysis_quotes_the_two_output_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    let left = tmp.path().join("left.txt");
+    let right = tmp.path().join("right.txt");
+    fs::write(&left, "LEFT-OUTPUT-UNIQUE pine cone").unwrap();
+    fs::write(&right, "RIGHT-OUTPUT-UNIQUE birch").unwrap();
+    let out = tmp.path().join("analysis.json");
+    write_output_analysis(&left, &right, &out).unwrap();
+    let text = fs::read_to_string(&out).unwrap();
+    assert!(text.contains("LEFT-OUTPUT-UNIQUE pine cone"), "{text}");
+    assert!(text.contains("RIGHT-OUTPUT-UNIQUE birch"), "{text}");
+}
+
+#[test]
+fn optimize_writes_the_provider_description() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("invoice");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("SKILL.md"),
+        "---\nname: invoice\ndescription: old description\n---\n\nExtract invoices.\n",
+    )
+    .unwrap();
+    let written = propose_description(&dir, &ScriptedProvider::new("optimize")).unwrap();
+    assert_eq!(
+        written,
+        "Proposed description from the provider for invoice line items."
+    );
+    let skill = fs::read_to_string(dir.join("SKILL.md")).unwrap();
+    assert!(skill.contains(&written), "{skill}");
 }
 
 fn has_rule(report: &super::regression::RegressionReport, rule: &str) -> bool {

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
-import type { GitPreview } from "@/lib/ipc/actions";
+import { listScanRows, type GitPreview, type GitPreviewSkill } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
 import { t } from "@/lib/i18n";
 import { Screen } from "@/components/chrome";
@@ -39,6 +39,8 @@ export function InstallView({
   const [rename, setRename] = useState("");
   const [preview, setPreview] = useState(false);
   const [previewId, setPreviewId] = useState("");
+  const [previewSkills, setPreviewSkills] = useState<GitPreviewSkill[]>([]);
+  const [chosen, setChosen] = useState<string[]>([]);
   const [relative, setRelative] = useState(".");
   const [cancelled, setCancelled] = useState(false);
   const [folder, setFolder] = useState("");
@@ -48,6 +50,8 @@ export function InstallView({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [scanNames, setScanNames] = useState<Record<string, string>>({});
+  const [rescanned, setRescanned] = useState<ScanRow[] | null>(null);
+  const scanRows = rescanned ?? scanned;
   async function act(work: () => Promise<void>, done?: () => void) {
     setBusy(true);
     setError(null);
@@ -123,6 +127,8 @@ export function InstallView({
               setCancelled(false);
               if (result?.id) {
                 setPreviewId(result.id);
+                setPreviewSkills(result.skills);
+                setChosen(result.skills.map((skill) => skill.relative));
                 setRelative(result.skills[0]?.relative ?? ".");
               }
             });
@@ -137,8 +143,22 @@ export function InstallView({
                 Rename
                 <Input aria-label="Rename skill" value={rename} onChange={(event) => setRename(event.target.value)} className="h-8 ml-2" />
               </label>
+              <ul className="mt-2 space-y-1">
+                {(previewSkills.length ? previewSkills : [{ relative, name: rename || "skill" }]).map((skill) => (
+                  <li key={skill.relative}>
+                    <label className="text-sm">
+                      <input
+                        type="checkbox"
+                        aria-label={t("install.git.select", { name: skill.name })}
+                        checked={chosen.includes(skill.relative)}
+                        onChange={() => setChosen((current) => current.includes(skill.relative) ? current.filter((item) => item !== skill.relative) : [...current, skill.relative])}
+                      /> {skill.name}
+                    </label>
+                  </li>
+                ))}
+              </ul>
               <div className="mt-2 flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => { const label = rename || "skill"; void act(async () => { await onImportGit(url, rename, previewId, relative); }, () => setImported(label)); }}>
+                <Button type="button" variant="outline" size="sm" onClick={() => { const label = rename || "skill"; const picked = chosen.length ? chosen : [relative]; void act(async () => { for (const item of picked) await onImportGit(url, rename, previewId, item); }, () => setImported(label)); }}>
                   {t("install.git.import")}
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => { setCancelled(true); void onCancel(previewId); }}>
@@ -152,7 +172,7 @@ export function InstallView({
       {active === "scan" ? (
         <div className="mt-4">
           <ul>
-            {scanned.map((row) => {
+            {scanRows.map((row) => {
               const name = scanNames[row.name] ?? row.name;
               return (
                 <li key={`${row.tool}-${row.name}`} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -165,8 +185,11 @@ export function InstallView({
               );
             })}
           </ul>
-          <Button type="button" disabled={busy} variant="default" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanned.map((row) => row.name))))}>
+          <Button type="button" disabled={busy} variant="default" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>
             {t("install.scan.all")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="mt-2 ml-2" onClick={() => void listScanRows().then((rows) => setRescanned(rows))}>
+            {t("install.scan.rescan")}
           </Button>
         </div>
       ) : null}

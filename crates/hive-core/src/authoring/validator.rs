@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use super::frontmatter::{estimate_tokens, parse_document, Document, Scalar};
-use crate::library::skill_metadata::sanitize_skill_name;
+use crate::core::skill_metadata::sanitize_skill_name;
 
 pub const QV_RULES: &[&str] = &[
     "S-01", "S-03", "S-04", "S-05", "S-06", "S-23", "S-07", "S-08", "S-09", "S-10", "S-11", "S-12",
@@ -468,7 +468,9 @@ fn frontmatter_rules(
         }
     }
     if let Some(value) = doc.get("allowed-tools") {
-        if matches!(value, Scalar::Seq(_)) {
+        let comma_string = matches!(value, Scalar::Str { text, .. } if text.contains(','));
+        let not_a_string = !matches!(value, Scalar::Str { .. });
+        if not_a_string || (profile == Profile::Portable && comma_string) {
             let severity = if profile == Profile::Portable {
                 Severity::Error
             } else {
@@ -485,13 +487,12 @@ fn frontmatter_rules(
         }
     }
     if profile == Profile::ClaudeCode {
-        findings.extend(claude_enums(path, doc));
+        findings.extend(claude_enums(dir, path, doc));
     }
-    let _ = dir;
     findings
 }
 
-fn claude_enums(path: &str, doc: &Document) -> Vec<Finding> {
+fn claude_enums(dir: &Path, path: &str, doc: &Document) -> Vec<Finding> {
     let mut findings = Vec::new();
     for name in ["disable-model-invocation", "user-invocable", "background"] {
         if let Some(value) = doc.get(name) {
@@ -544,12 +545,7 @@ fn claude_enums(path: &str, doc: &Document) -> Vec<Finding> {
         }
     }
     if let Some(value) = doc.string("agent") {
-        let known = ["Explore", "Plan", "general-purpose"];
-        if !known.contains(&value)
-            && !value
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-        {
+        if !known_subagent(dir, value) {
             findings.push(Finding::new(
                 "S-25",
                 Severity::Error,
@@ -577,7 +573,7 @@ fn claude_enums(path: &str, doc: &Document) -> Vec<Finding> {
 fn body_rules(dir: &Path, path: &str, doc: &Document, profile: Profile) -> Vec<Finding> {
     let mut findings = Vec::new();
     let lines = doc.body.lines().count();
-    if lines >= 500 {
+    if lines > 500 {
         findings.push(Finding::new(
             "S-27",
             Severity::Warning,
@@ -627,50 +623,69 @@ fn body_rules(dir: &Path, path: &str, doc: &Document, profile: Profile) -> Vec<F
 
 fn validate_resources(dir: &Path, _profile: Profile) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let references = dir.join("references");
-    if references.is_dir() {
-        if let Ok(entries) = fs::read_dir(&references) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
-                    continue;
-                }
-                let text = fs::read_to_string(&path).unwrap_or_default();
-                if text.lines().count() > 300 && !has_toc(&text) {
-                    findings.push(Finding::new(
-                        "S-29",
-                        Severity::Info,
-                        rel(dir, &path),
-                        Some(1),
-                        "markdown longer than 300 lines needs a table of contents",
-                        Some("add-toc"),
-                    ));
-                }
-            }
-        }
-    }
-    let scripts = dir.join("scripts");
-    if scripts.is_dir() {
-        if let Ok(entries) = fs::read_dir(&scripts) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if !path.is_file() || !should_be_executable(&path) {
-                    continue;
-                }
-                if !is_executable(&path) {
-                    findings.push(Finding::new(
-                        "S-32",
-                        Severity::Warning,
-                        rel(dir, &path),
-                        None,
-                        "script is not executable",
-                        Some("set-executable"),
-                    ));
-                }
-            }
-        }
-    }
+    walk_markdown(dir, dir, &mut findings);
+    walk_scripts(dir, &dir.join("scripts"), &mut findings);
     findings
+}
+
+fn walk_markdown(root: &Path, dir: &Path, findings: &mut Vec<Finding>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name == ".git" || name == "node_modules" || name == "__pycache__" {
+                continue;
+            }
+            walk_markdown(root, &path, findings);
+            continue;
+        }
+        if entry.file_name() == "SKILL.md" {
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let text = fs::read_to_string(&path).unwrap_or_default();
+        if text.lines().count() > 300 && !has_toc(&text) {
+            findings.push(Finding::new(
+                "S-29",
+                Severity::Info,
+                rel(root, &path),
+                Some(1),
+                "markdown longer than 300 lines needs a table of contents",
+                Some("add-toc"),
+            ));
+        }
+    }
+}
+
+fn walk_scripts(root: &Path, dir: &Path, findings: &mut Vec<Finding>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walk_scripts(root, &path, findings);
+            continue;
+        }
+        if !path.is_file() || !should_be_executable(&path) {
+            continue;
+        }
+        if !is_executable(&path) {
+            findings.push(Finding::new(
+                "S-32",
+                Severity::Warning,
+                rel(root, &path),
+                None,
+                "script is not executable",
+                Some("set-executable"),
+            ));
+        }
+    }
 }
 
 fn validate_evals(dir: &Path) -> Vec<Finding> {
@@ -812,11 +827,18 @@ fn validate_grading_artifacts(dir: &Path) -> Vec<Finding> {
             ));
             continue;
         };
-        let expectations = json
-            .get("expectations")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
+        let Some(expectations) = json.get("expectations").and_then(|v| v.as_array()).cloned()
+        else {
+            findings.push(Finding::new(
+                "S-34",
+                Severity::Error,
+                rel(dir, &candidate),
+                Some(1),
+                "grading.json needs an expectations array",
+                None,
+            ));
+            continue;
+        };
         for item in expectations {
             let keys: Vec<&str> = item
                 .as_object()
@@ -856,11 +878,21 @@ fn validate_grading_artifacts(dir: &Path) -> Vec<Finding> {
             ));
             continue;
         };
-        let rows = json
-            .as_array()
-            .cloned()
-            .or_else(|| json.get("runs").and_then(|v| v.as_array()).cloned())
-            .unwrap_or_default();
+        let rows = if let Some(rows) = json.as_array().cloned() {
+            rows
+        } else if let Some(rows) = json.get("runs").and_then(|v| v.as_array()).cloned() {
+            rows
+        } else {
+            findings.push(Finding::new(
+                "S-34",
+                Severity::Error,
+                rel(dir, &candidate),
+                Some(1),
+                "benchmark.json must list runs",
+                None,
+            ));
+            continue;
+        };
         for row in rows {
             let configuration = row
                 .get("configuration")
@@ -892,7 +924,33 @@ fn validate_grading_artifacts(dir: &Path) -> Vec<Finding> {
 }
 
 pub fn validate_agent(path: &Path, plugin_mode: bool) -> Vec<Finding> {
-    validate_agent_with_peers(path, plugin_mode, &[])
+    let peers = sibling_agent_peers(path);
+    validate_agent_with_peers(path, plugin_mode, &peers)
+}
+
+fn sibling_agent_peers(path: &Path) -> Vec<(String, String)> {
+    let Some(parent) = path.parent() else {
+        return Vec::new();
+    };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return Vec::new();
+    };
+    let mut peers = Vec::new();
+    for entry in entries.flatten() {
+        let candidate = entry.path();
+        if candidate == path || candidate.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let text = fs::read_to_string(&candidate).unwrap_or_default();
+        let doc = parse_document(&text);
+        if let Some(name) = doc.string("name") {
+            peers.push((
+                name.to_string(),
+                doc.string("description").unwrap_or("").to_string(),
+            ));
+        }
+    }
+    peers
 }
 
 pub fn validate_agent_with_peers(
@@ -1343,7 +1401,30 @@ fn keys_exact(keys: &[&str], expected: &[&str]) -> bool {
 }
 
 fn is_string_map(value: &Scalar) -> bool {
-    matches!(value, Scalar::Map(_))
+    match value {
+        Scalar::Map(entries) => entries.iter().all(|(_, item)| !item.starts_with('\u{1}')),
+        _ => false,
+    }
+}
+
+fn known_subagent(dir: &Path, name: &str) -> bool {
+    if ["Explore", "Plan", "general-purpose"].contains(&name) {
+        return true;
+    }
+    let mut current = dir.to_path_buf();
+    loop {
+        if current
+            .join(".claude")
+            .join("agents")
+            .join(format!("{name}.md"))
+            .is_file()
+        {
+            return true;
+        }
+        if !current.pop() {
+            return false;
+        }
+    }
 }
 
 fn is_boolish(value: &Scalar) -> bool {
@@ -1370,19 +1451,7 @@ fn reserved_name(dir_name: &str, name: &str) -> bool {
 }
 
 pub fn directory_is_safe(name: &str) -> bool {
-    !name.is_empty() && sanitize_skill_name(name) == name && !is_windows_device(name)
-}
-
-fn is_windows_device(name: &str) -> bool {
-    let stem = name.split('.').next().unwrap_or(name);
-    let upper = stem.to_ascii_uppercase();
-    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || ((upper.starts_with("COM") || upper.starts_with("LPT"))
-            && upper[3..]
-                .parse::<u8>()
-                .ok()
-                .filter(|n| (1..=9).contains(n))
-                .is_some())
+    sanitize_skill_name(name).as_deref() == Some(name)
 }
 
 fn line_of(doc: &Document, name: &str) -> usize {
@@ -1451,13 +1520,19 @@ fn referenced_paths(body: &str) -> Vec<String> {
         if token.is_empty() || token.contains("://") || token.starts_with('#') {
             continue;
         }
-        if token.contains('/')
+        let relative_file = token.rsplit_once('.').is_some_and(|(_, ext)| {
+            matches!(
+                ext,
+                "md" | "py" | "sh" | "bash" | "js" | "json" | "txt" | "yml" | "yaml" | "toml"
+            )
+        });
+        if (token.contains('/') || relative_file)
             && !token.starts_with('/')
             && token
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '_' | '-' | '.'))
         {
-            paths.push(token.to_string());
+            paths.push(token.trim_start_matches("./").to_string());
         }
     }
     paths.sort();
@@ -1477,13 +1552,12 @@ fn has_toc(text: &str) -> bool {
 }
 
 fn should_be_executable(path: &Path) -> bool {
-    let text = fs::read_to_string(path).unwrap_or_default();
-    if text.starts_with("#!") {
-        return true;
+    if !path.is_file() {
+        return false;
     }
-    matches!(
+    !matches!(
         path.extension().and_then(|ext| ext.to_str()),
-        Some("py" | "sh" | "bash" | "ps1" | "js" | "rb")
+        Some("md" | "txt" | "json" | "yaml" | "yml")
     )
 }
 

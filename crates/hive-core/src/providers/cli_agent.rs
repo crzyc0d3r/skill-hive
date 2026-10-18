@@ -27,6 +27,7 @@ pub struct LocalCli {
     pub program: String,
     pub flavor: Flavor,
     pub model: Option<String>,
+    pub sandbox: Option<PathBuf>,
 }
 
 impl LocalCli {
@@ -36,6 +37,7 @@ impl LocalCli {
             program: program.into(),
             flavor: Flavor::ClaudeCli,
             model: None,
+            sandbox: None,
         }
     }
 }
@@ -73,12 +75,23 @@ impl ChatProvider for LocalCli {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let temporary = if self.sandbox.is_none() {
+            Some(
+                tempfile::tempdir()
+                    .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?,
+            )
+        } else {
+            None
+        };
+        let cwd = self
+            .sandbox
+            .as_deref()
+            .unwrap_or_else(|| temporary.as_ref().expect("sandbox").path());
         let output = run_claude(
             &self.program,
             &prompt,
             self.model.as_deref(),
-            &cwd,
+            cwd,
             cancel,
             true,
         )?;
@@ -369,7 +382,76 @@ pub struct DetectedCli {
     pub flags: Vec<String>,
 }
 
-pub fn detect_local_agent_clis(extra_dirs: &[PathBuf]) -> Vec<DetectedCli> {
+/// Codex keeps `--help` detection and also starts the child when the binary is present.
+/// Claude is spawned in `sandbox` with `claude -p` when `claude` is on PATH.
+pub fn start_clis_in_sandbox(sandbox: &Path) -> Result<Vec<DetectedCli>, ProviderError> {
+    fs_create(sandbox)?;
+    let dirs = search_dirs(&[]);
+    let mut found = Vec::new();
+    let cancel = CancellationToken::new();
+    for name in ["claude", "codex"] {
+        let Some(path) = find_on_dirs(name, &dirs) else {
+            continue;
+        };
+        let version = command_output(&path.to_string_lossy(), &["--version"])
+            .unwrap_or_else(|_| "unknown".into());
+        if name == "codex" {
+            let flags = help_flags(&path);
+            start_child(&path, &["exec"], sandbox)?;
+            found.push(DetectedCli {
+                name: name.into(),
+                path: path.to_string_lossy().into_owned(),
+                version,
+                flags,
+            });
+        } else {
+            let _ = run_claude(
+                &path.to_string_lossy(),
+                "Reply OK",
+                None,
+                sandbox,
+                &cancel,
+                false,
+            )?;
+            found.push(DetectedCli {
+                name: name.into(),
+                path: path.to_string_lossy().into_owned(),
+                version,
+                flags: Vec::new(),
+            });
+        }
+    }
+    Ok(found)
+}
+
+fn fs_create(path: &Path) -> Result<(), ProviderError> {
+    std::fs::create_dir_all(path)
+        .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))
+}
+
+fn start_child(program: &Path, args: &[&str], sandbox: &Path) -> Result<(), ProviderError> {
+    let mut command = command_for(&program.to_string_lossy());
+    command.args(args);
+    command.current_dir(sandbox);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command.env_remove("CLAUDECODE");
+    let mut child = spawn_grouped(&mut command)?;
+    let status = child
+        .wait()
+        .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?;
+    if !status.success() {
+        return Err(ProviderError::new(
+            ErrorClass::Other,
+            format!("cli exit {}", status.code().unwrap_or(-1)),
+        ));
+    }
+    Ok(())
+}
+
+fn search_dirs(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
     let mut dirs = extra_dirs.to_vec();
     if let Some(path) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&path));
@@ -377,6 +459,11 @@ pub fn detect_local_agent_clis(extra_dirs: &[PathBuf]) -> Vec<DetectedCli> {
     if let Some(home) = dirs::home_dir() {
         dirs.push(home.join(".skills-manager").join("bin"));
     }
+    dirs
+}
+
+pub fn detect_local_agent_clis(extra_dirs: &[PathBuf]) -> Vec<DetectedCli> {
+    let dirs = search_dirs(extra_dirs);
     let mut found = Vec::new();
     for name in ["claude", "codex"] {
         if let Some(path) = find_on_dirs(name, &dirs) {

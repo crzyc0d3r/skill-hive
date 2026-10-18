@@ -1,5 +1,6 @@
 //! Provider acceptance tests. Live calls stay on 127.0.0.1. Vendor hosts are never contacted.
 
+use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
@@ -825,4 +826,232 @@ fn job_object_kills_the_grandchild() {
         !finished.exists(),
         "grandchild kept running after the job was terminated"
     );
+}
+
+#[cfg(unix)]
+static CLI_PATH_LOCK: Mutex<()> = Mutex::new(());
+
+#[cfg(unix)]
+#[test]
+fn claude_on_path_is_spawned_in_the_sandbox() {
+    let _guard = CLI_PATH_LOCK.lock().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let bin = root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let log = root.path().join("args.txt");
+    let script = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$PWD\" >> '{}'\nprintf '%s\\n' \"$*\" >> '{}'\ncase \"$1\" in\n  --version) echo fixture-cli ;;\n  --help) echo '--model --sandbox' ;;\n  *) printf '%s\\n' '{{\"type\":\"result\",\"result\":\"OK\",\"usage\":{{\"input_tokens\":1,\"output_tokens\":1}},\"duration_ms\":1}}' ;;\nesac\nexit 0\n",
+        log.display(),
+        log.display()
+    );
+    for name in ["claude", "codex"] {
+        let path = bin.join(name);
+        fs::write(&path, &script).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&path, permissions).unwrap();
+    }
+    let sandbox = root.path().join("sandbox");
+    let old = std::env::var("PATH").unwrap_or_default();
+    std::env::set_var("PATH", format!("{}:{}", bin.display(), old));
+    let started = start_clis_in_sandbox(&sandbox);
+    std::env::set_var("PATH", &old);
+    started.unwrap();
+    let recorded = fs::read_to_string(&log).unwrap();
+    assert!(
+        recorded.contains(sandbox.to_string_lossy().as_ref()),
+        "{recorded}"
+    );
+    assert!(recorded.contains("-p"), "{recorded}");
+    assert!(recorded.contains("Reply OK"), "{recorded}");
+    assert!(recorded.contains("--help"), "{recorded}");
+    assert!(recorded.contains("exec"), "{recorded}");
+}
+
+#[test]
+fn token_bucket_refuses_the_second_request_in_the_same_minute() {
+    let root = tempfile::tempdir().unwrap();
+    let db = root.path().join("hive.db");
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    crate::db::migrations::run_migrations(&conn).unwrap();
+    let config = sample_config(ProviderKind::Anthropic, None, "http://127.0.0.1:9", None);
+    upsert_provider(&conn, &config).unwrap();
+    conn.execute(
+        "UPDATE provider_configs SET rpm_limit = 1 WHERE id = ?1",
+        [config.id.as_str()],
+    )
+    .unwrap();
+    drop(conn);
+    let middleware = Middleware {
+        mode: RunMode::Live,
+        recordings_dir: root.path().join("recordings"),
+        kind: "anthropic".into(),
+        max_retries: 0,
+        limiter: Limiter::new(2),
+        sleeper: Box::new(NoopSleeper::new()),
+        secrets: Vec::new(),
+        pricing: Pricing {
+            input_per_mtok: 1_000_000.0,
+            output_per_mtok: 1_000_000.0,
+            cache_read_per_mtok: 0.0,
+            cache_write_per_mtok: 0.0,
+        },
+        provider_id: config.id.clone(),
+        hits: Mutex::new(0),
+    };
+    middleware
+        .limiter
+        .load_provider_budget(&db, &config.id, 1_700_000_000)
+        .unwrap();
+    let provider = ScriptedProvider::new("budget");
+    let mut sink = VecSink::default();
+    let (response, row) = middleware
+        .complete(
+            &provider,
+            &request("executor"),
+            &mut sink,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    assert!(!response.text.is_empty() || !response.tool_uses.is_empty());
+    assert!(row.cost_usd > 0.0);
+    let err = middleware
+        .complete(
+            &provider,
+            &request("executor"),
+            &mut VecSink::default(),
+            &CancellationToken::new(),
+        )
+        .unwrap_err();
+    assert_eq!(err.class, ErrorClass::RateLimited);
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let rows: Vec<(String, f64, Option<String>)> = {
+        let mut stmt = conn
+            .prepare("SELECT status, cost_usd, error_kind FROM usage_ledger ORDER BY id")
+            .unwrap();
+        let mapped = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, f64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .unwrap();
+        mapped.map(|row| row.unwrap()).collect()
+    };
+    assert!(
+        rows.iter()
+            .any(|(status, cost, _)| status == "ok" && *cost > 0.0),
+        "{rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .any(|(status, _, kind)| status == "rate_limited" && kind.as_deref() == Some("rpm")),
+        "{rows:?}"
+    );
+}
+
+#[test]
+fn probe_persists_last_test_and_stage_two_can_fail() {
+    let root = tempfile::tempdir().unwrap();
+    let db_path = root.path().join("hive.db");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    crate::db::migrations::run_migrations(&conn).unwrap();
+    let mut broken = sample_config(ProviderKind::Anthropic, None, "http://127.0.0.1:9", None);
+    broken.proxy_mode = "down".into();
+    broken.id = "proxy-down".into();
+    broken.name = "Proxy down".into();
+    upsert_provider(&conn, &broken).unwrap();
+    let report = probe_and_persist(
+        &broken,
+        &SecretString::new("secret"),
+        &CancellationToken::new(),
+        &conn,
+    );
+    assert!(
+        report
+            .stages
+            .iter()
+            .any(|stage| stage.name == "proxy" && !stage.ok),
+        "{:?}",
+        report.stages
+    );
+    let (at, ok, latency): (i64, i64, i64) = conn
+        .query_row(
+            "SELECT last_test_at, last_test_ok, last_test_latency_ms FROM provider_configs WHERE id = 'proxy-down'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert!(at > 1_700_000_000, "{at}");
+    assert_eq!(ok, 0);
+    assert!(latency >= 1);
+
+    let log = root.path().join("claude-args.txt");
+    #[cfg(unix)]
+    let program = {
+        let program = root.path().join("claude");
+        let script = format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\ncase \"$1\" in\n  --version) echo fixture-cli ;;\n  --help) echo '--model' ;;\n  *) printf '%s\\n' '{{\"type\":\"assistant\",\"message\":{{\"content\":[{{\"type\":\"text\",\"text\":\"OK\"}}]}}}}' '{{\"type\":\"result\",\"usage\":{{\"input_tokens\":1,\"output_tokens\":1}},\"duration_ms\":1}}' ;;\nesac\nexit 0\n",
+            log.display()
+        );
+        fs::write(&program, script).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&program).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&program, permissions).unwrap();
+        program
+    };
+    #[cfg(windows)]
+    let program = {
+        let program = root.path().join("claude.cmd");
+        fs::write(
+            &program,
+            "@echo off\r\necho %*>> \"".to_string()
+                + &log.display().to_string()
+                + "\"\r\nif \"%~1\"==\"--version\" echo fixture-cli & exit /b 0\r\necho {\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"OK\"}]}}\r\nexit /b 0\r\n",
+        )
+        .unwrap();
+        program
+    };
+    let mut cli = sample_config(
+        ProviderKind::LocalCli,
+        Some(Flavor::ClaudeCli),
+        "http://127.0.0.1:9",
+        Some(program.to_string_lossy().into_owned()),
+    );
+    cli.id = "claude-probe".into();
+    cli.name = "Claude probe".into();
+    cli.default_model = None;
+    cli.auth_mode = "none".into();
+    cli.supports_tools = false;
+    upsert_provider(&conn, &cli).unwrap();
+    let cli_report = probe_and_persist(
+        &cli,
+        &SecretString::new(""),
+        &CancellationToken::new(),
+        &conn,
+    );
+    assert!(
+        cli_report
+            .stages
+            .iter()
+            .any(|stage| stage.name == "cli" && stage.ok),
+        "{:?}",
+        cli_report.stages
+    );
+    let recorded = fs::read_to_string(&log).unwrap();
+    assert!(recorded.contains("-p"), "{recorded}");
+    assert!(recorded.contains("Reply OK"), "{recorded}");
+    let (cli_ok, cli_latency): (i64, i64) = conn
+        .query_row(
+            "SELECT last_test_ok, last_test_latency_ms FROM provider_configs WHERE id = 'claude-probe'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(cli_ok, 1);
+    assert_eq!(cli_latency as u64, cli_report.latency_ms);
 }

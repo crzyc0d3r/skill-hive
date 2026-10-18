@@ -1,9 +1,9 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { filterMarket, MARKET_FIXTURE, type MarketSkill } from "@/features/install/market";
-import { beginMarketInstall, cancelMarketInstall, fetchLeaderboard, marketInstallResult } from "@/lib/ipc/actions";
+import { beginMarketInstall, cancelMarketInstall, fetchLeaderboard, marketInstallResult, searchSkillsSh } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
 import { t } from "@/lib/i18n";
 
@@ -13,6 +13,16 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
   const [installed, setInstalled] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [remote, setRemote] = useState<MarketSkill[] | null>(null);
+  useEffect(() => {
+    if (demoEnabled() || !query.trim()) return;
+    const handle = window.setTimeout(() => {
+      void searchSkillsSh(query.trim()).then((rows) => {
+        if (Array.isArray(rows)) setRemote(rows);
+      });
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [query]);
   const leaderboard = useQuery({
     queryKey: ["leaderboard", demoEnabled()],
     queryFn: () =>
@@ -28,7 +38,7 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
         : fetchLeaderboard(),
     enabled: reachable && !skills,
   });
-  const source = skills ?? leaderboard.data ?? [];
+  const source = remote ?? skills ?? leaderboard.data ?? [];
   const rows = filterMarket(source, query, owner);
   const owners = [...new Set(source.map((skill) => skill.owner))];
   if (!reachable) return <p className="mt-4 text-sm text-muted-foreground">{t("install.leaderboard.empty")}</p>;

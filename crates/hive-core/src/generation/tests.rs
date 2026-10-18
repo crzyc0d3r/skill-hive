@@ -11,6 +11,7 @@ use super::session::{
 use super::templates::{render, Template};
 use crate::authoring::{validate_skill, Profile, Severity};
 use crate::db::migrations::run_migrations;
+use crate::providers::ScriptedProvider;
 
 fn vars() -> BTreeMap<String, String> {
     let mut vars = BTreeMap::new();
@@ -282,4 +283,39 @@ fn drafted_trigger_set_has_at_least_sixteen_queries() {
     }
     let parsed = draft_trigger_set(&serde_json::Value::Array(rows).to_string()).unwrap();
     assert!(parsed.len() >= 16);
+    let err = draft_trigger_set("[]").unwrap_err();
+    assert_eq!(err, "trigger set has 0 queries");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("trigger-error.txt");
+    fs::write(&path, &err).unwrap();
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "trigger set has 0 queries"
+    );
+}
+
+#[test]
+fn interview_persists_the_provider_question() {
+    let root = tempfile::tempdir().unwrap();
+    let mut session = GenerationSession::start(
+        root.path(),
+        None,
+        Kind::Skill,
+        "Extract line items from supplier invoice PDFs into a CSV",
+        "interview-skill",
+        Profile::Portable,
+    )
+    .unwrap();
+    session
+        .interview(
+            &ScriptedProvider::new("interview"),
+            "Use ISO dates in the date column.",
+        )
+        .unwrap();
+    let text = fs::read_to_string(session.staging.join("interview.json")).unwrap();
+    assert!(
+        text.contains("Which invoice date format should the CSV use?"),
+        "{text}"
+    );
+    assert!(text.contains("Use ISO dates in the date column."), "{text}");
 }

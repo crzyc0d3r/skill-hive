@@ -71,25 +71,35 @@ fn build_menu(
             tools.len()
         })
         .unwrap_or(0);
-    let model = build_tray_menu_from_data(skill_count, update_count, agent_count, &borrowed);
+    let active = store.get_active_scenario_id().ok().flatten();
+    let model = build_tray_menu_from_data(
+        skill_count,
+        update_count,
+        agent_count,
+        &borrowed,
+        active.as_deref(),
+    );
     let status = MenuItem::with_id(app, "status", label(&model, "status"), false, None::<&str>)?;
     let updates = MenuItem::with_id(app, "updates", label(&model, "updates"), true, None::<&str>)?;
     let mut preset_items: Vec<MenuItem<tauri::Wry>> = Vec::new();
     for (id, name) in &pairs {
-        preset_items.push(MenuItem::with_id(
-            app,
-            format!("apply:{id}"),
-            format!("Apply {name}"),
-            true,
-            None::<&str>,
-        )?);
-        preset_items.push(MenuItem::with_id(
-            app,
-            format!("remove:{id}"),
-            format!("Remove {name}"),
-            true,
-            None::<&str>,
-        )?);
+        if active.as_deref() == Some(id.as_str()) {
+            preset_items.push(MenuItem::with_id(
+                app,
+                format!("remove:{id}"),
+                format!("Remove {name}"),
+                true,
+                None::<&str>,
+            )?);
+        } else {
+            preset_items.push(MenuItem::with_id(
+                app,
+                format!("apply:{id}"),
+                format!("Apply {name}"),
+                true,
+                None::<&str>,
+            )?);
+        }
     }
     let preset_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = preset_items
         .iter()
@@ -172,6 +182,15 @@ pub fn refresh(app: &tauri::AppHandle) -> Result<Vec<String>, Box<dyn std::error
     Ok(pairs.into_iter().map(|(_, name)| name).collect())
 }
 
+fn tray_hidden(store: &SkillStore) -> bool {
+    for key in ["show_tray_icon", "trayIcon", "tray"] {
+        if let Ok(Some(value)) = store.get_setting(key) {
+            return matches!(value.as_str(), "off" | "0" | "false");
+        }
+    }
+    false
+}
+
 pub fn install(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let Some(store) = app.try_state::<Arc<SkillStore>>() else {
         return Ok(());
@@ -181,11 +200,7 @@ pub fn install(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>>
     let Some(icon) = app.default_window_icon().cloned() else {
         return Ok(());
     };
-    let tray_off = store
-        .get_setting("trayIcon")
-        .ok()
-        .flatten()
-        .is_some_and(|value| value == "off");
+    let tray_off = tray_hidden(store.inner());
     if tray_off {
         return Ok(());
     }
@@ -224,17 +239,11 @@ pub fn on_window(window: &tauri::Window, event: &WindowEvent) {
     let Some(store) = window.try_state::<Arc<SkillStore>>() else {
         return;
     };
-    let choice = store
-        .get_setting("closeBehaviour")
-        .ok()
-        .flatten()
+    let choice = ["close_action", "closeBehaviour", "close_behavior"]
+        .iter()
+        .find_map(|key| store.get_setting(key).ok().flatten())
         .unwrap_or_else(|| "ask".into());
-    let tray_on = store
-        .get_setting("trayIcon")
-        .ok()
-        .flatten()
-        .map(|value| value != "off")
-        .unwrap_or(true);
+    let tray_on = !tray_hidden(store.inner());
     match close_effect(effective_close(choice_from(&choice), tray_on)) {
         "quit" => {}
         "hide_to_tray" => {

@@ -142,6 +142,58 @@ pub fn import_agent_local_skill_to_center(
     Ok(installed.record.id)
 }
 
+/// Recreate a recorded agent target whose path is missing or whose symlink is broken.
+pub fn repair_stranded_targets(
+    store: &SkillStore,
+    tool: &str,
+    agent_skills: &Path,
+) -> Result<usize> {
+    let _ = agent_skills;
+    let mut repaired = 0usize;
+    let os = if cfg!(windows) {
+        OsKind::Windows
+    } else {
+        OsKind::Unix
+    };
+    for skill in store.get_all_skills()? {
+        let central = PathBuf::from(&skill.central_path);
+        if !central.is_dir() {
+            continue;
+        }
+        for target in store.get_targets_for_skill(&skill.id)? {
+            if target.tool != tool || !target_is_stranded(Path::new(&target.target_path)) {
+                continue;
+            }
+            let path = PathBuf::from(&target.target_path);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            deploy_skill(&central, &path, SyncMode::Symlink, os, &NativeBackend)
+                .map_err(|err| anyhow!(err.to_string()))?;
+            repaired += 1;
+        }
+    }
+    Ok(repaired)
+}
+
+fn target_is_stranded(path: &Path) -> bool {
+    match fs::symlink_metadata(path) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
+        Ok(meta) if meta.file_type().is_symlink() => fs::read_link(path)
+            .ok()
+            .map(|target| {
+                let absolute = if target.is_absolute() {
+                    target
+                } else {
+                    path.parent().unwrap_or(path).join(target)
+                };
+                !absolute.exists()
+            })
+            .unwrap_or(true),
+        _ => false,
+    }
+}
+
 pub fn pull_center_to_agent(
     store: &SkillStore,
     skill_id: &str,

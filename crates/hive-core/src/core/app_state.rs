@@ -587,4 +587,20 @@ mod tests {
             Some(to.join("skills/s").to_string_lossy().as_ref())
         );
     }
+
+    #[test]
+    fn initialize_store_opens_the_database_and_a_default_scenario() {
+        let _lock = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        central_repo::set_test_base_dir_override(Some(tmp.path().join("repo")));
+        let (store, timings) = initialize_store().unwrap();
+        assert!(central_repo::db_path().is_file());
+        assert!(timings.total_ms > 0 || timings.open_store_ms < u128::MAX);
+        assert!(store
+            .get_all_scenarios()
+            .unwrap()
+            .iter()
+            .any(|scenario| scenario.name == "Default"));
+        central_repo::set_test_base_dir_override(None);
+    }
 }

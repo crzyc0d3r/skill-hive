@@ -2,10 +2,13 @@
 //! Endpoint ids are replaced by display names. Secret-looking tokens are dropped.
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde_json::json;
+use serde_json::{json, Value};
+use zip::write::SimpleFileOptions;
+use zip::ZipWriter;
 
 use crate::testing::python_bin;
 
@@ -52,6 +55,7 @@ pub struct ExportCounts {
 }
 
 pub fn export_workspace(root: &Path, slice: &ExportSlice) -> Result<ExportCounts, String> {
+    let source = load_source_run(root);
     let iteration = root.join("iteration-1");
     fs::create_dir_all(&iteration).map_err(|err| err.to_string())?;
     let mut evals: Vec<i64> = slice.cells.iter().map(|cell| cell.eval_id).collect();
@@ -69,7 +73,7 @@ pub fn export_workspace(root: &Path, slice: &ExportSlice) -> Result<ExportCounts
         let metadata = json!({
             "eval_id": eval_id,
             "eval_name": name,
-            "prompt": "Recorded fixture prompt",
+            "prompt": prompt_for(source.as_ref(), *eval_id),
             "assertions": []
         });
         fs::write(
@@ -81,6 +85,11 @@ pub fn export_workspace(root: &Path, slice: &ExportSlice) -> Result<ExportCounts
             write_cell(&dir, cell)?;
         }
     }
+    let runs = source
+        .as_ref()
+        .and_then(|doc| doc.get("runs"))
+        .cloned()
+        .unwrap_or(json!([]));
     let benchmark = json!({
         "metadata": {
             "skill_name": slice.skill_name,
@@ -89,7 +98,7 @@ pub fn export_workspace(root: &Path, slice: &ExportSlice) -> Result<ExportCounts
             "timestamp": "2026-01-15T10:30:00Z",
             "evals_run": evals
         },
-        "runs": [],
+        "runs": runs,
         "run_summary": {},
         "notes": []
     });
@@ -119,6 +128,7 @@ pub fn export_workspace(root: &Path, slice: &ExportSlice) -> Result<ExportCounts
             return Err("export leaked an endpoint id".into());
         }
     }
+    write_export_zip(root)?;
     Ok(ExportCounts {
         testcases,
         cell_rows,
@@ -269,4 +279,67 @@ fn render_static(workspace: &Path, html: &Path) -> Result<(), String> {
         return Err("static review was not written".into());
     }
     Ok(())
+}
+
+fn load_source_run(root: &Path) -> Option<Value> {
+    let text = fs::read_to_string(root.join("source-run.json")).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn prompt_for(source: Option<&Value>, eval_id: i64) -> String {
+    let Some(source) = source else {
+        return "Recorded fixture prompt".into();
+    };
+    if let Some(runs) = source.get("runs").and_then(Value::as_array) {
+        for run in runs {
+            if run.get("eval_id").and_then(Value::as_i64) == Some(eval_id) {
+                if let Some(prompt) = run.get("prompt").and_then(Value::as_str) {
+                    return prompt.to_string();
+                }
+            }
+        }
+    }
+    source
+        .get("prompt")
+        .and_then(Value::as_str)
+        .unwrap_or("Recorded fixture prompt")
+        .to_string()
+}
+
+pub fn write_export_zip(root: &Path) -> Result<PathBuf, String> {
+    let zip_path = root.join("export.zip");
+    let mut files = Vec::new();
+    collect_files(root, &mut files);
+    files.retain(|path| path != &zip_path);
+    let file = fs::File::create(&zip_path).map_err(|err| err.to_string())?;
+    let mut writer = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    for path in files {
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|err| err.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        writer
+            .start_file(rel, options)
+            .map_err(|err| err.to_string())?;
+        let bytes = fs::read(&path).map_err(|err| err.to_string())?;
+        writer.write_all(&bytes).map_err(|err| err.to_string())?;
+    }
+    writer.finish().map_err(|err| err.to_string())?;
+    Ok(zip_path)
+}
+
+fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, out);
+        } else if path.is_file() {
+            out.push(path);
+        }
+    }
 }

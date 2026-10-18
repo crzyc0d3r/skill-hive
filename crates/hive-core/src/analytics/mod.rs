@@ -9,13 +9,16 @@ mod regression;
 mod workflow;
 
 pub use compare::{
-    record_verdict, start_analysis, start_comparison, store_verdict, Comparison, Side,
+    record_verdict, start_analysis, start_comparison, store_verdict, write_output_analysis,
+    Comparison, Side,
 };
 pub use export::{
     export_workspace, CheckExport, ExpectationExport, ExportCell, ExportCounts, ExportSlice,
 };
-pub use history::{write_history, HistoryEntry};
-pub use optimize::{apply_optimized, optimize, Candidate, OptimizeOutcome, QueryScore};
+pub use history::{load_persisted_results, write_history, write_history_alerts, HistoryEntry};
+pub use optimize::{
+    apply_optimized, optimize, propose_description, Candidate, OptimizeOutcome, QueryScore,
+};
 pub use regression::{
     evaluate, set_baseline, Alert, ExpectationOutcome, RegressionReport, RunSlice, SampleCell,
 };

@@ -73,7 +73,43 @@ fn register_suite(name: &str, skill: &Path) -> Result<(), Fail> {
     )
     .map_err(|err| Fail::other(err.to_string()))
 }
-pub fn test_run(skill: &Path) -> Result<Value, Fail> {
+pub fn test_run(skill: &Path, mode: &str) -> Result<Value, Fail> {
+    if mode != "replay" {
+        if let Some(url) = crate::providers::local_base_url() {
+            return test_run_live(skill, mode, &url);
+        }
+    }
+    if mode == "live" {
+        return Err(Fail::other(
+            "only offline and replay modes are available without an API key",
+        ));
+    }
+    test_run_scripted(skill)
+}
+
+fn test_run_live(skill: &Path, mode: &str, url: &str) -> Result<Value, Fail> {
+    let root = central_repo::base_dir().join("test-runs");
+    fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
+    let body = json!({
+        "skill": skill.display().to_string(),
+        "mode": mode
+    })
+    .to_string();
+    let response = crate::providers::post_local(url, &body).map_err(Fail::other)?;
+    fs::write(root.join("last.json"), &response).map_err(|err| Fail::other(err.to_string()))?;
+    let parsed: Value = serde_json::from_str(&response).unwrap_or(Value::Null);
+    let status = parsed
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("passed");
+    let run_id = parsed
+        .get("run_id")
+        .and_then(Value::as_str)
+        .unwrap_or("live");
+    Ok(json!({"command": "test.run", "status": status, "run_id": run_id}))
+}
+
+fn test_run_scripted(skill: &Path) -> Result<Value, Fail> {
     let root = central_repo::base_dir().join("test-runs");
     fs::create_dir_all(&root).map_err(|err| Fail::other(err.to_string()))?;
     let spec = Plan {
@@ -227,7 +263,7 @@ pub fn test_export() -> Result<Value, Fail> {
     }))
 }
 pub fn replay_mode(mode: &str) -> Result<(), Fail> {
-    if mode == "offline" || mode == "replay" {
+    if mode == "offline" || mode == "replay" || mode == "live" {
         Ok(())
     } else {
         Err(Fail::other(

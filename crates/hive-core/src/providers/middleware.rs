@@ -52,11 +52,49 @@ impl Sleeper for NoopSleeper {
     }
 }
 
+struct TokenBucket {
+    capacity: f64,
+    available: f64,
+    per_second: f64,
+    last_ms: u64,
+}
+
+impl TokenBucket {
+    fn new(per_minute: f64, now_ms: u64) -> Self {
+        Self {
+            capacity: per_minute,
+            available: per_minute,
+            per_second: per_minute / 60.0,
+            last_ms: now_ms,
+        }
+    }
+
+    fn take(&mut self, cost: f64, now_ms: u64) -> bool {
+        let elapsed = now_ms.saturating_sub(self.last_ms) as f64 / 1000.0;
+        self.last_ms = now_ms;
+        self.available = (self.available + elapsed * self.per_second).min(self.capacity);
+        if self.available < cost {
+            return false;
+        }
+        self.available -= cost;
+        true
+    }
+}
+
+struct RateGate {
+    rpm: Option<TokenBucket>,
+    tpm: Option<TokenBucket>,
+    now_ms: u64,
+    ledger: Option<PathBuf>,
+    provider_id: String,
+}
+
 pub struct Limiter {
     max: usize,
     current: Mutex<usize>,
     cv: Condvar,
     pub peak: Mutex<usize>,
+    rates: Mutex<Option<RateGate>>,
 }
 
 impl Limiter {
@@ -66,7 +104,132 @@ impl Limiter {
             current: Mutex::new(0),
             cv: Condvar::new(),
             peak: Mutex::new(0),
+            rates: Mutex::new(None),
         }
+    }
+
+    /// Load `rpm_limit` and `tpm_limit` from a provider row and arm the token buckets.
+    /// `now_secs` is the clock for the current minute so tests can hold time still.
+    pub fn load_provider_budget(
+        &self,
+        db: &Path,
+        provider_id: &str,
+        now_secs: u64,
+    ) -> Result<(), ProviderError> {
+        let conn = rusqlite::Connection::open(db)
+            .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?;
+        let (rpm, tpm): (Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT rpm_limit, tpm_limit FROM provider_configs WHERE id = ?1",
+                (provider_id,),
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?;
+        let now_ms = now_secs.saturating_mul(1000);
+        let rpm_bucket = rpm
+            .filter(|value| *value >= 0)
+            .map(|value| TokenBucket::new(value as f64, now_ms));
+        let tpm_bucket = tpm
+            .filter(|value| *value >= 0)
+            .map(|value| TokenBucket::new(value as f64, now_ms));
+        *self.rates.lock().expect("rates") = Some(RateGate {
+            rpm: rpm_bucket,
+            tpm: tpm_bucket,
+            now_ms,
+            ledger: Some(db.to_path_buf()),
+            provider_id: provider_id.to_string(),
+        });
+        Ok(())
+    }
+
+    pub fn try_acquire_budget(
+        &self,
+        model: &str,
+        purpose: &str,
+        tokens: u64,
+    ) -> Result<(), ProviderError> {
+        let mut guard = self.rates.lock().expect("rates");
+        let Some(gate) = guard.as_mut() else {
+            return Ok(());
+        };
+        if gate.rpm.is_none() && gate.tpm.is_none() {
+            return Ok(());
+        }
+        let now_ms = gate.now_ms;
+        let tokens = tokens.max(1);
+        let rpm_refused = gate
+            .rpm
+            .as_mut()
+            .is_some_and(|bucket| !bucket.take(1.0, now_ms));
+        if rpm_refused {
+            let ledger = gate.ledger.clone();
+            let provider_id = gate.provider_id.clone();
+            drop(guard);
+            write_ledger_row(
+                ledger.as_deref(),
+                &LedgerWrite {
+                    provider_id: &provider_id,
+                    model,
+                    purpose,
+                    cost_usd: 0.0,
+                    status: "rate_limited",
+                    error_kind: Some("rpm"),
+                    ts: now_ms / 1000,
+                },
+            )?;
+            let mut err =
+                ProviderError::new(ErrorClass::RateLimited, "requests per minute exceeded");
+            err.retryable = false;
+            return Err(err);
+        }
+        let tpm_refused = gate
+            .tpm
+            .as_mut()
+            .is_some_and(|bucket| !bucket.take(tokens as f64, now_ms));
+        if tpm_refused {
+            let ledger = gate.ledger.clone();
+            let provider_id = gate.provider_id.clone();
+            drop(guard);
+            write_ledger_row(
+                ledger.as_deref(),
+                &LedgerWrite {
+                    provider_id: &provider_id,
+                    model,
+                    purpose,
+                    cost_usd: 0.0,
+                    status: "rate_limited",
+                    error_kind: Some("tpm"),
+                    ts: now_ms / 1000,
+                },
+            )?;
+            let mut err = ProviderError::new(ErrorClass::RateLimited, "tokens per minute exceeded");
+            err.retryable = false;
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub fn record_cost(&self, row: &LedgerRow) {
+        let guard = self.rates.lock().expect("rates");
+        let Some(gate) = guard.as_ref() else {
+            return;
+        };
+        let now_ms = gate.now_ms;
+        let ledger = gate.ledger.clone();
+        let provider_id = gate.provider_id.clone();
+        drop(guard);
+        let _ = write_ledger_row(
+            ledger.as_deref(),
+            &LedgerWrite {
+                provider_id: &provider_id,
+                model: &row.model,
+                purpose: &row.purpose,
+                cost_usd: row.cost_usd,
+                status: &row.status,
+                error_kind: row.error_kind.as_deref(),
+                ts: now_ms / 1000,
+            },
+        );
     }
 
     pub fn acquire(&self, cancel: &CancellationToken) -> Result<Permit<'_>, ProviderError> {
@@ -93,6 +256,38 @@ impl Limiter {
         drop(current);
         Ok(Permit { limiter: self })
     }
+}
+
+struct LedgerWrite<'a> {
+    provider_id: &'a str,
+    model: &'a str,
+    purpose: &'a str,
+    cost_usd: f64,
+    status: &'a str,
+    error_kind: Option<&'a str>,
+    ts: u64,
+}
+
+fn write_ledger_row(db: Option<&Path>, row: &LedgerWrite<'_>) -> Result<(), ProviderError> {
+    let Some(db) = db else {
+        return Ok(());
+    };
+    let conn = rusqlite::Connection::open(db)
+        .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?;
+    conn.execute(
+        "INSERT INTO usage_ledger (ts, provider_config_id, model, purpose, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, status, error_kind) VALUES (?1, ?2, ?3, ?4, 0, 0, 0, 0, ?5, ?6, ?7)",
+        (
+            row.ts as i64,
+            row.provider_id,
+            row.model,
+            row.purpose,
+            row.cost_usd,
+            row.status,
+            row.error_kind,
+        ),
+    )
+    .map_err(|err| ProviderError::new(ErrorClass::Other, err.to_string()))?;
+    Ok(())
 }
 
 pub struct Permit<'a> {
@@ -159,6 +354,11 @@ impl Middleware {
         if self.mode == RunMode::Replay {
             return self.replay(request, sink);
         }
+        self.limiter.try_acquire_budget(
+            &request.model,
+            &request.metadata.purpose,
+            u64::from(request.max_tokens).max(1),
+        )?;
         let _permit = self.limiter.acquire(cancel)?;
         let mut attempt = 0_u32;
         loop {
@@ -172,6 +372,7 @@ impl Middleware {
                         self.write_recording(request, 200, &serialize_response(&response), None)?;
                     }
                     let row = self.row(request, &response.usage, "ok", None);
+                    self.limiter.record_cost(&row);
                     return Ok((response, row));
                 }
                 Err(err) if err.retryable && !err.delivered && attempt < self.max_retries => {

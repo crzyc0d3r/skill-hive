@@ -30,7 +30,8 @@ pub fn agent_def_show(name: &str) -> Result<Value, Fail> {
     if !path.is_file() {
         return Err(Fail::other(format!("unknown agent {name}")));
     }
-    Ok(json!({"command": "agents.def.show", "name": name}))
+    let text = fs::read_to_string(&path).map_err(|err| Fail::other(err.to_string()))?;
+    Ok(json!({"command": "agents.def.show", "name": name, "text": text}))
 }
 pub fn agent_def_deploy(name: &str) -> Result<Value, Fail> {
     let source = central_repo::base_dir()

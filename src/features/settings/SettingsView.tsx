@@ -17,6 +17,7 @@ import {
   setAllToolsEnabled,
   setCustomToolPath,
   setCustomToolProjectPath,
+  setToolEnabled,
   setToolOrder,
   removeCustomTool,
 } from "@/lib/ipc/actions";
@@ -71,9 +72,21 @@ export function SettingsView({
   const [restartArmed, setRestartArmed] = useState(false);
   const crash = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-panic") === "1";
   const repoWarn = typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-repo-warn") === "1";
+  const [versionLine, setVersionLine] = useState("");
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const [panicExcerpt, setPanicExcerpt] = useState<string | null>(null);
   const [repoWarnings, setRepoWarnings] = useState<string[]>([]);
+  useEffect(() => {
+    void silent<string | null>("get_settings", { key: "ui_text_size" }).then((value) => {
+      if (value === "small" || value === "medium" || value === "large" || value === "xl") applyTextSize(value);
+    });
+    void silent<string | null>("get_settings", { key: "ui_language" }).then((value) => {
+      if (value) setLocale(value);
+    });
+    void silent<string>("check_app_update").then((value) => {
+      if (typeof value === "string") setVersionLine(value);
+    });
+  }, []);
   useEffect(() => {
     if (tab !== "about") return;
     void silent<{ version: string; os: string; libraryPath: string }>("get_diagnostic_info").then((info) => {
@@ -134,16 +147,16 @@ export function SettingsView({
               {t("settings.motion")}
             </Button>
             {sizes.map((size) => (
-              <Button key={size} type="button" variant="outline" size="sm" onClick={() => applyTextSize(size)}>
-                {size === "xl" ? t("settings.text.xl") : size}
+              <Button key={size} type="button" variant="outline" size="sm" onClick={() => { applyTextSize(size); void writeSetting("ui_text_size", size); }}>
+                {t(`settings.text.${size}`)}
               </Button>
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="text-sm">{t("settings.language")}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => setLocale("en")}>{t("settings.language.en")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setLocale("zh-CN")}>{t("settings.language.zhCN")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setLocale("zh-TW")}>{t("settings.language.zhTW")}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setLocale("en"); void writeSetting("ui_language", "en"); }}>{t("settings.language.en")}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setLocale("zh-CN"); void writeSetting("ui_language", "zh-CN"); }}>{t("settings.language.zhCN")}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setLocale("zh-TW"); void writeSetting("ui_language", "zh-TW"); }}>{t("settings.language.zhTW")}</Button>
           </div>
         </div>
       ) : null}
@@ -235,11 +248,15 @@ export function SettingsView({
                   const next = moveById(agents, dragKey, agent.key, (item) => item.key);
                   void onAgents(next);
                   void setToolOrder(next.map((item) => item.key));
+                  void writeSetting("agent_order", next.map((item) => item.key).join(","));
                   setDragKey(null);
                 }}
                 className="rounded-md border border-border p-2 text-sm"
               >
                 <span className="font-medium">{agent.name}</span>
+                <label className="ml-2 text-sm">
+                  <input type="checkbox" aria-label={`${t("settings.agents.enable")} ${agent.name}`} checked={agent.enabled} onChange={(event) => { const enabled = event.target.checked; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, enabled } : item)); void setToolEnabled(agent.key, enabled); }} /> {t("settings.agents.enable")}
+                </label>
                 <span className="ml-2 text-muted-foreground">{agent.enabled ? "Enabled" : "Disabled"}</span>
                 <span className="ml-2 text-muted-foreground">{agent.installed ? "Detected" : "Other supported"}</span>
                 <label className="mt-1 block">
@@ -283,7 +300,7 @@ export function SettingsView({
       ) : null}
       {tab === "about" ? (
         <div className="mt-4 text-sm">
-          <p>{t("settings.about.version")}</p>
+          <p>{t("settings.about.version")} {versionLine}</p>
           {diagnostics ? <p>{diagnostics}</p> : null}
           <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { const remote = localStorage.getItem("skill-hive-update-version"); const runs = Number(localStorage.getItem("skill-hive-active-runs") ?? "0"); const decision = decideUpdate({ remoteVersion: remote, platform: desktopPlatform(navigator.userAgent, localStorage.getItem("skill-hive-platform")), activeRuns: Number.isFinite(runs) ? runs : 0, }); setUpdateNote(decision.state === "available" ? t(decision.messageKey, { version: decision.version }) : t(decision.messageKey)); setUpdateAction(decision.state === "available" ? decision.action : null); void downloadAndInstallUpdate(); if (decision.state === "available" && decision.action === "install") { localStorage.setItem("skill-hive-pending-install", decision.version); } else { localStorage.removeItem("skill-hive-pending-install"); } }}>
             {t("settings.about.updates")}
@@ -299,7 +316,7 @@ export function SettingsView({
           ) : null}
           {crash || panicExcerpt ? <p role="alert">{panicExcerpt ?? t("settings.about.crash")}</p> : null}
           {repoWarn || repoWarnings.length > 0 ? <p role="alert">{repoWarnings[0] ?? t("settings.about.repo")}</p> : null}
-          <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href="https://github.com/crzyc0d3r/skill-hive/issues/new" target="_blank" rel="noreferrer">{t("settings.about.report")}</a>
+          <a className="mt-2 inline-block rounded-md border border-border px-2 py-1" href={`https://github.com/crzyc0d3r/skill-hive/issues/new?body=${encodeURIComponent(diagnostics ?? diagnosticsPath)}`} target="_blank" rel="noreferrer" onClick={() => { const path = diagnostics ?? diagnosticsPath; if (path && navigator.clipboard) void navigator.clipboard.writeText(path); }}>{t("settings.about.report")}</a>
           <label className="mt-2 block">
             Diagnostics path
             <Input aria-label="Diagnostics path" value={diagnosticsPath} onChange={(event) => setDiagnosticsPath(event.target.value)} className="h-8 ml-2" />

@@ -14,6 +14,7 @@ export interface SkillCard {
   body: string;
   sourceBody: string;
   agents: string[];
+  sourceRef?: string;
   files?: SkillFile[];
   draft?: boolean;
   updatedAt?: number;

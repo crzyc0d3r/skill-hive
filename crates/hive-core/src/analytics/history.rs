@@ -67,3 +67,63 @@ pub fn write_history(
     .map_err(|err| err.to_string())?;
     Ok(value)
 }
+
+/// Read a persisted run document and write the results view from that document.
+pub fn load_persisted_results(run_path: &Path, out: &Path) -> Result<Value, String> {
+    let raw = fs::read_to_string(run_path).map_err(|err| err.to_string())?;
+    let value: Value = serde_json::from_str(&raw).map_err(|err| err.to_string())?;
+    let projected = json!({
+        "run_id": value.get("run_id").cloned().unwrap_or(Value::Null),
+        "prompt": value.get("prompt").cloned().unwrap_or(Value::Null),
+        "cells": value.get("cells").cloned().unwrap_or(json!([])),
+        "notes": value.get("notes").cloned().unwrap_or(json!([])),
+    });
+    if let Some(parent) = out.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::write(
+        out,
+        serde_json::to_string_pretty(&projected).map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(projected)
+}
+
+/// Regression alerts for a history comparison. Rules come from `regression::evaluate` (R1–R6).
+pub fn write_history_alerts(
+    baseline_path: &Path,
+    current_path: &Path,
+    out: &Path,
+) -> Result<Vec<super::regression::Alert>, String> {
+    let baseline = read_slice(baseline_path)?;
+    let current = read_slice(current_path)?;
+    let report = super::regression::evaluate(Some(&baseline), &current);
+    let alerts: Vec<Value> = report
+        .alerts
+        .iter()
+        .map(|alert| {
+            json!({
+                "rule": alert.rule,
+                "severity": alert.severity,
+                "message": alert.message,
+                "eval_id": alert.eval_id,
+                "cells": alert.cells,
+            })
+        })
+        .collect();
+    if let Some(parent) = out.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::write(
+        out,
+        serde_json::to_string_pretty(&json!({"alerts": alerts, "flaky": report.flaky}))
+            .map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(report.alerts)
+}
+
+fn read_slice(path: &Path) -> Result<super::regression::RunSlice, String> {
+    let text = fs::read_to_string(path).map_err(|err| err.to_string())?;
+    serde_json::from_str(&text).map_err(|err| err.to_string())
+}

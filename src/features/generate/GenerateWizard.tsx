@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { t } from "../../lib/i18n";
+import { demoEnabled } from "@/lib/demo";
 import {
   acceptDefaults,
   askDiscard,
@@ -21,6 +22,7 @@ const STEPS = ["goal", "interview", "drafting", "review", "save"] as const;
 export function GenerateWizard() {
   const { sessionId } = useParams();
   const { wizard } = useGenerate();
+  const demo = demoEnabled();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") askDiscard();
@@ -70,6 +72,7 @@ export function GenerateWizard() {
       ) : null}
       {wizard.step === "interview" ? (
         <div className="space-y-2">
+          {wizard.questions.length === 0 ? <p>{t("generate.interview.empty")}</p> : wizard.questions.map((question) => <p key={question}>{question}</p>)}
           <Button type="button" variant="outline" size="sm" onClick={() => acceptDefaults()}>{t("generate.defaults")}</Button>
         </div>
       ) : null}
@@ -81,7 +84,8 @@ export function GenerateWizard() {
       ) : null}
       {wizard.step === "review" || wizard.step === "save" ? (
         <div className="space-y-2">
-          <p data-testid="generate-problems">{t("generate.problems")}: 0</p>
+          {demo ? <p data-testid="generate-problems">{t("generate.problems")}: 0</p> : wizard.questions.length === 0 ? <p data-testid="generate-empty">{t("generate.interview.empty")}</p> : null}
+          {wizard.questions.map((question) => <p key={question}>{question}</p>)}
           <p className="text-sm">{t("generate.safety")}</p>
           <pre data-testid="generate-diff" className="rounded-md border border-border p-2 text-xs">{wizard.diffOpened ? "+++ SKILL.md" : t("generate.diff")}</pre>
           <Button type="button" variant="outline" size="sm" onClick={() => openDiff()}>{t("generate.openDiff")}</Button>

@@ -24,6 +24,7 @@ pub fn build_tray_menu_from_data(
     update_count: usize,
     agent_count: usize,
     presets: &[(&str, &str)],
+    active_preset: Option<&str>,
 ) -> TrayEntry {
     let mut children = vec![
         TrayEntry {
@@ -51,18 +52,18 @@ pub fn build_tray_menu_from_data(
         .map(|(id, name)| TrayEntry {
             id: (*id).to_string(),
             label: (*name).to_string(),
-            children: vec![
-                TrayEntry {
-                    id: format!("apply:{id}"),
-                    label: format!("Apply {name}"),
+            children: {
+                let (item_id, item_label) = if active_preset == Some(*id) {
+                    (format!("remove:{id}"), format!("Remove {name}"))
+                } else {
+                    (format!("apply:{id}"), format!("Apply {name}"))
+                };
+                vec![TrayEntry {
+                    id: item_id,
+                    label: item_label,
                     children: Vec::new(),
-                },
-                TrayEntry {
-                    id: format!("remove:{id}"),
-                    label: format!("Remove {name}"),
-                    children: Vec::new(),
-                },
-            ],
+                }]
+            },
         })
         .collect();
     if agent_count == 0 {
@@ -133,7 +134,7 @@ mod tests {
 
     #[test]
     fn tray_menu_lists_status_presets_and_quit() {
-        let menu = build_tray_menu_from_data(3, 1, 2, &[("research", "Research")]);
+        let menu = build_tray_menu_from_data(3, 1, 2, &[("research", "Research")], None);
         let labels: Vec<_> = menu
             .children
             .iter()
@@ -152,7 +153,7 @@ mod tests {
                 "Quit"
             ]
         );
-        let empty = build_tray_menu_from_data(0, 0, 0, &[]);
+        let empty = build_tray_menu_from_data(0, 0, 0, &[], None);
         let presets = empty
             .children
             .iter()
@@ -172,8 +173,20 @@ mod tests {
             .iter()
             .find(|item| item.id == "presets")
             .unwrap();
+        assert_eq!(presets.children[0].children.len(), 1);
         assert_eq!(presets.children[0].children[0].id, "apply:research");
-        assert_eq!(presets.children[0].children[1].label, "Remove Research");
+        let active =
+            build_tray_menu_from_data(3, 1, 2, &[("research", "Research")], Some("research"));
+        let active_presets = active
+            .children
+            .iter()
+            .find(|item| item.id == "presets")
+            .unwrap();
+        assert_eq!(active_presets.children[0].children[0].id, "remove:research");
+        assert_eq!(
+            active_presets.children[0].children[0].label,
+            "Remove Research"
+        );
         assert!(left_click_restores("windows"));
         assert!(left_click_restores("linux"));
         assert!(!left_click_restores("macos"));

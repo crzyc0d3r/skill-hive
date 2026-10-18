@@ -50,9 +50,10 @@ import { BASE_LISTING_KEY, SKILLS_KEY } from "../../lib/events/files";
 import { listBaseEntries } from "../../lib/ipc/settings";
 import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
-import { applyTextSize, isTextSize, t } from "../../lib/i18n";
+import { applyTextSize, isTextSize, setLocale, t } from "../../lib/i18n";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
-import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, silent, updatePreset } from "@/lib/ipc/actions";
+import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, setToolOrder, silent, switchPreset, updatePreset } from "@/lib/ipc/actions";
+import { writeSetting } from "@/lib/ipc/catalog";
 import { moveById } from "@/features/library/model";
 import { lobsterAgents } from "@/features/lobster/model";
 import { useProjectDot } from "@/features/project/store";
@@ -101,6 +102,11 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const [dragPreset, setDragPreset] = useState<string | null>(null);
   const [editingPreset, setEditingPreset] = useState<string | null>(null);
   const [presetName, setPresetName] = useState("");
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const [projectRows, setProjectRows] = useState<{ id: string; name: string; path: string }[]>([]);
+  const [skillUpdates, setSkillUpdates] = useState(0);
+  const [agentRows, setAgentRows] = useState<AgentRow[] | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const projectDot = useProjectDot();
@@ -120,7 +126,20 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     void silent<string>("check_app_update").then((value) => {
       if (typeof value === "string" && value.startsWith("available")) setShowUpdate(true);
     });
-  }, []);
+    void silent<number>("check_all_skill_updates").then((count) => {
+      if (typeof count === "number" && count > 0) setSkillUpdates(count);
+    });
+    void silent<string | null>("get_settings", { key: "skill_update_count" }).then((value) => {
+      const count = Number(value);
+      if (Number.isFinite(count) && count > 0) setSkillUpdates(count);
+    });
+    void silent<string | null>("get_active_preset").then((id) => {
+      if (typeof id === "string" && id) setActivePresetId(id);
+    });
+    void silent<{ id: string; name: string; path: string }[]>("get_projects").then((rows) => {
+      if (Array.isArray(rows)) setProjectRows(rows);
+    });
+  }, [reloadKey]);
   useEffect(() => {
     const onRestart = () => setRestartNow(localStorage.getItem("skill-hive-restart-now") === "1");
     window.addEventListener("skill-hive-restart", onRestart);
@@ -179,6 +198,20 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       })
       .catch(() => {
         /* text size is optional */
+      });
+    getSettings("ui_text_size")
+      .then((value) => {
+        if (!cancelled && isTextSize(value)) applyTextSize(value);
+      })
+      .catch(() => {
+        /* text size is optional */
+      });
+    getSettings("ui_language")
+      .then((value) => {
+        if (!cancelled && value) setLocale(value);
+      })
+      .catch(() => {
+        /* language is optional */
       });
     getSettings("shortcuts")
       .then((value) => {
@@ -256,6 +289,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     const presetHits = shownPresets
       .filter((preset) => !needle || preset.name.toLowerCase().includes(needle))
       .map((preset) => ({ id: preset.id, label: preset.name, href: "/global-workspace", group: "Presets" }));
+    const projectHits = projectRows
+      .filter((project) => !needle || project.name.toLowerCase().includes(needle))
+      .map((project) => ({ id: project.id, label: project.name, href: `/project/${project.id}`, group: "Projects" }));
     const actions = [
       ...ACTIONS,
       { id: "new-skill", label: t("palette.newSkill"), href: "action:skill" },
@@ -267,8 +303,12 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       ...action,
       group: "Actions",
     }));
-    return [...skillHits, ...presetHits, ...actionHits];
-  }, [query, skills.data, shownPresets]);
+    return [...skillHits, ...presetHits, ...projectHits, ...actionHits];
+  }, [query, skills.data, shownPresets, projectRows]);
+
+  useEffect(() => {
+    setPaletteIndex(0);
+  }, [query]);
 
   const listing = useQuery({
     queryKey: BASE_LISTING_KEY,
@@ -277,7 +317,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
 
   const title = NAV_ITEMS.find((item) => item.path === location.pathname)?.nav ?? "Skill Hive";
   const primaryNav = NAV_ITEMS.filter((item) => item.path !== "/settings");
-  const grouped = ["Skills", "Presets", "Actions"]
+  const grouped = ["Skills", "Presets", "Projects", "Actions"]
     .map((group) => ({ group, items: matches.filter((item) => item.group === group) }))
     .filter((group) => group.items.length > 0);
 
@@ -312,6 +352,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                         <NavLink to={item.path} title={item.nav}>
                           <Icon aria-hidden="true" />
                           {collapsed ? <span className="sr-only">{item.nav}</span> : <span>{item.nav}</span>}
+                          {item.path === "/my-skills" && skillUpdates > 0 ? <span data-testid="update-dot" className="ml-auto size-2 rounded-full bg-warning" title={t("sidebar.updates")} /> : null}
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -327,8 +368,16 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                     <NavLink to="/global-workspace">{collapsed ? "G" : t("workspace.allAgents")}</NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                {(agents.data ?? []).filter((agent) => agent.installed && agent.enabled).map((agent) => (
-                  <SidebarMenuItem key={agent.key}>
+                {(agentRows ?? (agents.data ?? []).filter((agent) => agent.installed && agent.enabled)).map((agent) => (
+                  <SidebarMenuItem key={agent.key} draggable data-sidebar-agent={agent.key} onDragStart={() => setDragPreset(agent.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => {
+                    const current = agentRows ?? (agents.data ?? []).filter((item) => item.installed && item.enabled);
+                    if (!dragPreset) return;
+                    const next = moveById(current, dragPreset, agent.key, (item) => item.key);
+                    setAgentRows(next);
+                    void writeSetting("agent_order", next.map((item) => item.key).join(","));
+                    void setToolOrder(next.map((item) => item.key));
+                    setDragPreset(null);
+                  }}>
                     <SidebarMenuButton asChild isActive={location.pathname === `/global-workspace/${agent.key}`}>
                       <NavLink to={`/global-workspace/${agent.key}`}>{collapsed ? agent.name.slice(0, 1) : `${agent.name}\u200b`}</NavLink>
                     </SidebarMenuButton>
@@ -356,7 +405,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                       className="group/preset relative flex items-center"
                     >
                       <SidebarMenuButton asChild className="flex-1">
-                        <NavLink to="/global-workspace">
+                        <NavLink to="/global-workspace" onClick={() => { setActivePresetId(preset.id); void switchPreset(preset.id); }}>
                           {collapsed ? preset.name.slice(0, 1) : preset.name}
                           {collapsed || preset.skillIds.length === 0 ? null : <span aria-hidden="true" className="ml-auto text-xs text-muted-foreground tabular-nums group-hover/preset:invisible">{preset.skillIds.length}</span>}
                         </NavLink>
@@ -402,14 +451,28 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             <SidebarGroup>
               <SidebarGroupLabel>{t("sidebar.projects")}</SidebarGroupLabel>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink to="/project/fixture" className="flex items-center gap-2">
-                      <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block size-2 rounded-full bg-info" />
-                      {collapsed ? "P" : t("project.title")}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                {projectRows.length === 0 ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <NavLink to="/project/fixture" className="flex items-center gap-2">
+                        <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block size-2 rounded-full bg-info" />
+                        {collapsed ? "P" : t("project.title")}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : projectRows.map((project) => (
+                  <SidebarMenuItem key={project.id}>
+                    <SidebarMenuButton asChild>
+                      <NavLink to={`/project/${project.id}`} className="flex items-center gap-2">
+                        <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block size-2 rounded-full bg-info" />
+                        {collapsed ? project.name.slice(0, 1) : project.name}
+                      </NavLink>
+                    </SidebarMenuButton>
+                    <Button type="button" size="icon-xs" variant="ghost" aria-label={`${t("sidebar.removeProject")} ${project.name}`} onClick={() => { setProjectRows((current) => current.filter((item) => item.id !== project.id)); void silent("remove_project", { id: project.id }); }}>
+                      <Trash2Icon aria-hidden="true" />
+                    </Button>
+                  </SidebarMenuItem>
+                ))}
               </SidebarMenu>
             </SidebarGroup>
             {lobsterRows.length === 0 ? null : (
@@ -471,6 +534,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   listing: listing.data ?? [],
                   skills: skills.data ?? [],
                   presets: shownPresets,
+                  activePresetId,
                   setPresets: (next: PresetRow[]) => setPresetRows(next),
                   agents: ((agents.data ?? []) as AgentRow[]).filter((agent) => agent.installed && agent.enabled),
                   theme,
@@ -511,30 +575,46 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
               value={query}
               onValueChange={setQuery}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && matches[0]) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setPaletteIndex((index) => Math.min(index + 1, Math.max(matches.length - 1, 0)));
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setPaletteIndex((index) => Math.max(index - 1, 0));
+                  return;
+                }
+                if (event.key === "Enter" && matches[paletteIndex]) {
                   event.preventDefault();
                   setPaletteOpen(false);
-                  runAction(matches[0].href, navigate);
+                  runAction(matches[paletteIndex].href, navigate);
                 }
               }}
             />
             <CommandList>
               {matches.length === 0 ? <CommandEmpty>{t("palette.empty", { query })}</CommandEmpty> : null}
               {grouped.map((group) => (
-                <CommandGroup key={group.group} heading={group.group}>
-                  {group.items.map((action) => (
-                    <CommandItem
-                      key={`${action.group}-${action.id}`}
-                      value={`${action.group}-${action.id}`}
-                      onSelect={() => {
-                        setPaletteOpen(false);
-                        runAction(action.href, navigate);
-                      }}
-                    >
-                      <span>{action.label}</span>
-                      <Kbd>Enter</Kbd>
-                    </CommandItem>
-                  ))}
+                <CommandGroup key={group.group} heading={group.group === "Projects" ? t("palette.group.projects") : group.group}>
+                  {group.items.map((action) => {
+                    const index = matches.findIndex((item) => item.group === action.group && item.id === action.id);
+                    const active = index === paletteIndex;
+                    return (
+                      <CommandItem
+                        key={`${action.group}-${action.id}`}
+                        value={`${action.group}-${action.id}`}
+                        data-active={active ? "true" : "false"}
+                        data-testid={active ? "palette-active" : undefined}
+                        onSelect={() => {
+                          setPaletteOpen(false);
+                          runAction(action.href, navigate);
+                        }}
+                      >
+                        <span>{action.label}</span>
+                        <Kbd>Enter</Kbd>
+                      </CommandItem>
+                    );
+                  })}
                 </CommandGroup>
               ))}
             </CommandList>
@@ -637,6 +717,7 @@ export interface ShellOutletContext {
   listing: string[];
   skills: import("@/features/library/model").SkillCard[];
   presets: PresetRow[];
+  activePresetId: string | null;
   setPresets: (next: PresetRow[]) => void;
   agents: AgentRow[];
   theme: ThemeChoice;

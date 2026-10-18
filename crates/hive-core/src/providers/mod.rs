@@ -11,7 +11,8 @@ mod store;
 mod types;
 
 pub use cli_agent::{
-    detect_local_agent_clis, help_flags, kill_tree, spawn_grouped, CliEvent, LocalCli,
+    detect_local_agent_clis, help_flags, kill_tree, spawn_grouped, start_clis_in_sandbox, CliEvent,
+    LocalCli,
 };
 pub use http::{AnthropicProvider, OpenAiProvider};
 pub use middleware::{
@@ -19,7 +20,7 @@ pub use middleware::{
     Recording, RunMode, Sleeper,
 };
 pub use pricing::{cost_usd, lookup, seed_models, Pricing};
-pub use probe::{probe_offline, probe_provider, ProbeStage};
+pub use probe::{probe_and_persist, probe_offline, probe_provider, ProbeStage};
 pub use scripted::ScriptedProvider;
 pub use secrets::{
     clear_git_token, clear_provider_secret, has_git_token, has_provider_secret, load_env_secret,

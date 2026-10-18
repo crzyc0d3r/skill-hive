@@ -90,8 +90,10 @@ fn path_overrides_round_trip_and_reset() {
     let _guard = central_repo::test_base_dir_lock();
     let tmp = tempfile::tempdir().unwrap();
     let base = tmp.path().join("base");
+    let skills = tmp.path().join("codex-skills");
+    let skills_text = skills.to_string_lossy().into_owned();
     let store = open_store(&base);
-    set_tool_path(&store, "codex", "/var/codex-skills").unwrap();
+    set_tool_path(&store, "codex", &skills_text).unwrap();
     set_project_path(&store, "codex", "custom/skills").unwrap();
     let row = tool_statuses(&store, tmp.path())
         .unwrap()
@@ -108,6 +110,6 @@ fn path_overrides_round_trip_and_reset() {
         .find(|row| row.key == "codex")
         .unwrap();
     assert!(!reset.has_path_override);
-    assert_ne!(reset.skills_dir, "/var/codex-skills");
+    assert_ne!(reset.skills_dir, skills_text);
     central_repo::set_test_base_dir_override(None);
 }

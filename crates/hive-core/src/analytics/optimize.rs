@@ -5,6 +5,10 @@ use std::fs;
 use std::path::Path;
 
 use crate::authoring::versions::{VersionSource, VersionStore};
+use crate::providers::{
+    CancellationToken, ChatProvider, ChatRequest, ContentBlock, Message, RequestMetadata,
+    ThinkingMode, VecSink,
+};
 use crate::testing::judge_stream;
 
 #[derive(Debug, Clone)]
@@ -114,6 +118,45 @@ pub fn optimize(
         cancelled: false,
         iterations: iterations as usize,
     }
+}
+
+pub fn propose_description(
+    subject_dir: &Path,
+    provider: &dyn ChatProvider,
+) -> Result<String, String> {
+    let current = fs::read_to_string(subject_dir.join("SKILL.md")).unwrap_or_default();
+    let request = ChatRequest {
+        model: "fixture-model".into(),
+        system: None,
+        messages: vec![Message {
+            role: "user".into(),
+            content: vec![ContentBlock::Text(format!(
+                "Propose a replacement description.\n{current}",
+                current = current.replace('{', "(").replace('}', ")")
+            ))],
+        }],
+        tools: Vec::new(),
+        max_tokens: 200,
+        effort: None,
+        thinking: ThinkingMode::Off,
+        stream: false,
+        metadata: RequestMetadata {
+            purpose: "optimize".into(),
+            ref_id: None,
+            provider_id: None,
+        },
+    };
+    let mut sink = VecSink::default();
+    let cancel = CancellationToken::new();
+    let response = provider
+        .complete(&request, &mut sink, &cancel)
+        .map_err(|err| err.message)?;
+    let description = response.text.trim().to_string();
+    if description.is_empty() {
+        return Err("provider returned an empty description".into());
+    }
+    apply_optimized(subject_dir, &description)?;
+    Ok(description)
 }
 
 pub fn apply_optimized(subject_dir: &Path, description: &str) -> Result<String, String> {
