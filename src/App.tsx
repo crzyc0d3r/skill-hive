@@ -43,6 +43,7 @@ import { BackupView } from "./features/backup/BackupView";
 import { ProjectView } from "./features/project/ProjectView";
 import { EndpointsView } from "./features/endpoints/EndpointsView";
 import { ResultsView } from "./features/results/ResultsView";
+import { EffectivenessView } from "./features/effectiveness/EffectivenessView";
 import { SuiteView } from "./features/suites/SuiteView";
 import { CompareView } from "./features/compare/CompareView";
 import { GenerateWizard } from "./features/generate/GenerateWizard";
@@ -233,6 +234,7 @@ function screenFor(path: string) {
   if (path === "/runs/:runId" || path === "/testing/runs/:id") return <ResultsView />;
   if (path === "/generate/:sessionId") return <GenerateWizard />;
   if (path === "/compare/:comparisonId") return <CompareView />;
+  if (path === "/effectiveness") return <EffectivenessView />;
   if (path === "/skills/:id/history" || path === "/agents/:id/history") return <HistoryView />;
   if (path === "/dev/tokens") return <TokensView />;
   return <PlaceholderView />;

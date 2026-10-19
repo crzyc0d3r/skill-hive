@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
-import { applyOptimizedDescription, recordCompareVerdict, saveGeneratedDraft } from "@/lib/ipc/actions";
+import { applyOptimizedDescription, blindCompareLast, interviewForGoal, optimizeSkillDescription, recordCompareVerdict, saveGeneratedDraft } from "@/lib/ipc/actions";
+import { demoEnabled } from "@/lib/demo";
 import { EMPTY_SEED, parseSeed, type GenerateSeed } from "./model";
 
 export type WizardStep = "goal" | "interview" | "drafting" | "review" | "save";
@@ -97,8 +98,13 @@ function takeQuestions(raw: unknown) {
   if (typeof raw !== "string") return;
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
-      wizard = { ...wizard, questions: parsed };
+    const list = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" && "questions" in parsed && Array.isArray((parsed as { questions: unknown }).questions)
+        ? (parsed as { questions: unknown[] }).questions
+        : null;
+    if (list && list.every((item) => typeof item === "string")) {
+      wizard = { ...wizard, questions: list as string[] };
       publish();
     }
   } catch {
@@ -110,15 +116,19 @@ export function acceptDefaults(): void {
   const goal = wizard.goal || "interview";
   wizard = { ...wizard, answers: "accepted defaults", step: "drafting" };
   publish();
+  void interviewForGoal(goal).then(takeQuestions);
   void saveGeneratedDraft(goal).then(takeQuestions);
 }
 
 export function continueWizard(): void {
   const order: WizardStep[] = ["goal", "interview", "drafting", "review", "save"];
   const index = order.indexOf(wizard.step);
+  const leavingGoal = wizard.step === "goal";
+  const goal = wizard.goal;
   const next = order[Math.min(index + 1, order.length - 1)];
   wizard = { ...wizard, step: wizard.step === "drafting" ? "review" : next };
   publish();
+  if (leavingGoal) void interviewForGoal(goal).then(takeQuestions);
 }
 
 export function openDiff(): void {
@@ -153,9 +163,10 @@ export function confirmDiscard(): void {
   publish();
 }
 
-export function optimizeDescription(): void {
+export function optimizeDescription(skillPath = ""): void {
   wizard = { ...wizard, optimized: true };
   publish();
+  void optimizeSkillDescription(skillPath || wizard.goal || "skill");
 }
 
 export function applyOptimized(): void {
@@ -173,12 +184,19 @@ export function applyOptimized(): void {
 export function recordVerdict(verdict: string): void {
   wizard = { ...wizard, verdict };
   publish();
-  void recordCompareVerdict("comparison", verdict).then((value) => {
-    if (typeof value === "string" && value) {
-      wizard = { ...wizard, compareText: value };
-      publish();
-    }
-  });
+  const record = () => {
+    void recordCompareVerdict("comparison", verdict).then((value) => {
+      if (typeof value === "string" && value) {
+        wizard = { ...wizard, compareText: value };
+        publish();
+      }
+    });
+  };
+  if (demoEnabled()) {
+    record();
+    return;
+  }
+  void blindCompareLast(wizard.goal || "comparison", "Output A", "Output B").finally(record);
 }
 
 export function resetGenerate(): void {

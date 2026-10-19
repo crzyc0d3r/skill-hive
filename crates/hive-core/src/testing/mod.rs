@@ -2,12 +2,22 @@
 
 mod aggregate;
 mod checks;
+mod effectiveness;
 mod engine;
 mod suite;
 mod trigger;
 
 pub use aggregate::{aggregate_benchmark, delta_string, Stat};
 pub use checks::{run_check, CheckResult, DeterministicCheck};
+pub use effectiveness::{
+    apply_description, benchmark_notes, bisect_distractors, blind_compare, calibrate_gold,
+    classify_activation, conflict_matrix, export_snapshot, import_snapshot, influence_map,
+    install_warnings, interview_goal, letter_grade, optimize_descriptions, radar_axes,
+    rank_leaderboard, run_cli_trigger, run_measured, send_prompt, send_templates, snapshot_skill,
+    static_overlap, strong_model_only, suggest_description, write_default_suite, ActivationRow,
+    Axis, BlindRequest, GoldLabel, LibrarySkill, MeasureRequest, ModelChoice, OverlapHit, RankRow,
+    SkillScore,
+};
 pub use engine::{
     materialize_fixture, persist_step_metrics, resume_run, run_plan, run_plan_with_clock,
     run_version_comparison, select_fixture_file, CellReport, EngineClock, Plan, RunReport,

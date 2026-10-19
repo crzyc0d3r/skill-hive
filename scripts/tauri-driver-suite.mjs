@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import net from "node:net";
 import { spawnCommand } from "./spawn-tool.mjs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -17,6 +18,40 @@ const base = mkdtempSync(path.join(tmpdir(), "skill-hive-driver-"));
 const isolateHome = process.platform === "linux";
 const home = isolateHome ? path.join(base, "home") : homedir();
 process.env.SKILL_HIVE_BASE = base;
+process.env.SKILL_HIVE_API_KEY = "sk-driver-measured";
+const driverWire = net.createServer((socket) => {
+  const chunks = [];
+  socket.on("data", (chunk) => {
+    chunks.push(chunk);
+    const buf = Buffer.concat(chunks);
+    const split = buf.indexOf("\r\n\r\n");
+    if (split < 0) return;
+    const head = buf.subarray(0, split).toString("utf8");
+    const length = Number(head.match(/content-length:\s*(\d+)/i)?.[1] ?? 0);
+    if (buf.length < split + 4 + length) return;
+    const body = buf.subarray(split + 4, split + 4 + length).toString("utf8");
+    let text = "driver-draft";
+    if (body.includes("HIVE_INTERVIEW")) text = '{"questions":["Who is the reader?","Which files matter?"]}';
+    else if (body.includes("HIVE_REWRITE")) text = '{"description":"authoring-goal narrowed","changes":["narrowed"]}';
+    else if (body.includes("HIVE_BLIND")) text = '{"winner":"A"}';
+    else if (body.includes("HIVE_ANALYST")) text = '{"notes":[{"text":"The expectation passes in both configurations."}]}';
+    const payload = [
+      'data: {"type":"message_start","message":{"id":"m","usage":{"input_tokens":1}}}',
+      "",
+      `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":${JSON.stringify(text)}}}`,
+      "",
+      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}',
+      "",
+      'data: {"type":"message_stop"}',
+      "",
+      "",
+    ].join("\n");
+    const bytes = Buffer.byteLength(payload);
+    socket.end(`HTTP/1.1 200 OK\r\nContent-Length: ${bytes}\r\nConnection: close\r\n\r\n${payload}`);
+  });
+});
+await new Promise((resolve) => driverWire.listen(0, "127.0.0.1", resolve));
+const driverWirePort = driverWire.address().port;
 if (isolateHome) {
   process.env.HOME = home;
   process.env.USERPROFILE = home;
@@ -72,11 +107,17 @@ const driverArgs = process.env.TAURI_NATIVE_DRIVER
 const driver = spawnCommand("tauri-driver", driverArgs, { stdio: "inherit" });
 await new Promise((resolve) => setTimeout(resolve, 1000));
 
-async function call(method, urlPath, body) {
+const suiteDeadline = setTimeout(() => {
+  console.error("tauri-driver suite exceeded 10 minutes");
+  process.exit(1);
+}, 10 * 60 * 1000);
+
+async function call(method, urlPath, body, timeoutMs = 20000) {
   const response = await fetch(`http://127.0.0.1:4444${urlPath}`, {
     method,
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`${method} ${urlPath} ${response.status} ${text}`);
@@ -145,21 +186,36 @@ promoteDevToolsPort.scans = 0;
 
 let session;
 const promoter = process.platform === "win32" ? setInterval(promoteDevToolsPort, 200) : null;
-try {
-  const created = await call("POST", "/session", {
-    capabilities: {
-      alwaysMatch: {
-        browserName: "wry",
-        "tauri:options": {
-          application: path.resolve(application),
-          webviewOptions: {
-            userDataFolder: webviewProfile,
-            additionalBrowserArguments: ["--remote-debugging-port=9222", "--remote-allow-origins=*"],
-          },
+const sessionBody = {
+  capabilities: {
+    alwaysMatch: {
+      browserName: "wry",
+      "tauri:options": {
+        application: path.resolve(application),
+        webviewOptions: {
+          userDataFolder: webviewProfile,
+          additionalBrowserArguments: ["--remote-debugging-port=9222", "--remote-allow-origins=*"],
         },
       },
     },
-  });
+  },
+};
+async function openSession() {
+  let last;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await call("POST", "/session", sessionBody, 45000);
+    } catch (err) {
+      last = err;
+      const message = String(err?.message ?? err);
+      if (!message.includes("session not created") && !message.includes("EOF while parsing")) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  throw last;
+}
+try {
+  const created = await openSession();
   session = created.value?.sessionId ?? created.sessionId;
   if (!session) throw new Error(`no session id in ${JSON.stringify(created)}`);
   let prefix = `/session/${session}`;
@@ -213,9 +269,40 @@ try {
     throw new Error(`${selector} not found\n${last}\nurl ${url.value}\nsource ${slice}`);
   }
 
-  async function click(selector) {
-    const id = await find(selector);
+  async function dismissToasts() {
+    // Removing a toast node unmounts #root on the next React commit. Click the
+    // close control instead, and ignore a shell that has no toast.
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      let id;
+      try {
+        const found = await call("POST", `${prefix}/element`, { using: "css selector", value: "button[data-close-button]" });
+        id = found.value?.["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(found.value ?? {})[0];
+      } catch {
+        return;
+      }
+      if (!id) return;
+      await call("POST", `${prefix}/element/${id}/click`, {}).catch(() => {});
+    }
+  }
+  async function clickFound(id) {
     await call("POST", `${prefix}/element/${id}/click`, {});
+  }
+  async function click(selector) {
+    let last;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const id = await find(selector);
+      try {
+        await clickFound(id);
+        return;
+      } catch (err) {
+        last = err;
+        const message = String(err?.message ?? err);
+        if (message.includes("click intercepted")) await dismissToasts();
+        else if (!message.includes("stale element")) throw err;
+      }
+    }
+    throw last;
   }
 
   await find("[data-testid=sidebar]");
@@ -268,8 +355,20 @@ try {
   async function clickText(text, last = false) {
     const quoted = JSON.stringify(text);
     const expression = last ? `(//button[normalize-space()=${quoted}])[last()]` : `//button[normalize-space()=${quoted}]`;
-    const id = await find(expression, "xpath");
-    await call("POST", `${prefix}/element/${id}/click`, {});
+    let lastError;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const id = await find(expression, "xpath");
+      try {
+        await clickFound(id);
+        return;
+      } catch (err) {
+        lastError = err;
+        const message = String(err?.message ?? err);
+        if (message.includes("click intercepted")) await dismissToasts();
+        else if (!message.includes("stale element")) throw err;
+      }
+    }
+    throw lastError;
   }
   async function typeInto(selector, value) {
     const id = await find(selector);
@@ -326,20 +425,8 @@ try {
   }
   async function restart() {
     await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE" }).catch(() => {});
-    const created = await call("POST", "/session", {
-      capabilities: {
-        alwaysMatch: {
-          browserName: "wry",
-          "tauri:options": {
-            application: path.resolve(application),
-            webviewOptions: {
-              userDataFolder: webviewProfile,
-              additionalBrowserArguments: ["--remote-debugging-port=9222", "--remote-allow-origins=*"],
-            },
-          },
-        },
-      },
-    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const created = await openSession();
     session = created.value?.sessionId ?? created.sessionId;
     prefix = `/session/${session}`;
     await find("[data-testid=sidebar]");
@@ -511,6 +598,15 @@ try {
   await clickText("User");
   await waitUntil("agent export", () => existsSync(path.join(authoring, "agent", "reviewer", "export", "AGENT.md")));
 
+  execFileSync(pythonBin(), ["-c", `
+import sqlite3
+conn = sqlite3.connect(${JSON.stringify(path.join(base, "hive.db"))})
+conn.execute("""INSERT INTO provider_configs
+ (id, name, kind, base_url, default_model, auth_mode, keyring_account, proxy_mode, supports_tools, role_generator, created_at, updated_at)
+ VALUES ('driver-gen', 'Driver Gen', 'anthropic', ?, 'claude-sonnet-4', 'keyring', 'driver-gen', 'none', 1, 1, 0, 0)
+ ON CONFLICT(id) DO UPDATE SET base_url = excluded.base_url""", (${JSON.stringify(`http://127.0.0.1:${driverWirePort}`)},))
+conn.commit()
+`], { stdio: "inherit" });
   await openPath("/generate/authoring");
   await find("[data-testid=generate-wizard]");
   await typeInto("#generate-goal", "authoring-goal");
@@ -519,7 +615,7 @@ try {
   await clickText("Continue");
   await clickText("Open diff");
   await clickText("Save");
-  await waitUntil("generated draft", () => readFileSync(path.join(authoring, "generate", "draft", "SKILL.md"), "utf8").includes("authoring-goal"));
+  await waitUntil("generated draft", () => readFileSync(path.join(authoring, "generate", "draft", "SKILL.md"), "utf8").includes("authoring-goal"), 45000);
 
   await openPath("/testing");
   await find("[data-testid=suite]");
@@ -536,12 +632,18 @@ try {
   await clickText("Record verdict");
   await waitUntil("compare verdict", () => sql("select verdict from comparisons where id = 'comparison'") === "Output A");
 
+  mkdirSync(path.join(base, "effectiveness"), { recursive: true });
+  writeFileSync(path.join(base, "effectiveness", "last.json"), JSON.stringify({
+    run_id: "measured-1",
+    with_rate: 0.81,
+    history: { iterations: [{ version: "measured-1", parent: null, expectation_pass_rate: 0.81, grading_result: "won", is_current_best: true }] },
+  }));
   await openPath("/skills/warnings/history");
   await find("[data-testid=history]");
   await clickText("Baseline");
   await waitUntil("history baseline", () => {
     const history = readFileSync(path.join(authoring, "history", "baseline", "history.json"), "utf8");
-    return history.includes("v2-optimized") && history.includes("\"is_current_best\": true");
+    return history.includes("measured-1") && history.includes("0.81") && history.includes("\"is_current_best\": true");
   });
 
   await openPath("/settings/endpoints");
@@ -567,12 +669,28 @@ try {
   await clickText("Set aside local changes");
   await waitUntil("set aside", () => setting("backup_aside").includes(`${path.sep}aside${path.sep}`) && walkFiles(path.join(base, "aside")).some((file) => file.endsWith(`${path.sep}note.txt`)));
   await typeInto('input[aria-label="Restore remote"]', restoreBare);
+  await dismissToasts();
   await clickText("Use remote library");
   await waitUntil("first-run restore", () => readFileSync(path.join(base, "skills", "restored-marker.txt"), "utf8").includes("restored-from-remote"));
 
-  await openPath("/project/fixture");
-  await click("[data-testid=link-project]");
-  await clickText("Pull center");
+  let projectError;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await openPath("/project/fixture");
+      await find("[data-testid=project]");
+      await click("[data-testid=link-project]");
+      await clickText("Pull center");
+      projectError = undefined;
+      break;
+    } catch (err) {
+      projectError = err;
+      const message = String(err?.message ?? err);
+      const recoverable = message.includes("stale element") || message.includes('id="root"></div>') || message.includes("not found");
+      if (attempt === 2 || !recoverable) break;
+      await restart();
+    }
+  }
+  if (projectError) throw projectError;
   await waitUntil("project center", () => readFileSync(path.join(base, "skills", "projects", "notes", "SKILL.md"), "utf8").includes("center v2"));
 
   const diagnostics = path.join(base, "diagnostics.zip");
@@ -595,10 +713,16 @@ try {
   });
 
   console.log("tauri-driver suite: shell routes, install, and authoring artifacts");
+} catch (err) {
+  console.error(err);
+  process.exitCode = 1;
 } finally {
+  clearTimeout(suiteDeadline);
   if (promoter) clearInterval(promoter);
   if (session) {
-    await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`http://127.0.0.1:4444/session/${session}`, { method: "DELETE", signal: AbortSignal.timeout(5000) }).catch(() => {});
   }
   driver.kill("SIGTERM");
+  driverWire.close();
+  process.exit(process.exitCode || 0);
 }

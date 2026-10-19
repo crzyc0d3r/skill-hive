@@ -30,6 +30,7 @@ const screens = [
   ["results", "/runs/run-fixture"],
   ["history", "/skills/skill-research/history"],
   ["compare", "/compare/fixture"],
+  ["effectiveness", "/effectiveness"],
 ];
 
 const sizes = [

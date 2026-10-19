@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expandForFullPage, expectRadarLabelsInside } from "./full-page";
 
 const screens = [
   { name: "dashboard", path: "/", landmark: "dashboard" },
@@ -13,6 +14,14 @@ const screens = [
   { name: "settings-general", path: "/settings?tab=general", landmark: "settings" },
   { name: "settings-agents", path: "/settings?tab=agents", landmark: "settings" },
   { name: "settings-about", path: "/settings?tab=about", landmark: "settings" },
+  { name: "effectiveness", path: "/effectiveness", landmark: "effectiveness" },
+  { name: "suite", path: "/skills/skill-research/tests", landmark: "suite" },
+  { name: "compare", path: "/compare/fixture", landmark: "compare" },
+  { name: "history", path: "/skills/skill-research/history", landmark: "history" },
+  { name: "endpoints", path: "/settings/endpoints", landmark: "endpoints" },
+  { name: "agents", path: "/agents", landmark: "agents" },
+  { name: "skill-editor", path: "/skills/skill-research/edit", landmark: "skill-editor" },
+  { name: "agent-editor", path: "/agents/reviewer/edit", landmark: "agent-editor" },
 ] as const;
 
 async function prepare(page: Page, theme: "light" | "dark") {
@@ -56,6 +65,29 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByTestId("command-palette")).toBeVisible();
       await expect(page.getByLabel("Command search")).toBeVisible();
       await assertFrame(page, theme, "command-palette");
+    });
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`effectiveness charts ${theme}`, async ({ page }) => {
+    await prepare(page, theme);
+    await page.goto("/effectiveness");
+    await expect(page.getByTestId("effect-grade")).toBeVisible();
+    await page.getByRole("button", { name: "Show the charts" }).click();
+    await expect(page.getByTestId("effect-map")).toBeVisible();
+    await expect(page.getByTestId("effect-overlay")).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, "effectiveness charts horizontal overflow").toBeLessThanOrEqual(1);
+    await expectRadarLabelsInside(page);
+    const sidebarBox = await page.getByTestId("sidebar").boundingBox();
+    expect(sidebarBox?.height ?? 0).toBeGreaterThanOrEqual(600);
+    await expandForFullPage(page);
+    await page.screenshot({
+      path: `docs/parity/screenshots/${theme}/effectiveness-charts.png`,
+      fullPage: true,
     });
   });
 }

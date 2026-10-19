@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { InboxIcon, SearchIcon } from "lucide-react";
+import { AlertTriangleIcon, InboxIcon, LoaderCircleIcon, SearchIcon, WifiOffIcon } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -76,6 +76,50 @@ export function EmptyState({ title, action }: { title: string; action?: ReactNod
     <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-8">
       <InboxIcon className="size-5 text-muted-foreground" aria-hidden="true" />
       <p className="max-w-prose text-sm text-muted-foreground">{title}</p>
+      {action}
+    </div>
+  );
+}
+
+export function StatePanel({
+  tone,
+  title,
+  action,
+}: {
+  tone: "loading" | "empty" | "error" | "offline";
+  title: string;
+  action?: ReactNode;
+}) {
+  const icon =
+    tone === "loading" ? (
+      <LoaderCircleIcon className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
+    ) : tone === "error" ? (
+      <AlertTriangleIcon className="size-5 text-destructive" aria-hidden="true" />
+    ) : tone === "offline" ? (
+      <WifiOffIcon className="size-5 text-warning-text" aria-hidden="true" />
+    ) : (
+      <InboxIcon className="size-5 text-muted-foreground" aria-hidden="true" />
+    );
+  const surface =
+    tone === "error"
+      ? "border-destructive/40 bg-destructive/10"
+      : tone === "offline"
+        ? "border-warning/40 bg-warning-subtle"
+        : "border-dashed border-border bg-muted/40";
+  return (
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      className={cn("flex min-h-72 flex-1 flex-col justify-center gap-4 rounded-lg border px-5 py-8", surface)}
+    >
+      {icon}
+      <p className="max-w-prose text-sm text-foreground">{title}</p>
+      {tone === "loading" ? (
+        <div className="grid w-full max-w-3xl grid-cols-2 gap-3" aria-hidden="true">
+          <div className="h-24 animate-pulse rounded-lg bg-muted" />
+          <div className="h-24 animate-pulse rounded-lg bg-muted" />
+          <div className="col-span-2 h-32 animate-pulse rounded-lg bg-muted" />
+        </div>
+      ) : null}
       {action}
     </div>
   );

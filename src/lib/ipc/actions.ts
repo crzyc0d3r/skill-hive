@@ -132,11 +132,23 @@ export const fixSkillDraft = (id: string, fixId: string, path: string, message: 
   dispatch("fix_skill_draft", { id, fixId, path, message });
 export const saveAgentDraft = (id: string, text: string) => dispatch("save_agent_draft", { id, text });
 export const exportAgentDraft = (id: string, text: string) => dispatch("export_agent_draft", { id, text });
+export const interviewForGoal = (goal: string) => dispatch("interview_for_goal", { goal });
 export const saveGeneratedDraft = (goal: string) => dispatch("save_generated_draft", { goal });
 export const applyOptimizedDescription = (description: string) =>
   dispatch("apply_optimized_description", { description });
 export const recordCompareVerdict = (id: string, verdict: string) =>
   dispatch("record_compare_verdict", { id, verdict });
+export const blindCompareLast = (prompt: string, outputA: string, outputB: string) =>
+  dispatch("blind_compare_last", { prompt, outputA, outputB });
+export const optimizeSkillDescription = (skillPath: string, rounds = 5) =>
+  dispatch("optimize_skill_description", { skillPath, rounds });
+export const controlMeasuredRun = (action: string) => dispatch("control_measured_run", { action });
+export const exportMeasuredRun = () => dispatch("export_measured_run");
+export const saveSuiteDraft = (skillPath: string, prompt: string, query: string, check: string) =>
+  dispatch("save_suite_draft", { skillPath, prompt, query, check });
+export const probeEndpoint = (id: string) => dispatch("probe_endpoint", { id });
+export const runEffectivenessSuite = (skillPath: string, adapter: string, repetitions = 3) =>
+  dispatch("run_effectiveness_suite", { skillPath, adapter, repetitions });
 export const writeHistoryBaseline = (skillName: string) => dispatch("write_history_baseline", { skillName });
 export const setProviderSecret = (id: string, secret: string) => dispatch("set_provider_secret", { id, secret });
 export const storeBackupPat = (token: string) => dispatch("store_backup_pat", { token });

@@ -47,7 +47,7 @@ function fromManaged(skill: SkillCard): ProjectSkill {
   return {
     id: skill.id,
     name: skill.name,
-    agents: skill.agents,
+    agents: Array.isArray(skill.agents) ? skill.agents : [],
     enabled: skill.enabled,
     center: skill.sourceBody,
     local: skill.body,
@@ -165,7 +165,7 @@ export function ProjectView() {
                 {item.name}
                 <span data-testid="project-dot" data-color={dotColor(item)} className="ml-2 inline-block h-2 w-2 rounded-full bg-current" />
               </p>
-              <p>{t("project.agents")}: {item.agents.join(", ") || "—"}</p>
+              <p>{t("project.agents")}: {(item.agents ?? []).join(", ") || "—"}</p>
               <Button type="button" variant="outline" size="sm" onClick={() => { update(addSkillToAgents(item, ["claude_code", "codex"])); void syncSkillToTool(item.id, "claude_code"); void syncSkillToTool(item.id, "codex"); void silent("export_skill_to_project", { id, skillId: item.id, agent: "claude_code" }); void silent("export_skill_to_project", { id, skillId: item.id, agent: "codex" }); }}>
                 {t("project.add")}
               </Button>

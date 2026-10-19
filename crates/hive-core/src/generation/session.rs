@@ -500,7 +500,11 @@ fn template_name(template: Template) -> &'static str {
         Template::P6 => "P6",
         Template::P7 => "P7",
         Template::P8 => "P8",
+        Template::P9 => "P9",
+        Template::P10 => "P10",
+        Template::P11 => "P11",
         Template::P12 => "P12",
+        Template::P13 => "P13",
     }
 }
 

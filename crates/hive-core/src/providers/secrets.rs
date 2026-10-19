@@ -20,9 +20,12 @@ pub enum SecretBackend {
 }
 
 pub fn selected_backend() -> SecretBackend {
+    // A headless macOS runner has no login-keychain dialog, so set_password
+    // waits forever. The labelled file is the same fallback Linux uses.
+    let headless_macos = cfg!(target_os = "macos") && std::env::var_os("CI").is_some();
     let linux_without_secret_service = cfg!(target_os = "linux")
         && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1");
-    if linux_without_secret_service {
+    if linux_without_secret_service || headless_macos {
         SecretBackend::LabelledFallback
     } else {
         SecretBackend::Keyring
@@ -168,9 +171,11 @@ mod tests {
         let account = format!("endpoint-{}", std::process::id());
         let secret = "sk-ant-endpoint-fixture-secret";
         let kind = store_provider_secret(&account, secret, tmp.path()).unwrap();
-        if cfg!(target_os = "linux")
-            && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1")
-        {
+        let headless_macos = cfg!(target_os = "macos") && std::env::var_os("CI").is_some();
+        let fallback = headless_macos
+            || (cfg!(target_os = "linux")
+                && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1"));
+        if fallback {
             assert_eq!(kind, SecretBackend::LabelledFallback);
             let stored = fs::read_to_string(fallback_path(tmp.path(), SERVICE, &account)).unwrap();
             assert!(stored.contains("label=skill-hive-provider"));

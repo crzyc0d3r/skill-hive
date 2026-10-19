@@ -30,6 +30,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: "/providers", title: "Providers" },
   { path: "/generate/:sessionId", title: "Generate" },
   { path: "/compare/:comparisonId", title: "Compare" },
+  { path: "/effectiveness", title: "Effectiveness" },
   { path: "/dev/tokens", title: "Tokens" },
 ];
 

@@ -16,7 +16,11 @@ it("confirms a budget pause and shows the run chip", async () => {
     renderAt("/skills/skill-research/tests");
     expect(await screen.findByTestId("suite")).toBeInTheDocument();
     expect(screen.getByTestId("run-chip")).toHaveAttribute("href", "/runs/run-fixture");
-    await user.click(screen.getByRole("link", { name: "Run suite" }));
+    expect(screen.getByTestId("suite-matrix")).toHaveTextContent("3");
+    await user.click(screen.getByRole("button", { name: "Run suite" }));
+    expect(await screen.findByTestId("suite-progress")).toBeInTheDocument();
+    cleanup();
+    renderAt("/runs/run-fixture");
     await user.click(await screen.findByRole("button", { name: "Budget" }));
     expect(screen.getByTestId("budget-dialog")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Confirm" }));

@@ -1,0 +1,28 @@
+{
+  "nodes": [
+    {
+      "id": "n1_counts",
+      "kind": "code",
+      "scope": "Recount docs/plan-conformance-audit.md and fail if the summary disagrees with the rows.",
+      "reads": ["docs/plan-conformance-audit.md"],
+      "writes": "automations/effectiveness-verify/out/counts.txt",
+      "run": "python3 automations/effectiveness-verify/code/check_audit.py > automations/effectiveness-verify/out/counts.txt",
+      "check": {"cmd": "python3 automations/effectiveness-verify/code/check_audit.py"},
+      "deps": []
+    },
+    {
+      "id": "n2_result",
+      "kind": "code",
+      "scope": "Write the verification result: audit counts, the measured wire test, the blind command, and the four screenshots.",
+      "reads": [
+        "docs/plan-conformance-audit.md",
+        "crates/hive-core/src/testing/effectiveness.rs",
+        "crates/hive-cli/src/eval.rs"
+      ],
+      "writes": "automations/effectiveness-verify/out/result.md",
+      "run": "python3 automations/effectiveness-verify/code/write_result.py",
+      "check": {"cmd": "python3 automations/effectiveness-verify/code/check_result.py"},
+      "deps": ["n1_counts"]
+    }
+  ]
+}

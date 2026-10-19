@@ -2,6 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use hive_cli::{command_ids, execute_isolated, validate};
+
+#[path = "wire.rs"]
+mod wire;
 use serde_json::Value;
 
 fn run(state: &std::path::Path, config: &std::path::Path, args: &[&str]) -> (i32, Value) {
@@ -421,6 +424,25 @@ fn contract_suite_exercises_every_subcommand() {
     );
     assert_eq!(code, 0, "{parsed}");
     seen.push(record(state, &parsed));
+    let mock = wire::spawn_wire();
+    let (code, parsed) = run(
+        state,
+        &config,
+        &[
+            "providers",
+            "add",
+            "--id",
+            "local",
+            "--name",
+            "Local",
+            "--kind",
+            "anthropic",
+            "--base-url",
+            &format!("http://127.0.0.1:{}", mock.port),
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
     let (code, parsed) = run(
         state,
         &config,
@@ -431,6 +453,8 @@ fn contract_suite_exercises_every_subcommand() {
             skill.to_str().unwrap(),
             "--mode",
             "offline",
+            "--repetitions",
+            "1",
         ],
     );
     assert_eq!(code, 0, "{parsed}");
@@ -492,10 +516,26 @@ fn contract_suite_exercises_every_subcommand() {
     let (code, parsed) = run(
         state,
         &config,
+        &[
+            "providers",
+            "add",
+            "--id",
+            "local",
+            "--name",
+            "Local",
+            "--kind",
+            "anthropic",
+        ],
+    );
+    assert_eq!(code, 0, "{parsed}");
+    seen.push(record(state, &parsed));
+    let (code, parsed) = run(
+        state,
+        &config,
         &["generate", "skill", "--name", "invoice-extractor"],
     );
     assert_ne!(code, 0, "{parsed}");
-    assert!(parsed.to_string().contains("API key"));
+    assert!(parsed.to_string().contains("API key"), "{parsed}");
 
     seen.sort();
     seen.dedup();

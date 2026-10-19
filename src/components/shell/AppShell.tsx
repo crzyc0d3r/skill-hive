@@ -700,7 +700,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           onClose={() => setCloseOpen(false)}
         />
       ) : null}
-      <Toaster position="bottom-right" />
+      <Toaster position="top-right" closeButton />
     </div>
   );
 }

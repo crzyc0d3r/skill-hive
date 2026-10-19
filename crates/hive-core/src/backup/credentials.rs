@@ -22,9 +22,12 @@ pub enum CredentialKind {
 }
 
 pub fn selected_backend() -> CredentialKind {
+    // A headless macOS runner has no login-keychain dialog, so set_password
+    // waits forever. The labelled file is the same fallback Linux uses.
+    let headless_macos = cfg!(target_os = "macos") && std::env::var_os("CI").is_some();
     let linux_without_secret_service = cfg!(target_os = "linux")
         && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1");
-    if linux_without_secret_service {
+    if linux_without_secret_service || headless_macos {
         CredentialKind::LabelledFallback
     } else {
         CredentialKind::Keyring
@@ -130,9 +133,11 @@ mod tests {
     #[test]
     fn backend_matches_platform_policy() {
         let kind = selected_backend();
-        if cfg!(target_os = "linux")
-            && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1")
-        {
+        let headless_macos = cfg!(target_os = "macos") && std::env::var_os("CI").is_some();
+        let fallback = headless_macos
+            || (cfg!(target_os = "linux")
+                && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1"));
+        if fallback {
             assert_eq!(kind, CredentialKind::LabelledFallback);
         } else {
             assert_eq!(kind, CredentialKind::Keyring);
@@ -145,9 +150,11 @@ mod tests {
         let account = format!("backup-{}", std::process::id());
         let secret = "local-bare-remote-token";
         let kind = store_credential(&account, secret, tmp.path()).unwrap();
-        if cfg!(target_os = "linux")
-            && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1")
-        {
+        let headless_macos = cfg!(target_os = "macos") && std::env::var_os("CI").is_some();
+        let fallback = headless_macos
+            || (cfg!(target_os = "linux")
+                && std::env::var("SKILL_HIVE_SECRET_SERVICE").ok().as_deref() != Some("1"));
+        if fallback {
             assert_eq!(kind, CredentialKind::LabelledFallback);
             let stored = fs::read_to_string(fallback_path(tmp.path(), &account)).unwrap();
             assert!(stored.contains("label=skill-hive-git-backup"));

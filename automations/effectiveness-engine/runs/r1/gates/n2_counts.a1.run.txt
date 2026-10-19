@@ -1,0 +1,6 @@
+$ python3 automations/effectiveness-engine/code/write_counts.py
+(exit 0)
+real=38
+stand-in=12
+missing=13
+total=63
