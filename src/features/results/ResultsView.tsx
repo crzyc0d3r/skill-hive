@@ -104,9 +104,9 @@ export function ResultsView() {
   }, [forced, online, attempt]);
 
   const selected = cells[index];
-  const status = paused ? t("results.pause") : phase === "ready" ? t("results.heatmap") : phaseCopy(phase);
+  const lede = paused ? t("results.pause") : phase === "ready" ? t("results.heatmap") : undefined;
   return (
-    <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} lede={status} actions={
+    <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} lede={lede} actions={
       <>
         <Button type="button" size="sm" onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
         <Button type="button" variant="secondary" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>{t("results.export")}</Button>
