@@ -20,6 +20,42 @@ export function shortAxis(name: string): string {
   return name;
 }
 
+/** Square radar drawing box. The plot sits inside a margin wide enough for the longest axis word. */
+export const RADAR = {
+  size: 760,
+  center: 380,
+  plot: 220 / 70,
+  labelRadius: 262,
+  fontSize: 16,
+  lineHeight: 20,
+} as const;
+
+export function axisLabelLines(label: string): string[] {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return [label.trim() || label];
+  return [parts[0]!, parts.slice(1).join(" ")];
+}
+
+export function radarLabelAnchor(
+  index: number,
+  count: number,
+  lineCount: number,
+): { x: number; y: number; anchor: "start" | "middle" | "end" } {
+  const n = Math.max(count, 1);
+  const angle = -Math.PI / 2 + (2 * Math.PI * index) / n;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const anchor: "start" | "middle" | "end" = Math.abs(cos) < 0.45 ? "middle" : cos > 0 ? "start" : "end";
+  const x = RADAR.center + RADAR.labelRadius * cos;
+  const iy = RADAR.center + RADAR.labelRadius * sin;
+  const lines = Math.max(lineCount, 1);
+  const block = (lines - 1) * RADAR.lineHeight;
+  let y = iy - block / 2;
+  if (anchor === "middle" && sin < 0) y = iy - block - 2;
+  if (anchor === "middle" && sin > 0) y = iy + 14;
+  return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, anchor };
+}
+
 export interface AxisScore {
   name: string;
   value: number | null;

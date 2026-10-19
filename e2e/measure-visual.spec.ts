@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expandForFullPage, expectRadarLabelsInside } from "./full-page";
 
 const sizes = [
   { name: "1100", width: 1100, height: 640 },
@@ -33,21 +34,10 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByTestId("effect-overlay")).toBeVisible();
       const chartsOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(chartsOverflow, "charts horizontal overflow").toBeLessThanOrEqual(1);
-      await page.evaluate(() => {
-        const main = document.querySelector('[data-testid="content"]');
-        if (!(main instanceof HTMLElement)) return;
-        const extra = Math.max(0, main.scrollHeight - main.clientHeight);
-        let node: HTMLElement | null = main;
-        while (node) {
-          node.style.setProperty("height", "auto", "important");
-          node.style.setProperty("max-height", "none", "important");
-          node.style.setProperty("overflow", "visible", "important");
-          node = node.parentElement;
-        }
-        document.documentElement.style.height = "auto";
-        document.body.style.height = "auto";
-        document.body.style.minHeight = `${window.innerHeight + extra + 32}px`;
-      });
+      await expectRadarLabelsInside(page);
+      const sidebarBox = await page.getByTestId("sidebar").boundingBox();
+      expect(sidebarBox?.height ?? 0).toBeGreaterThanOrEqual(size.height - 40);
+      await expandForFullPage(page);
       await page.screenshot({ path: `docs/parity/screenshots/${theme}/effectiveness-charts${suffix}.png`, fullPage: true });
       await page.goto("/skills/skill-research/tests");
       await expect(page.getByTestId("suite-matrix")).toBeVisible();

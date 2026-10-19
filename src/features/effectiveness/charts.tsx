@@ -3,12 +3,11 @@ import { cn } from "cn";
 import { t } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { gradeTone, radarPoint, shortAxis, type AxisScore, type EffectivenessReport, type InfluenceEdge } from "@/features/effectiveness/model";
+import { RADAR, axisLabelLines, gradeTone, radarLabelAnchor, radarPoint, shortAxis, type AxisScore, type EffectivenessReport, type InfluenceEdge } from "@/features/effectiveness/model";
 
-const CX = 200;
-const CY = 200;
-const PLOT = 185 / 70;
-const LABEL = 152 / 70;
+const CX = RADAR.center;
+const CY = RADAR.center;
+const PLOT = RADAR.plot;
 
 function placed(index: number, count: number, value: number, scale: number): { x: number; y: number } {
   const raw = radarPoint(index, count, value);
@@ -21,12 +20,6 @@ function polygon(axes: AxisScore[], scale: number): string {
     .filter((point): point is { x: number; y: number } => point != null)
     .map((point) => `${point.x},${point.y}`)
     .join(" ");
-}
-
-function textAnchor(x: number): "start" | "middle" | "end" {
-  if (x < CX - 28) return "end";
-  if (x > CX + 28) return "start";
-  return "middle";
 }
 
 export function GradeMark({ letter, score, hero, testId }: { letter: string; score: number; hero?: boolean; testId?: string }) {
@@ -67,7 +60,7 @@ export function RadarFigure({ report }: { report: EffectivenessReport }) {
       <svg
         role="img"
         aria-label={caption}
-        viewBox="0 0 400 400"
+        viewBox={`0 0 ${RADAR.size} ${RADAR.size}`}
         className="mx-auto aspect-square w-full"
       >
         {rings.map((points) => (
@@ -92,23 +85,24 @@ export function RadarFigure({ report }: { report: EffectivenessReport }) {
           return <rect key={`overlay-${axis.name}`} x={point.x - 5} y={point.y - 5} width="10" height="10" fill="var(--color-card)" stroke="var(--color-chart-2)" strokeWidth="2.5" />;
         })}
         {axes.map((axis, index) => {
-          const point = placed(index, count, 100, LABEL);
-          const anchor = textAnchor(point.x);
-          const dy = point.y < CY - 20 ? -6 : point.y > CY + 20 ? 16 : 5;
+          const lines = axisLabelLines(shortAxis(axis.name));
+          const place = radarLabelAnchor(index, count, lines.length);
           return (
             <text
               key={`label-${axis.name}`}
-              x={point.x}
-              y={point.y + dy}
-              textAnchor={anchor}
+              textAnchor={place.anchor}
               fill="var(--color-foreground)"
               stroke="var(--color-card)"
-              strokeWidth="6"
+              strokeWidth="4"
               paintOrder="stroke"
-              fontSize="16"
+              fontSize={RADAR.fontSize}
               fontFamily="var(--font-sans)"
             >
-              {shortAxis(axis.name)}
+              {lines.map((line, lineIndex) => (
+                <tspan key={line} x={place.x} y={place.y + lineIndex * RADAR.lineHeight}>
+                  {line}
+                </tspan>
+              ))}
             </text>
           );
         })}

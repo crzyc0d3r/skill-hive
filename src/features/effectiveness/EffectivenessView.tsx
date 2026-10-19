@@ -126,7 +126,7 @@ export function EffectivenessView() {
     >
       {open ? (
         <>
-          <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.72fr)]">
+          <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.7fr)]">
             <Panel title={t("effect.radar")} className="min-w-0">
               <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>
               <div className="mt-3">
