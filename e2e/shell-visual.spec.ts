@@ -80,6 +80,21 @@ for (const theme of ["light", "dark"] as const) {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow, "effectiveness charts horizontal overflow").toBeLessThanOrEqual(1);
+    await page.evaluate(() => {
+      const main = document.querySelector('[data-testid="content"]');
+      if (!(main instanceof HTMLElement)) return;
+      const extra = Math.max(0, main.scrollHeight - main.clientHeight);
+      let node: HTMLElement | null = main;
+      while (node) {
+        node.style.setProperty("height", "auto", "important");
+        node.style.setProperty("max-height", "none", "important");
+        node.style.setProperty("overflow", "visible", "important");
+        node = node.parentElement;
+      }
+      document.documentElement.style.height = "auto";
+      document.body.style.height = "auto";
+      document.body.style.minHeight = `${window.innerHeight + extra + 32}px`;
+    });
     await page.screenshot({
       path: `docs/parity/screenshots/${theme}/effectiveness-charts.png`,
       fullPage: true,

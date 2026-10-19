@@ -40,5 +40,16 @@ test.describe("results", () => {
     await page.screenshot({ path: "docs/parity/screenshots/light/results.png", fullPage: false });
     await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
     await page.screenshot({ path: "docs/parity/screenshots/dark/results.png", fullPage: false });
+    await page.setViewportSize({ width: 1440, height: 860 });
+    await page.evaluate(() => {
+      document.documentElement.setAttribute("data-theme", "light");
+      document.documentElement.classList.remove("dark");
+    });
+    await page.screenshot({ path: "docs/parity/screenshots/light/results-1440.png", fullPage: false });
+    await page.evaluate(() => {
+      document.documentElement.setAttribute("data-theme", "dark");
+      document.documentElement.classList.add("dark");
+    });
+    await page.screenshot({ path: "docs/parity/screenshots/dark/results-1440.png", fullPage: false });
   });
 });

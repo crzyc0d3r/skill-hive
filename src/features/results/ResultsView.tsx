@@ -1,20 +1,40 @@
+import { invoke } from "@tauri-apps/api/core";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
+import { cn } from "cn";
 import { t } from "../../lib/i18n";
 import { evidenceAnchor, FIXTURE_CELLS, FIXTURE_STEPS, moveCell, stepDuration, type HeatCell, type TimelineStep } from "@/features/results/model";
 import { demoEnabled } from "@/lib/demo";
-import { controlMeasuredRun, exportMeasuredRun, silent } from "@/lib/ipc/actions";
+import { controlMeasuredRun, exportMeasuredRun } from "@/lib/ipc/actions";
+import { Panel, Screen, StatePanel } from "@/components/chrome";
+import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
 
 function scrollToId(id: string) {
   const node = document.getElementById(id);
   if (node && typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "nearest" });
 }
 
+function rateTone(rate: number): string {
+  if (rate >= 0.8) return "border-success/40 bg-success-subtle text-success-text";
+  if (rate >= 0.5) return "border-warning/40 bg-warning-subtle text-warning-text";
+  return "border-destructive/30 bg-destructive/15 text-destructive";
+}
+
+function phaseCopy(phase: ViewPhase): string {
+  if (phase === "loading") return t("results.loading");
+  if (phase === "error") return t("results.error");
+  if (phase === "offline") return t("results.offline");
+  return t("results.empty");
+}
+
 export function ResultsView() {
-  const demo = demoEnabled();
+  const forced = previewPhase();
+  const online = useOnline();
+  const demo = demoEnabled() && !forced;
   const [cells, setCells] = useState<HeatCell[]>(() => (demo ? FIXTURE_CELLS : []));
   const [steps, setSteps] = useState<TimelineStep[]>(() => (demo ? FIXTURE_STEPS : []));
+  const [phase, setPhase] = useState<ViewPhase>(() => forced ?? (demo ? "ready" : "loading"));
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -24,12 +44,32 @@ export function ResultsView() {
   const [exported, setExported] = useState("");
   const [notes, setNotes] = useState<string[]>([]);
   const [triggers, setTriggers] = useState<{ query: string; outcome: string }[]>([]);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    if (demo) return;
-    void silent<string>("get_effectiveness_report").then((raw) => {
-      let loaded = false;
-      if (raw) {
-        try {
+    if (forced) {
+      setPhase(forced);
+      setCells([]);
+      setSteps([]);
+      return;
+    }
+    if (demoEnabled()) {
+      setCells(FIXTURE_CELLS);
+      setSteps(FIXTURE_STEPS);
+      setPhase("ready");
+      return;
+    }
+    if (!online) {
+      setPhase("offline");
+      return;
+    }
+    let cancel = false;
+    setPhase("loading");
+    void (async () => {
+      try {
+        const raw = await invoke<string>("get_effectiveness_report");
+        let loaded = false;
+        if (raw) {
           const parsed = JSON.parse(raw) as {
             cells?: { id: string; configuration: string; pass_rate: number }[];
             analyst_notes?: string[];
@@ -40,145 +80,158 @@ export function ResultsView() {
             setCells(parsed.cells.map((cell) => ({ id: cell.id, label: cell.configuration, passRate: cell.pass_rate })));
           }
           if (Array.isArray(parsed.analyst_notes)) setNotes(parsed.analyst_notes.filter((note) => note.length > 0));
-          if (Array.isArray(parsed.activations)) {
-            setTriggers(parsed.activations.map((row) => ({ query: row.query, outcome: row.outcome })));
-          }
-        } catch {
-          /* an empty report stays on the empty state */
+          if (Array.isArray(parsed.activations)) setTriggers(parsed.activations.map((row) => ({ query: row.query, outcome: row.outcome })));
         }
+        if (!loaded) {
+          const excerpt = await invoke<{ text?: string }>("get_recent_log_excerpt");
+          if (excerpt?.text) {
+            const parsed = JSON.parse(excerpt.text) as { cells?: HeatCell[]; steps?: TimelineStep[] };
+            if (Array.isArray(parsed.cells) && parsed.cells.length) {
+              loaded = true;
+              setCells(parsed.cells);
+            }
+            if (Array.isArray(parsed.steps)) setSteps(parsed.steps);
+          }
+        }
+        if (!cancel) setPhase(loaded ? "ready" : "empty");
+      } catch {
+        if (!cancel) setPhase("error");
       }
-      if (loaded) return undefined;
-      return silent<{ text?: string }>("get_recent_log_excerpt").then((excerpt) => {
-        if (!excerpt?.text) return;
-        try {
-          const parsed = JSON.parse(excerpt.text) as { cells?: HeatCell[]; steps?: TimelineStep[] };
-          if (Array.isArray(parsed.cells) && parsed.cells.length) setCells(parsed.cells);
-          if (Array.isArray(parsed.steps)) setSteps(parsed.steps);
-        } catch {
-          /* logs that are not a run payload stay on the empty state */
-        }
-      });
-    });
-  }, [demo]);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [forced, online, attempt]);
+
   const selected = cells[index];
+  const status = paused ? t("results.pause") : phase === "ready" ? t("results.heatmap") : phaseCopy(phase);
   return (
-    <section data-testid="results" className="min-w-0 space-y-3">
-      <h1 className="font-mono text-xl font-semibold">{t("results.title")}</h1>
-      <p className="text-sm">{paused ? t("results.pause") : cells.length === 0 ? t("results.empty") : t("results.heatmap")}</p>
-      <div
-        role="grid"
-        tabIndex={0}
-        data-testid="heatmap"
-        className="grid grid-cols-2 gap-2"
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && selected) {
-            setOpen(selected.id);
-            return;
-          }
-          const next = moveCell(index, event.key, cells.length);
-          if (next !== index) {
-            event.preventDefault();
-            setIndex(next);
-          }
-        }}
-      >
-        {cells.map((cell, cellIndex) => (
-          <Button key={cell.id} type="button" role="gridcell" data-selected={cellIndex === index} variant="outline" size="sm" className="text-left" onClick={() => setIndex(cellIndex)}>
-            {cell.label} {cell.passRate}
-          </Button>
-        ))}
-      </div>
-      {open ? (
-        <section data-testid="cell-sheet" className="rounded border border-border p-3 text-sm">
-          <h2 className="text-sm font-semibold">{t("results.sheet")}</h2>
-          <p data-testid="heatmap-open">{open}</p>
-          {selected ? <p>{selected.label} {selected.passRate}</p> : null}
-          <p>{t("results.transcript")}</p>
-          <p>{t("results.timeline")}</p>
-          <p>{t("results.outputs")}</p>
-          <p>{t("results.grading")}</p>
-          <p>{t("results.checks")}</p>
-          <p>{t("results.feedback")}</p>
-        </section>
+    <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} lede={status} actions={
+      <>
+        <Button type="button" size="sm" onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>{t("results.export")}</Button>
+      </>
+    }>
+      {phase === "loading" || phase === "error" || phase === "offline" ? (
+        <StatePanel
+          tone={phase}
+          title={phaseCopy(phase)}
+          action={phase === "loading" ? null : <Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button>}
+        />
       ) : null}
-      <section data-testid="analyst-notes">
-        <h2 className="text-sm font-semibold">{t("results.notes")}</h2>
-        <ul>
-          {notes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      </section>
-      <section data-testid="trigger-panel">
-        <h2 className="text-sm font-semibold">{t("results.triggers")}</h2>
-        <ul>
-          {triggers.map((row) => (
-            <li key={`${row.query}-${row.outcome}`}>{row.query} {row.outcome}</li>
-          ))}
-        </ul>
-      </section>
-      <h2 className="text-sm font-semibold">{t("results.timeline")}</h2>
-      <ul className="flex gap-2">
-        {steps.map((step) => (
-          <li key={step.id}>
-            <Button type="button" variant="outline" size="sm" onClick={() => scrollToId(`step-${step.id}`)}>
-              {step.tool} {stepDuration(step)}ms
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <div data-testid="transcript" className="max-h-24 overflow-auto rounded border border-border p-2 text-xs">
-        {demo ? (
-          <>
-            <p id="step-2">step 2 wrote outputs/answer.txt</p>
-            <p id="step-3">step 3 read outputs/answer.txt</p>
-            <p id="outputs/answer.txt">PINECONE</p>
-          </>
-        ) : (
-          steps.map((step) => (
-            <p id={`step-${step.id}`} key={step.id}>{step.tool}</p>
-          ))
-        )}
+      {phase === "empty" ? <StatePanel tone="empty" title={t("results.empty")} /> : null}
+      <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(16rem,0.9fr)]">
+        <Panel title={t("results.heatmap")} className="min-w-0">
+          <div
+            role="grid"
+            tabIndex={0}
+            data-testid="heatmap"
+            className="grid grid-cols-2 gap-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && selected) {
+                setOpen(selected.id);
+                return;
+              }
+              const next = moveCell(index, event.key, cells.length);
+              if (next !== index) {
+                event.preventDefault();
+                setIndex(next);
+              }
+            }}
+          >
+            {cells.map((cell, cellIndex) => (
+              <button
+                key={cell.id}
+                type="button"
+                role="gridcell"
+                data-selected={cellIndex === index}
+                className={cn("flex h-28 flex-col items-start justify-between rounded-lg border p-3 text-left", rateTone(cell.passRate), cellIndex === index && "ring-2 ring-ring")}
+                onClick={() => setIndex(cellIndex)}
+              >
+                <span className="text-sm font-medium">{cell.label}</span>
+                <span className="font-mono text-3xl font-semibold tabular-nums">{Math.round(cell.passRate * 100)}%</span>
+                <span className="font-mono text-xs tabular-nums">{cell.passRate}</span>
+              </button>
+            ))}
+          </div>
+        </Panel>
+        <div className="flex flex-col gap-3">
+          <Panel title={t("results.sheet")} testId={open ? "cell-sheet" : undefined} className="h-full">
+            {open ? <p data-testid="heatmap-open" className="font-mono text-sm">{open}</p> : <p className="text-sm text-muted-foreground">{t("results.heatmap")}</p>}
+            {selected && open ? <p className="mt-1 text-sm">{selected.label} {selected.passRate}</p> : null}
+            <ul className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.transcript")}</li>
+              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.timeline")}</li>
+              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.outputs")}</li>
+              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.grading")}</li>
+              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.checks")}</li>
+              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.feedback")}</li>
+            </ul>
+          </Panel>
+          {notes.length ? (
+            <Panel title={t("results.notes")} testId="analyst-notes">
+              <ul className="space-y-2 text-sm">{notes.map((note) => <li key={note}>{note}</li>)}</ul>
+            </Panel>
+          ) : <div data-testid="analyst-notes" className="hidden" />}
+          {triggers.length ? (
+            <Panel title={t("results.triggers")} testId="trigger-panel">
+              <ul className="space-y-2 text-sm">{triggers.map((row) => <li key={`${row.query}-${row.outcome}`} className="flex justify-between gap-2"><span>{row.query}</span><span className="font-mono text-xs">{row.outcome}</span></li>)}</ul>
+            </Panel>
+          ) : <div data-testid="trigger-panel" className="hidden" />}
+        </div>
       </div>
-      <form
-        className="flex flex-wrap gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const next = evidenceAnchor(query);
-          setAnchor(next);
-          if (next) scrollToId(next);
-        }}
-      >
-        <label className="text-sm">
-          {t("results.evidence")}
-          <Input className="h-8 ml-2" value={query} onChange={(event) => setQuery(event.target.value)} />
-        </label>
-        <Button type="submit" variant="outline" size="sm">
-          {t("results.evidence")}
-        </Button>
-      </form>
-      <p data-testid="evidence-anchor">{anchor ?? t("results.noAnchor")}</p>
-      <Button type="button" variant="outline" size="sm" onClick={() => setBudgetOpen(true)}>
-        {t("results.budget")}
-      </Button>
+      <Panel title={t("results.timeline")}>
+        <div className="flex h-14 overflow-hidden rounded-md border border-border">
+          {steps.map((step) => (
+            <button key={step.id} type="button" className="flex min-w-24 flex-1 flex-col items-start justify-center border-r border-border bg-chart-1/15 px-3 text-left last:border-r-0" style={{ flexGrow: Math.max(stepDuration(step), 1) }} onClick={() => scrollToId(`step-${step.id}`)}>
+              <span className="text-sm font-medium">{step.tool}</span>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">{stepDuration(step)}ms</span>
+            </button>
+          ))}
+        </div>
+        <div data-testid="transcript" className="mt-3 max-h-28 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs">
+          {demo ? (
+            <>
+              <p id="step-2">step 2 wrote outputs/answer.txt</p>
+              <p id="step-3">step 3 read outputs/answer.txt</p>
+              <p id="outputs/answer.txt">PINECONE</p>
+            </>
+          ) : (
+            steps.map((step) => (
+              <p id={`step-${step.id}`} key={step.id}>{step.tool}</p>
+            ))
+          )}
+        </div>
+      </Panel>
+      <Panel title={t("results.evidence")}>
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const next = evidenceAnchor(query);
+            setAnchor(next);
+            if (next) scrollToId(next);
+          }}
+        >
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("results.evidence")}</span>
+            <Input className="h-8" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
+          <Button type="submit" size="sm">{t("results.evidence")}</Button>
+        </form>
+        <p className="mt-2 font-mono text-sm" data-testid="evidence-anchor">{anchor ?? t("results.noAnchor")}</p>
+      </Panel>
       {budgetOpen ? (
-        <div role="dialog" data-testid="budget-dialog" className="rounded border border-border p-3">
-          <p className="text-sm">{t("results.budget")}</p>
-          <Button type="button" variant="outline" size="sm" className="mr-2" onClick={() => { setPaused(true); setBudgetOpen(false); void controlMeasuredRun("continue"); }}>
-            {t("results.confirm")}
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="mr-2" onClick={() => { setBudgetOpen(false); void controlMeasuredRun("stop"); }}>
-            {t("results.stop")}
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => { setBudgetOpen(false); void controlMeasuredRun("cancel"); }}>
-            {t("results.cancel")}
-          </Button>
+        <div role="dialog" data-testid="budget-dialog" className="rounded-lg border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-medium">{t("results.budget")}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={() => { setPaused(true); setBudgetOpen(false); void controlMeasuredRun("continue"); }}>{t("results.confirm")}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => { setBudgetOpen(false); void controlMeasuredRun("stop"); }}>{t("results.stop")}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => { setBudgetOpen(false); void controlMeasuredRun("cancel"); }}>{t("results.cancel")}</Button>
+          </div>
         </div>
       ) : null}
-      <Button type="button" variant="outline" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>
-        {t("results.export")}
-      </Button>
-      {exported ? <p data-testid="results-export">{exported}</p> : null}
-    </section>
+      {exported ? <p data-testid="results-export" className="font-mono text-xs">{exported}</p> : null}
+    </Screen>
   );
 }

@@ -1,3 +1,25 @@
+import { t } from "@/lib/i18n";
+
+export function gradeTone(letter: string): string {
+  const grade = letter.trim().slice(0, 1).toUpperCase();
+  if (grade === "A") return "bg-success-subtle text-success-text";
+  if (grade === "B") return "bg-info-subtle text-info-text";
+  if (grade === "C") return "bg-warning-subtle text-warning-text";
+  return "bg-destructive/15 text-destructive";
+}
+
+export function shortAxis(name: string): string {
+  if (name.startsWith("Trigger")) return t("effect.axis.trigger");
+  if (name.startsWith("Negative")) return t("effect.axis.negative");
+  if (name.startsWith("Survival")) return t("effect.axis.survival");
+  if (name.startsWith("With")) return t("effect.axis.with");
+  if (name.startsWith("Value")) return t("effect.axis.value");
+  if (name.startsWith("Consistency")) return t("effect.axis.consistency");
+  if (name.startsWith("Weak")) return t("effect.axis.weak");
+  if (name.startsWith("Efficiency")) return t("effect.axis.efficiency");
+  return name;
+}
+
 export interface AxisScore {
   name: string;
   value: number | null;

@@ -1,9 +1,12 @@
-import { Button } from "@/components/ui/button";
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
-import { t } from "../../lib/i18n";
+import { Button } from "@/components/ui/button";
+import { Panel, Screen, Stat, StatePanel } from "@/components/chrome";
+import { t } from "@/lib/i18n";
 import { demoEnabled } from "@/lib/demo";
-import { silent } from "@/lib/ipc/actions";
-import { SAMPLE_REPORT, radarPoint, type EffectivenessReport, type InfluenceEdge } from "@/features/effectiveness/model";
+import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
+import { SAMPLE_REPORT, type EffectivenessReport } from "@/features/effectiveness/model";
+import { AxisTable, BisectList, ConflictMatrix, GradeMark, InfluenceMap, Leaderboard, MapTable, RadarFigure, WarningTable } from "@/features/effectiveness/charts";
 
 const VERDICTS = ["hijacked", "cofired", "none", "strong", "value", "install", "healthy"] as const;
 
@@ -31,289 +34,166 @@ function actionText(code: string): string {
   return t("effect.action.healthy");
 }
 
+function phaseCopy(phase: ViewPhase): string {
+  if (phase === "loading") return t("effect.loading");
+  if (phase === "error") return t("effect.error");
+  if (phase === "offline") return t("effect.offline");
+  return t("effect.empty");
+}
+
 export function EffectivenessView() {
-  const demo = demoEnabled();
-  const [report, setReport] = useState<EffectivenessReport | null>(() => (demo ? SAMPLE_REPORT : null));
+  const forced = previewPhase();
+  const online = useOnline();
+  const [report, setReport] = useState<EffectivenessReport | null>(() => (demoEnabled() && !previewPhase() ? SAMPLE_REPORT : null));
+  const [phase, setPhase] = useState<ViewPhase>(() => previewPhase() ?? (demoEnabled() ? "ready" : "loading"));
   const [open, setOpen] = useState(false);
-  const [edge, setEdge] = useState<InfluenceEdge | null>(null);
-  const [node, setNode] = useState(0);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (demo) return;
-    void silent<string>("get_effectiveness_report").then((raw) => {
-      if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw) as EffectivenessReport;
-        if (parsed.grade) setReport(parsed);
-      } catch {
-        /* a report that is not JSON stays on the empty state */
-      }
-    });
-  }, [demo]);
+    if (forced) {
+      setPhase(forced);
+      setReport(null);
+      return;
+    }
+    if (demoEnabled()) {
+      setReport(SAMPLE_REPORT);
+      setPhase("ready");
+      return;
+    }
+    if (!online) {
+      setReport(null);
+      setPhase("offline");
+      return;
+    }
+    let cancel = false;
+    setPhase("loading");
+    void invoke<string>("get_effectiveness_report")
+      .then((raw) => {
+        if (cancel) return;
+        if (!raw) {
+          setReport(null);
+          setPhase("empty");
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw) as EffectivenessReport;
+          if (!parsed.grade) {
+            setReport(null);
+            setPhase("empty");
+            return;
+          }
+          setReport(parsed);
+          setPhase("ready");
+        } catch {
+          setPhase("error");
+        }
+      })
+      .catch(() => {
+        if (!cancel) setPhase("error");
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [forced, online, attempt]);
 
-  if (!report) {
+  const retry =
+    phase === "error" || phase === "offline" ? (
+      <Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>
+        {t("banner.retry")}
+      </Button>
+    ) : null;
+
+  if (phase !== "ready" || !report) {
     return (
-      <section data-testid="effectiveness" className="space-y-3">
-        <h1 className="font-mono text-xl font-semibold">{t("effect.title")}</h1>
-        <p>{t("effect.empty")}</p>
-      </section>
+      <Screen testId="effectiveness" className="min-h-[calc(100dvh-8.5rem)]" title={t("effect.title")}>
+        <StatePanel tone={phase === "ready" ? "empty" : phase} title={phaseCopy(phase === "ready" ? "empty" : phase)} action={retry} />
+      </Screen>
     );
   }
 
   const code = verdictKey(report.verdict);
-  const nodes = report.influence?.nodes ?? [];
-  const edges = report.influence?.edges ?? [];
-  const selected = nodes[node] ?? nodes[0];
-  const axes = report.axes ?? [];
-  const points = axes
-    .map((axis, index) => (axis.value == null ? null : radarPoint(index, axes.length, axis.value)))
-    .filter((point): point is { x: number; y: number } => point != null);
-  const polygon = points.map((point) => `${point.x},${point.y}`).join(" ");
-  const overlayAxes = report.overlay?.axes ?? [];
-  const overlayPoints = overlayAxes
-    .map((axis, index) => (axis.value == null ? null : radarPoint(index, overlayAxes.length, axis.value)))
-    .filter((point): point is { x: number; y: number } => point != null);
-  const overlayPolygon = overlayPoints.map((point) => `${point.x},${point.y}`).join(" ");
-
   return (
-    <section data-testid="effectiveness" className="min-w-0 space-y-4">
-      <h1 className="font-mono text-xl font-semibold">{t("effect.title")}</h1>
-      <p className="text-4xl font-semibold" data-testid="effect-grade">
-        <span className="sr-only">{t("effect.grade")} </span>
-        {report.grade}
-        <span className="ml-2 text-base font-normal tabular-nums">{Math.round(report.grade_score)}</span>
-      </p>
-      <p data-testid="effect-verdict">{verdictText(code)}</p>
-      <p data-testid="effect-action">{actionText(code)}</p>
-      {report.omitted_axes?.length ? <p>{t("effect.omitted", { axes: report.omitted_axes.join(", ") })}</p> : null}
-      <Button type="button" size="sm" variant="outline" onClick={() => setOpen((value) => !value)}>
-        {open ? t("effect.hide") : t("effect.show")}
-      </Button>
+    <Screen
+      testId="effectiveness"
+      className="min-h-[calc(100dvh-8.5rem)]"
+      title={t("effect.title")}
+      lede={open ? undefined : verdictText(code)}
+      actions={
+        <Button type="button" size="sm" onClick={() => setOpen((value) => !value)}>
+          {open ? t("effect.hide") : t("effect.show")}
+        </Button>
+      }
+    >
       {open ? (
-        <div className="space-y-6">
-          <section>
-            <h2 className="text-sm font-semibold">{t("effect.radar")}</h2>
-            <p>{t("effect.caption.radar", { axis: report.weakest_axis })}</p>
-            {report.overlay?.name ? <p>{t("effect.overlay")}: {report.overlay.name}</p> : null}
-            <svg role="img" aria-label={t("effect.caption.radar", { axis: report.weakest_axis })} viewBox="0 0 200 200" className="h-48 w-48">
-              <polygon points={polygon} fill="none" stroke="currentColor" strokeWidth="2" />
-              {overlayPolygon ? (
-                <polygon data-testid="effect-overlay" points={overlayPolygon} fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
-              ) : null}
-              {points.map((point, index) => (
-                <circle key={axes[index]?.name ?? index} cx={point.x} cy={point.y} r="3" fill="currentColor" />
-              ))}
-              {points.map((point, index) => (
-                <text key={`label-${axes[index]?.name ?? index}`} x={point.x} y={point.y - 6} fontSize="6">
-                  {axes[index]?.value}
-                </text>
-              ))}
-            </svg>
-            <Button type="button" size="sm" variant="outline" onClick={() => document.getElementById("effect-radar-table")?.focus()}>
-              {t("effect.showTable")}
-            </Button>
-            <table id="effect-radar-table" tabIndex={0} className="w-full text-sm">
-              <caption className="sr-only">{t("effect.radar")}</caption>
-              <tbody>
-                {axes.map((axis) => (
-                  <tr key={axis.name}>
-                    <th scope="row" className="text-left font-normal">{axis.name}</th>
-                    <td className="tabular-nums">{axis.value == null ? "—" : axis.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-          <section>
-            <h2 className="text-sm font-semibold">{t("effect.map")}</h2>
-            <p>{t("effect.caption.map", { arrow: report.thickest_arrow })}</p>
-            <div
-              role="application"
-              tabIndex={0}
-              data-testid="effect-map"
-              className="flex gap-4"
-              onKeyDown={(event) => {
-                if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setNode((value) => (nodes.length ? (value + 1) % nodes.length : 0));
-                }
-                if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setNode((value) => (nodes.length ? (value - 1 + nodes.length) % nodes.length : 0));
-                }
-                if (event.key === "Enter" && selected) {
-                  const match = edges.find((item) => item.source === selected.id || item.target === selected.id) ?? null;
-                  setEdge(match);
-                }
-              }}
-            >
-              {nodes.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  data-selected={index === node}
-                  className="rounded border border-border px-3 py-2 text-left"
-                  style={{ fontSize: `${12 + item.won}px` }}
-                  onClick={() => setNode(index)}
-                >
-                  <span className="font-semibold">{item.grade}</span> {item.id}
-                  <span className="block tabular-nums">{Math.round(item.score)}</span>
-                </button>
-              ))}
-            </div>
-            <ul>
-              {edges.map((item) => (
-                <li key={`${item.source}-${item.target}`}>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setEdge(item)}>
-                    {item.source} → {item.target} {Math.round(item.steal_rate * 100)}%
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            {edge ? (
-              <div data-testid="effect-stolen">
-                <h3 className="text-sm font-semibold">{t("effect.queries")}</h3>
-                <ul>
-                  {edge.queries.map((id) => {
-                    const activation = report.activations?.find((row) => row.query_id === id);
-                    return (
-                      <li key={id}>
-                        {activation?.query ?? id}
-                        {activation?.transcript ? <span className="ml-2 font-mono text-xs">{activation.transcript}</span> : null}
-                      </li>
-                    );
-                  })}
-                </ul>
+        <>
+          <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.72fr)]">
+            <Panel title={t("effect.radar")} className="min-w-0">
+              <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>
+              <div className="mt-3">
+                <RadarFigure report={report} />
               </div>
-            ) : null}
-            <Button type="button" size="sm" variant="outline" onClick={() => document.getElementById("effect-map-table")?.focus()}>
-              {t("effect.showTable")}
-            </Button>
-            <table id="effect-map-table" tabIndex={0} className="w-full text-sm">
-              <caption className="sr-only">{t("effect.map")}</caption>
-              <thead>
-                <tr>
-                  <th>source</th>
-                  <th>target</th>
-                  <th>steal rate</th>
-                  <th>queries won</th>
-                  <th>grade</th>
-                  <th>transcript</th>
-                </tr>
-              </thead>
-              <tbody>
-                {edges.map((item) => {
-                  const target = nodes.find((entry) => entry.id === item.target);
-                  const transcript = report.activations?.find((row) => item.queries.includes(row.query_id))?.transcript ?? "";
-                  return (
-                    <tr key={`${item.source}-${item.target}`}>
-                      <td>{item.source}</td>
-                      <td>{item.target}</td>
-                      <td className="tabular-nums">{Math.round(item.steal_rate * 100)}%</td>
-                      <td className="tabular-nums">{target?.won ?? 0}</td>
-                      <td>{target?.grade}</td>
-                      <td className="font-mono text-xs">{transcript}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-          <section>
-            <h2 className="text-sm font-semibold">{t("effect.board")}</h2>
-            <p>{t("effect.caption.board", { skill: report.leader_name, factor: report.leader_factor })}</p>
-            <table className="w-full text-sm">
-              <caption className="sr-only">{t("effect.board")}</caption>
-              <thead>
-                <tr>
-                  <th>rank</th>
-                  <th>skill</th>
-                  <th>fires</th>
-                  <th>quality</th>
-                  <th>score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(report.leaderboard ?? []).map((row) => (
-                  <tr key={row.skill} data-testid={`board-${row.skill}`}>
-                    <td className="tabular-nums">{row.rank}</td>
-                    <td>{row.skill}</td>
-                    <td className="tabular-nums">{row.fires}</td>
-                    <td className="tabular-nums">{row.quality}</td>
-                    <td className="tabular-nums">{row.score}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-          <section>
-            <h2 className="text-sm font-semibold">{t("effect.conflicts")}</h2>
-            <p>
-              {t("effect.caption.conflicts", {
-                other: report.conflicts?.[0]?.other ?? "—",
-                owner: report.conflicts?.[0]?.owner ?? "—",
-              })}
+            </Panel>
+            <div className="flex min-w-0 flex-col gap-3">
+              <Panel>
+                <GradeMark letter={report.grade} score={report.grade_score} testId="effect-grade" />
+                <p className="mt-3 text-sm" data-testid="effect-verdict">{verdictText(code)}</p>
+                <p className="mt-1 text-sm text-muted-foreground" data-testid="effect-action">{actionText(code)}</p>
+              </Panel>
+              <Panel title={t("effect.map")}>
+                <p className="mb-2 text-sm text-muted-foreground">{t("effect.caption.map", { arrow: report.thickest_arrow })}</p>
+                <InfluenceMap report={report} />
+              </Panel>
+              <Panel title={t("effect.board")}>
+                <p className="mb-2 text-sm text-muted-foreground">{t("effect.caption.board", { skill: report.leader_name, factor: report.leader_factor })}</p>
+                <Leaderboard report={report} />
+              </Panel>
+            </div>
+          </div>
+          <Panel title={t("effect.conflicts")}>
+            <p className="mb-2 text-sm text-muted-foreground">
+              {t("effect.caption.conflicts", { other: report.conflicts?.[0]?.other ?? "—", owner: report.conflicts?.[0]?.owner ?? "—" })}
             </p>
-            <table className="w-full text-sm">
-              <caption className="sr-only">{t("effect.conflicts")}</caption>
-              <thead>
-                <tr>
-                  <th>owner</th>
-                  <th>other</th>
-                  <th>stole</th>
-                  <th>co-fired</th>
-                  <th>neither</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(report.conflicts ?? []).map((cell) => (
-                  <tr key={`${cell.owner}-${cell.other}`}>
-                    <td>{cell.owner}</td>
-                    <td>{cell.other}</td>
-                    <td className="tabular-nums">{cell.stole}</td>
-                    <td className="tabular-nums">{cell.co_fired}</td>
-                    <td className="tabular-nums">{cell.neither}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-          <section>
-            <h2 className="text-sm font-semibold">{t("effect.bisect")}</h2>
-            <p>{t("effect.caption.bisect", { skills: report.interference?.bisect.join(", ") || "—" })}</p>
-            <p data-testid="effect-bisect">{report.interference?.bisect.join(", ") || "—"}</p>
-          </section>
-          <section>
-            <h2 className="text-sm font-semibold">{t("effect.warnings")}</h2>
-            <p>
-              {t("effect.caption.warnings", {
-                skill: report.interference?.warnings[0]?.suspect ?? "—",
-              })}
-            </p>
-            <table className="w-full text-sm">
-              <caption className="sr-only">{t("effect.warnings")}</caption>
-              <thead>
-                <tr>
-                  <th>query</th>
-                  <th>before</th>
-                  <th>after</th>
-                  <th>suspect</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(report.interference?.warnings ?? []).map((row) => (
-                  <tr key={`${row.query_id}-${row.suspect}`}>
-                    <td>{row.query_id}</td>
-                    <td>{row.before}</td>
-                    <td>{row.after}</td>
-                    <td>{row.suspect}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+            <ConflictMatrix report={report} />
+          </Panel>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Panel title={t("effect.bisect")}>
+              <p className="mb-2 text-sm text-muted-foreground">{t("effect.caption.bisect", { skills: report.interference?.bisect.join(", ") || "—" })}</p>
+              <BisectList report={report} />
+            </Panel>
+            <Panel title={t("effect.warnings")}>
+              <p className="mb-2 text-sm text-muted-foreground">{t("effect.caption.warnings", { skill: report.interference?.warnings[0]?.suspect ?? "—" })}</p>
+              <WarningTable report={report} />
+            </Panel>
+          </div>
+          <Panel title={t("effect.map")}>
+            <MapTable report={report} />
+          </Panel>
+        </>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
+          <Panel className="h-full">
+            <GradeMark letter={report.grade} score={report.grade_score} hero testId="effect-grade" />
+            <p className="mt-4 text-sm" data-testid="effect-verdict">{verdictText(code)}</p>
+            <p className="mt-2 text-sm text-muted-foreground" data-testid="effect-action">{actionText(code)}</p>
+            {report.omitted_axes?.length ? <p className="mt-3 text-xs text-muted-foreground">{t("effect.omitted", { axes: report.omitted_axes.join(", ") })}</p> : null}
+          </Panel>
+          <div className="grid grid-cols-2 gap-3">
+            <Stat label={t("effect.radar")} value={report.axes.length} hint={report.weakest_axis} />
+            <Stat label={t("effect.board")} value={report.leader_name} hint={report.leader_factor} />
+            <Stat label={t("effect.overlay")} value={report.overlay?.name ?? "—"} />
+            <Stat label={t("effect.map")} value={report.influence?.edges.length ?? 0} hint={report.thickest_arrow} />
+          </div>
         </div>
-      ) : null}
-    </section>
+      )}
+      <Panel title={t("effect.radar")} className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          {open ? <p className="text-sm text-muted-foreground">{t("effect.series.skill")}</p> : <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>}
+          <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById("effect-radar-table")?.focus()}>
+            {t("effect.showTable")}
+          </Button>
+        </div>
+        <AxisTable report={report} />
+      </Panel>
+    </Screen>
   );
 }
