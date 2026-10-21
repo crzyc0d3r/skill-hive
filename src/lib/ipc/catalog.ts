@@ -25,6 +25,9 @@ export interface ScanRow {
   name: string;
   tool: string;
   path: string;
+  alreadyManaged?: boolean;
+  differs?: boolean;
+  fingerprint?: string;
 }
 
 const inflight = new Map<string, Promise<unknown>>();
@@ -67,9 +70,9 @@ export function listAgents(): Promise<AgentRow[]> {
 
 export function listScanned(): Promise<ScanRow[]> {
   const previewScans = [
-    { name: "autopilot", tool: "claude_code", path: "~/.claude/skills/autopilot" },
-    { name: "autopilot", tool: "codex", path: "~/.codex/skills/autopilot" },
-    { name: "autopilot", tool: "cursor", path: "~/.cursor/skills/autopilot" },
+    { name: "autopilot", tool: "claude_code", path: "~/.claude/skills/autopilot", fingerprint: "copy-a" },
+    { name: "autopilot", tool: "codex", path: "~/.codex/skills/autopilot", fingerprint: "copy-a" },
+    { name: "autopilot", tool: "cursor", path: "~/.cursor/skills/autopilot", fingerprint: "copy-b" },
   ];
   const fallback = demoEnabled()
     ? previewAgentsEnabled()

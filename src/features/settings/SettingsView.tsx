@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { AgentName } from "@/components/app/AgentBadge";
 import { Screen, StatePanel } from "@/components/chrome";
 import { SettingsSkeleton } from "@/components/skeletons";
 import { RetryContext, useShellPhase } from "@/lib/view-state";
@@ -269,7 +270,7 @@ export function SettingsView({
                 }}
                 className="rounded-md border border-border p-2 text-sm"
               >
-                <span className="font-medium">{agent.name}</span>
+                <AgentName agent={agent.key} displayName={agent.name} />
                 <label className="ml-2 text-sm">
                   <input type="checkbox" aria-label={`${t("settings.agents.enable")} ${agent.name}`} checked={agent.enabled} onChange={(event) => { const enabled = event.target.checked; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, enabled } : item)); void setToolEnabled(agent.key, enabled); }} /> {t("settings.agents.enable")}
                 </label>

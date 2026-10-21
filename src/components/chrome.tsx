@@ -26,7 +26,7 @@ export function Screen({
     <section data-testid={testId} className={cn("flex w-full min-w-0 flex-col gap-4", className)}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="font-mono text-[22px] font-semibold leading-7 tracking-tight">{title}</h1>
+          <h1 className="font-sans text-display font-semibold tracking-tight">{title}</h1>
           {lede ? <p className="mt-1 max-w-prose text-sm leading-5 text-muted-foreground">{lede}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -41,8 +41,8 @@ export function Stat({ label, value, hint, icon }: { label: string; value: React
     <Card className="gap-1 rounded-lg border-border bg-card py-3 shadow-none">
       <div className="flex items-start justify-between gap-3 px-3">
         <div className="min-w-0">
-          <div className="text-xs font-medium text-muted-foreground">{label}</div>
-          <div className="font-mono text-[28px] font-semibold leading-9 tracking-tight tabular-nums">{value}</div>
+          <div className="text-overline font-semibold tracking-[0.04em] text-muted-foreground uppercase">{label}</div>
+          <div className="font-sans text-metric font-semibold tracking-tight tabular-nums">{value}</div>
           {hint ? <div className="text-xs text-muted-foreground">{hint}</div> : null}
         </div>
         {icon ? <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">{icon}</div> : null}
@@ -65,7 +65,7 @@ export function Panel({
   return (
     <Card data-testid={testId} className={cn("gap-2 rounded-lg border-border bg-card py-3 shadow-none", className)}>
       <div className="px-3">
-        {title ? <h2 className="font-mono text-base font-medium leading-6">{title}</h2> : null}
+        {title ? <h2 className="font-sans text-title font-semibold">{title}</h2> : null}
         <div className={title ? "mt-2" : undefined}>{children}</div>
       </div>
     </Card>

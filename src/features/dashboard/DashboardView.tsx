@@ -6,9 +6,11 @@ import { t } from "@/lib/i18n";
 import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { useGenerate } from "@/features/generate/store";
 import { installManageSkills } from "@/lib/ipc/actions";
+import { AgentBadge } from "@/components/app/AgentBadge";
+import { SourceBadge } from "@/components/app/SourceBadge";
 import { Panel, PrimaryLink, QuietLink, Screen, Stat } from "@/components/chrome";
 import { DashboardSkeleton, RegionError } from "@/components/skeletons";
-import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -22,6 +24,8 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
   const coverage = skills.length === 0 ? 0 : Math.round((synced / skills.length) * 100);
   const recent = [...skills].sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
   const installed = skills.some((skill) => skill.name === "manage-skills");
+  const uninstalled = skills.filter((skill) => skill.agents.length === 0).length;
+  const regressions = seed.regressions.length;
   return (
     <Screen
       testId="dashboard"
@@ -39,58 +43,74 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
     >
       {phase === "loading" ? <DashboardSkeleton /> : null}
       {phase === "error" ? <RegionError onRetry={retry} /> : null}
-      {phase === "ready" ? <>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {phase === "ready" && skills.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border bg-card px-4 py-6">
+          <h2 className="font-sans text-title font-semibold">{t("dashboard.onboard.title")}</h2>
+          <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+            <li className="rounded-md border border-border p-3 text-sm"><span className="text-muted-foreground">1</span> {t("dashboard.onboard.scan")}</li>
+            <li className="rounded-md border border-border p-3 text-sm"><span className="text-muted-foreground">2</span> {t("dashboard.onboard.install")}</li>
+            <li className="rounded-md border border-border p-3 text-sm"><span className="text-muted-foreground">3</span> {t("dashboard.onboard.test")}</li>
+          </ol>
+        </div>
+      ) : null}
+      {phase === "ready" && skills.length > 0 ? <>
+      {uninstalled > 0 || regressions > 0 ? (
+        <div className="space-y-2" data-testid="attention-strip">
+          {uninstalled > 0 ? (
+            <Alert>
+              <AlertTitle>{t("dashboard.attention.uninstalled", { count: String(uninstalled) })}</AlertTitle>
+              <AlertDescription>
+                <QuietLink to="/my-skills">{t("dashboard.attention.review")}</QuietLink>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {regressions > 0 ? (
+            <Alert>
+              <AlertTitle>{t("dashboard.attention.regressions", { count: String(regressions) })}</AlertTitle>
+              <AlertDescription>
+                <QuietLink to="/effectiveness">{t("dashboard.attention.review")}</QuietLink>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3 min-[1100px]:grid-cols-4">
         <Stat label={t("dashboard.stat.skills")} value={skills.length} icon={<LibraryIcon className="size-4" aria-hidden="true" />} />
-        <Stat label={t("dashboard.stat.coverage")} value={`${coverage}%`} icon={<ActivityIcon className="size-4" aria-hidden="true" />} />
+        <Stat label={t("dashboard.stat.coverage")} value={`${coverage}%`} hint={<><span>{t("dashboard.coverage.meaning", { synced: String(synced), total: String(skills.length) })}</span><Progress value={coverage} className="mt-2" /></>} icon={<ActivityIcon className="size-4" aria-hidden="true" />} />
         <Stat label={t("dashboard.stat.agents")} value={connected} icon={<BotIcon className="size-4" aria-hidden="true" />} />
         <Stat label={t("dashboard.stat.tested")} value={<span data-testid="tested-count">{seed.tested.length}</span>} icon={<FlaskConicalIcon className="size-4" aria-hidden="true" />} />
       </div>
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)]">
+      <div className="grid min-h-0 flex-1 gap-3 min-[1440px]:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)]">
         <Panel title={t("dashboard.recent")} className="h-full">
-          {skills.length === 0 ? (
-            <div className="flex min-h-48 flex-col items-start justify-center gap-3 rounded-md border border-dashed border-border bg-muted/30 px-4 py-8">
-              <SparklesIcon className="size-5 text-muted-foreground" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">{t("dashboard.recent")}</p>
-            </div>
-          ) : (
-            <ul data-testid="recent-activity" className="divide-y divide-border">
-              {recent.slice(0, 6).map((skill) => (
-                <li key={skill.id}>
-                  <Link to={`/my-skills?skill=${skill.id}`} className="flex items-center gap-3 py-2.5 hover:text-foreground">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold uppercase">
-                      {skill.name.slice(0, 1)}
+          <ul data-testid="recent-activity" className="divide-y divide-border">
+            {recent.slice(0, 6).map((skill) => (
+              <li key={skill.id}>
+                <Link to={`/my-skills?skill=${skill.id}`} className="flex items-center gap-3 py-2.5 hover:text-foreground">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold uppercase">
+                    {skill.name.slice(0, 1)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium">{skill.name}</span>
+                      <SourceBadge source={skill.source} />
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium">{skill.name}</span>
-                        <Badge variant="outline" className="font-normal">{skill.source}</Badge>
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">{skill.description}</span>
-                    </span>
-                    <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
-                      {skill.agents.length > 0 ? skill.agents.join(", ") : t("dashboard.stat.enabled")}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+                    <span className="block truncate text-xs text-muted-foreground">{skill.description}</span>
+                  </span>
+                  <span className="hidden flex-wrap justify-end gap-1 sm:flex">
+                    {skill.agents.slice(0, 3).map((agent) => <AgentBadge key={agent} agent={agent} />)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </Panel>
         <div className="flex h-full flex-col gap-3">
-          <Panel title={t("dashboard.stat.coverage")}>
-            <div className="flex items-end justify-between gap-3">
-              <div className="font-mono text-2xl font-semibold tabular-nums">{synced}<span className="text-base text-muted-foreground">/{skills.length}</span></div>
-              <span className="text-xs text-muted-foreground">{coverage}%</span>
-            </div>
-            <Progress value={coverage} className="mt-3" />
-            <p className="mt-3 text-xs text-muted-foreground">{t("dashboard.stat.skills")} {skills.length}</p>
-          </Panel>
           <Panel title={t("dashboard.setup")} testId="manage-skills">
-            <p className="text-sm text-muted-foreground">{t("dashboard.setup")}</p>
+            <p className="text-sm text-muted-foreground">{t("dashboard.setup.body")}</p>
             <Button
               type="button"
               size="sm"
+              variant="outline"
               className="mt-3"
               disabled={installed}
               onClick={() => {

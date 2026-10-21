@@ -41,7 +41,7 @@ export function GenerateWizard() {
   return (
     <section data-testid="generate-wizard" className="mx-auto flex w-full max-w-3xl flex-col gap-4">
       <header>
-        <h1 className="font-mono text-[22px] font-semibold tracking-tight">{t("generate.title")}</h1>
+        <h1 className="font-sans text-display font-semibold tracking-tight">{t("generate.title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{sessionId}</p>
       </header>
       <ol className="inline-flex w-fit flex-wrap rounded-lg bg-muted p-0.5 text-sm">

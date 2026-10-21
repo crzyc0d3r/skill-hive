@@ -8,7 +8,7 @@ describe("library", () => {
     const user = userEvent.setup();
     renderAt("/my-skills");
     expect(await screen.findByText("research-notes")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "local" }));
+    await user.click(screen.getByRole("button", { name: "Local folder" }));
     expect(screen.queryByText("review-diff")).not.toBeInTheDocument();
     await act(async () => {
       screen.getByRole("button", { name: "research" }).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
@@ -19,7 +19,7 @@ describe("library", () => {
     await user.click(screen.getByRole("button", { name: "Rename tag" }));
     expect(screen.getByRole("button", { name: "sources" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "local" }));
+    await user.click(screen.getByRole("button", { name: "Local folder" }));
     await user.click(screen.getByRole("checkbox", { name: "Select research-notes" }));
     await user.click(screen.getByRole("checkbox", { name: "Select review-diff" }));
     await user.click(screen.getByRole("button", { name: "Sync to agents" }));

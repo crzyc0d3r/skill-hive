@@ -10,6 +10,13 @@ const ICONS: Record<string, LucideIcon> = {
   windsurf: Wind,
 };
 
+/** Stable hue for a letter tile. The same agent always gets the same color. */
+export function agentHue(key: string): number {
+  let hash = 0;
+  for (const char of key) hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
+  return hash % 360;
+}
+
 /** Display names for the built-in adapters. Visible UI never prints the key. */
 export const AGENT_NAMES: Record<string, string> = {
   cursor: "Cursor",

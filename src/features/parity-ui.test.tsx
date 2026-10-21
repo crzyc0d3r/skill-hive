@@ -162,7 +162,7 @@ describe("ui parity invokes", () => {
     renderAt("/lobster-workspace/openclaw");
     expect(await screen.findByTestId("lobster")).toBeInTheDocument();
     expect(screen.getByTestId("agent-page")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "openclaw" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OpenClaw" })).toBeInTheDocument();
   });
 
   it("links a skills root, updates and deletes a project skill, and remembers agents", async () => {

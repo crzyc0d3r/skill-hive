@@ -141,7 +141,7 @@ export function AxisTable({ report }: { report: EffectivenessReport }) {
             const other = overlay[index]?.value;
             return (
               <TableRow key={axis.name} className="odd:bg-muted/30">
-                <TableCell className="whitespace-normal font-medium">{axis.name}</TableCell>
+                <TableCell className="whitespace-normal font-medium">{shortAxis(axis.name)}</TableCell>
                 <TableCell>
                   <span className="flex items-center justify-end gap-3">
                     <span className="hidden h-2 w-24 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">

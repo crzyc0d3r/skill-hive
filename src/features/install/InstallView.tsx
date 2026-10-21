@@ -5,7 +5,9 @@ import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
 import { listScanRows, type GitPreview, type GitPreviewSkill } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
-import { agentDisplayName } from "@/lib/agents";
+import { AgentBadge } from "@/components/app/AgentBadge";
+import { groupScanRows } from "@/lib/scans";
+
 import { t } from "@/lib/i18n";
 import { Screen, StatePanel } from "@/components/chrome";
 import { InstallSkeleton } from "@/components/skeletons";
@@ -14,25 +16,6 @@ import { Card } from "@/components/ui/card";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
 const TABS = ["leaderboard", "local", "git", "scan"] as const;
-
-interface GroupedScan extends ScanRow {
-  tools: string[];
-  paths: string[];
-}
-
-function groupedScans(rows: ScanRow[]): GroupedScan[] {
-  const grouped: GroupedScan[] = [];
-  for (const row of rows) {
-    const existing = grouped.find((item) => item.name.trim().toLowerCase() === row.name.trim().toLowerCase());
-    if (!existing) {
-      grouped.push({ ...row, tools: [row.tool], paths: [row.path] });
-      continue;
-    }
-    if (!existing.tools.includes(row.tool)) existing.tools.push(row.tool);
-    if (!existing.paths.includes(row.path)) existing.paths.push(row.path);
-  }
-  return grouped;
-}
 
 export function InstallView({
   scanned,
@@ -74,6 +57,7 @@ export function InstallView({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [scanNames, setScanNames] = useState<Record<string, string>>({});
+  const [picked, setPicked] = useState<string[]>([]);
   const [rescanned, setRescanned] = useState<ScanRow[] | null>(null);
   const scanRows = rescanned ?? scanned;
   async function act(work: () => Promise<void>, done?: () => void) {
@@ -93,7 +77,15 @@ export function InstallView({
   const active = useMemo(() => (tabs.includes(tab) ? tab : "local"), [tab, tabs]);
 
   return (
-    <Screen testId="install" title={t("install.title")}>
+    <Screen
+      testId="install"
+      title={t("install.title")}
+      actions={active === "scan" ? (
+        <Button type="button" disabled={busy || picked.length === 0} aria-busy={busy} size="sm" onClick={() => void act(() => Promise.resolve(onImportAll(picked)))}>
+          {t("install.scan.importSelected", { count: String(picked.length) })}
+        </Button>
+      ) : undefined}
+    >
       <div role="tablist" aria-label={t("install.title")} className="inline-flex max-w-full flex-wrap rounded-lg bg-muted p-0.5">
         {tabs.map((item) => (
           <Button key={item} type="button" role="tab" aria-selected={active === item} data-testid={`tab-${item}`} variant="ghost" size="sm" className={`h-7 rounded-md px-3 shadow-none ${active === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
@@ -160,7 +152,10 @@ export function InstallView({
             });
           }}
         >
-          <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/org/skills" className="h-8 max-w-xl" />
+          <label className="block text-sm">
+            <span className="mb-1.5 block text-muted-foreground">{t("install.git.url")}</span>
+            <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/org/skills" className="h-8 max-w-xl" />
+          </label>
           <Button type="submit" size="sm" disabled={busy} aria-busy={busy}>{t("install.git.preview")}</Button>
           {cancelled ? <p role="status">{t("install.git.removed")}</p> : null}
           {preview && !cancelled ? (
@@ -197,27 +192,49 @@ export function InstallView({
       ) : null}
       {phase === "ready" && active === "scan" ? (
         <div className="mt-4">
-          <ul>
-            {groupedScans(scanRows).map((row) => {
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2" />
+                  <th className="px-3 py-2">{t("library.title")}</th>
+                  <th className="px-3 py-2">{t("library.installedIn")}</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+            {groupScanRows(scanRows).map((row) => {
               const name = scanNames[row.name] ?? row.name;
+              const checked = picked.includes(row.name);
               return (
-                <li key={row.name} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <span>{row.tools.map((tool) => agentDisplayName(tool)).join(", ")}</span>
-                  {row.paths.length > 1 ? <span className="text-muted-foreground">{t("install.scan.locations", { count: String(row.paths.length) })}</span> : null}
-                  <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} className="h-8" />
-                  <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
-                    {t("install.scan.one")} {row.name}
-                  </Button>
-                  {row.paths.length > 1 ? (
-                    <ul className="w-full font-mono text-xs text-muted-foreground">
-                      {row.paths.map((path) => <li key={path}>{path}</li>)}
-                    </ul>
-                  ) : null}
-                </li>
+                <tr key={row.name} className="border-t border-border">
+                  <td className="px-3 py-2">
+                    <input type="checkbox" aria-label={`${t("install.git.select", { name: row.name })}`} checked={checked} onChange={() => setPicked((current) => current.includes(row.name) ? current.filter((item) => item !== row.name) : [...current, row.name])} />
+                  </td>
+                  <td className="px-3 py-2 font-medium">
+                    {row.name}
+                    {row.differs ? <span className="ml-2 rounded-full bg-warning-subtle px-2 py-0.5 text-xs text-warning-subtle-foreground">{t("install.scan.differs")}</span> : null}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="flex flex-wrap gap-1">{row.tools.slice(0, 4).map((tool) => <AgentBadge key={tool} agent={tool} />)}</span>
+                    {row.paths.length > 1 ? <span className="mt-1 block text-xs text-muted-foreground">{t("install.scan.locations", { count: String(row.paths.length) })}</span> : null}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <details>
+                      <summary className="cursor-pointer text-xs text-muted-foreground">{t("install.scan.rename")}</summary>
+                      <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} className="mt-1 h-8" />
+                    </details>
+                    <Button type="button" variant="outline" size="sm" className="mt-1" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
+                      {t("install.scan.one")} {row.name}
+                    </Button>
+                  </td>
+                </tr>
               );
             })}
-          </ul>
-          <Button type="button" disabled={busy} aria-busy={busy} variant="default" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>
+              </tbody>
+            </table>
+          </div>
+          <Button type="button" disabled={busy} aria-busy={busy} variant="outline" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>
             {t("install.scan.all")}
           </Button>
           <Button type="button" variant="outline" size="sm" className="mt-2 ml-2" disabled={busy} aria-busy={busy} onClick={() => void act(async () => { setRescanned(await listScanRows()); })}>

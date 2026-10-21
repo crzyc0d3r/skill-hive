@@ -16,10 +16,11 @@ import { setProjectSkills } from "@/features/project/store";
 import { addProject, pullProjectCenter, setSkillsEnabled, silent, syncSkillToTool } from "@/lib/ipc/actions";
 import type { SkillCard } from "@/features/library/model";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { AgentMark } from "@/components/app/AgentBadge";
+import { agentDisplayName } from "@/lib/agents";
 import { StatePanel } from "@/components/chrome";
 import { ProjectSkeleton } from "@/components/skeletons";
 import { RetryContext, useShellPhase } from "@/lib/view-state";
-import { agentDisplayName } from "@/lib/agents";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -139,7 +140,7 @@ export function ProjectView() {
 
   return (
     <section data-testid="project" className="flex w-full flex-col gap-4">
-      <h1 className="font-mono text-[22px] font-semibold tracking-tight">{t("project.title")}</h1>
+      <h1 className="font-sans text-display font-semibold tracking-tight">{t("project.title")}</h1>
       {phase === "loading" ? <ProjectSkeleton /> : null}
       {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
       <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 shadow-none">
@@ -212,7 +213,10 @@ export function ProjectView() {
           {tab === "diff" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.local}{"\n"}{skill.center}</pre> : null}
           <div className="flex flex-wrap gap-2">
             {["claude_code", "codex"].map((agent) => (
-              <Button key={agent} type="button" size="sm" aria-pressed={agents.includes(agent)} variant={agents.includes(agent) ? "secondary" : "outline"} onClick={() => rememberAgents(agents.includes(agent) ? agents.filter((item) => item !== agent) : [...agents, agent])}>{agentDisplayName(agent)}</Button>
+              <Button key={agent} type="button" size="sm" aria-pressed={agents.includes(agent)} variant={agents.includes(agent) ? "secondary" : "outline"} onClick={() => rememberAgents(agents.includes(agent) ? agents.filter((item) => item !== agent) : [...agents, agent])}>
+                <AgentMark agent={agent} name={agentDisplayName(agent)} />
+                {agentDisplayName(agent)}
+              </Button>
             ))}
           </div>
           <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(true); void silent<SkillCard[]>("get_managed_skills").then((loaded) => setLibrary(loaded ?? [])); }}>{t("project.fromLibrary")}</Button>

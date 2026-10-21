@@ -3,15 +3,21 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArchiveIcon,
   BotIcon,
+  CircleHelpIcon,
   DownloadIcon,
+  FlaskConicalIcon,
+  GitCompareIcon,
   GripVerticalIcon,
   HexagonIcon,
+  HistoryIcon,
   LayoutDashboardIcon,
   LibraryIcon,
   PencilIcon,
   PlusIcon,
+  SearchIcon,
   SettingsIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -66,7 +72,10 @@ import { closePicker, createSkill, openPicker, useAuthoring } from "@/lib/author
 import { CloseGuardDialog } from "./CloseGuardDialog";
 import { HelpDialog } from "./HelpDialog";
 import { Kbd } from "../Kbd";
+import { cn } from "cn";
+import { AgentMark } from "@/components/app/AgentBadge";
 import { StatusBanner } from "../StatusBanner";
+import { shellBand, useShellBand } from "@/lib/shell-width";
 
 const NAV_ICONS: Record<string, typeof LayoutDashboardIcon> = {
   "/": LayoutDashboardIcon,
@@ -94,7 +103,17 @@ const SHORTCUTS = [
 export function AppShell({ platform = "linux" }: { platform?: string }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const band = useShellBand();
+  const [pinned, setPinned] = useState(
+    () => typeof localStorage !== "undefined" && localStorage.getItem("skill-hive-sidebar-pin") === "1",
+  );
+  const [collapsed, setCollapsed] = useState(() => {
+    const width = typeof window === "undefined" ? 1440 : window.innerWidth;
+    const next = shellBand(width);
+    if (next >= 1440) return false;
+    if (next === 1100) return localStorage.getItem("skill-hive-sidebar-pin") !== "1";
+    return true;
+  });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [theme, setTheme] = useState<ThemeChoice>("system");
@@ -149,6 +168,13 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     window.addEventListener("skill-hive-restart", onRestart);
     return () => window.removeEventListener("skill-hive-restart", onRestart);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.shell = String(band);
+    if (band >= 1440) setCollapsed(false);
+    else if (band === 1100) setCollapsed(!pinned);
+    else setCollapsed(true);
+  }, [band, pinned]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -346,7 +372,13 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     queryFn: () => listBaseEntries().catch(() => [] as string[]),
   });
 
-  const title = NAV_ITEMS.find((item) => item.path === location.pathname)?.nav ?? "Skill Hive";
+  const crumb = location.pathname.startsWith("/global-workspace") || location.pathname.startsWith("/project") || location.pathname.startsWith("/lobster")
+    ? t("shell.workspaces")
+    : location.pathname.startsWith("/effectiveness") || location.pathname.startsWith("/runs") || location.pathname.startsWith("/compare") || location.pathname.includes("/tests") || location.pathname.includes("/history")
+      ? t("shell.test")
+      : t("shell.manage");
+  const sidebarWidth = collapsed ? 56 : band >= 1920 ? 256 : 240;
+  const pagePad = band >= 1920 ? "px-8 py-8" : band >= 1440 ? "px-6 py-6" : "px-4 py-4";
   const primaryNav = NAV_ITEMS.filter((item) => item.path !== "/settings");
   const grouped = ["Skills", "Presets", "Projects", "Actions"]
     .map((group) => ({ group, items: matches.filter((item) => item.group === group) }))
@@ -358,18 +390,36 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         <div data-testid="drag-strip" data-tauri-drag-region className="h-7 shrink-0 bg-sidebar" />
       ) : null}
       <StatusBanner message={banner} onRetry={() => setReloadKey((value) => value + 1)} />
-      <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)} className="h-full min-h-0 flex-1">
+      <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)} className="relative h-full min-h-0 flex-1">
         <Sidebar
           collapsible="none"
           data-testid="sidebar"
           data-collapsed={collapsed ? "true" : "false"}
-          className="h-full shrink-0 border-r border-sidebar-border bg-sidebar"
-          style={{ width: collapsed ? 56 : 240 }}
+          data-band={band}
+          className={cn("h-full shrink-0 border-r border-sidebar-border bg-sidebar", collapsed && "[&_[data-sidebar=group-label]]:sr-only", band === 800 && !collapsed && "absolute inset-y-0 left-0 z-40 shadow-lg")}
+          style={{ width: sidebarWidth }}
         >
           <SidebarHeader className="h-11 justify-center border-b border-sidebar-border px-3">
-            <div className="flex items-center gap-2 font-mono text-sm font-semibold tracking-tight">
+            <div className="flex items-center gap-2 font-sans text-sm font-semibold tracking-tight">
               <HexagonIcon className="size-4 shrink-0" aria-hidden="true" />
               {collapsed ? <span className="sr-only">Skill Hive</span> : <span>Skill Hive</span>}
+              {band === 1100 && !collapsed ? (
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant={pinned ? "secondary" : "ghost"}
+                  className="ml-auto"
+                  aria-pressed={pinned}
+                  aria-label={t("shell.pin")}
+                  onClick={() => {
+                    const next = !pinned;
+                    setPinned(next);
+                    localStorage.setItem("skill-hive-sidebar-pin", next ? "1" : "0");
+                  }}
+                >
+                  <GripVerticalIcon aria-hidden="true" />
+                </Button>
+              ) : null}
             </div>
           </SidebarHeader>
           <SidebarContent>
@@ -396,7 +446,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location.pathname === "/global-workspace"}>
-                    <NavLink to="/global-workspace">{collapsed ? "G" : t("workspace.allAgents")}</NavLink>
+                    <NavLink to="/global-workspace">
+                      {collapsed ? <><span aria-hidden="true">G</span><span className="sr-only">{t("workspace.allAgents")}</span></> : t("workspace.allAgents")}
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 {(agentRows ?? (agents.data ?? []).filter((agent) => agent.installed && agent.enabled)).map((agent) => (
@@ -410,7 +462,10 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                     setDragPreset(null);
                   }}>
                     <SidebarMenuButton asChild isActive={location.pathname === `/global-workspace/${agent.key}`}>
-                      <NavLink to={`/global-workspace/${agent.key}`}>{collapsed ? agent.name.slice(0, 1) : `${agent.name}\u200b`}</NavLink>
+                      <NavLink to={`/global-workspace/${agent.key}`}>
+                        {collapsed ? <span aria-hidden="true">{agent.name.slice(0, 1)}</span> : <AgentMark agent={agent.key} name={agent.name} />}
+                        <span className={collapsed ? "sr-only" : undefined}>{`${agent.name}\u200b`}</span>
+                      </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
@@ -437,12 +492,12 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                     >
                       <SidebarMenuButton asChild className="flex-1">
                         <NavLink to="/global-workspace" onClick={() => { setActivePresetId(preset.id); void switchPreset(preset.id); }}>
-                          {collapsed ? preset.name.slice(0, 1) : preset.name}
+                          {collapsed ? <span aria-hidden="true">{preset.name.slice(0, 1)}</span> : null}
+                          <span className={collapsed ? "sr-only" : undefined}>{preset.name}</span>
                           {collapsed || preset.skillIds.length === 0 ? null : <span aria-hidden="true" className="ml-auto text-xs text-muted-foreground tabular-nums group-hover/preset:invisible">{preset.skillIds.length}</span>}
                         </NavLink>
                       </SidebarMenuButton>
-                      {collapsed ? null : (
-                        <div className="absolute right-1 flex items-center rounded-md bg-sidebar opacity-0 transition-opacity group-hover/preset:opacity-100">
+                      <div className="absolute right-1 flex items-center rounded-md bg-sidebar opacity-0 transition-opacity group-hover/preset:opacity-100">
                           <Button type="button" size="icon-xs" variant="ghost" title={t("library.reorder")} aria-label={`${t("library.reorder")} ${preset.name}`}>
                             <GripVerticalIcon aria-hidden="true" />
                           </Button>
@@ -455,7 +510,6 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                             <span className="sr-only">{t("preset.delete")}</span>
                           </Button>
                         </div>
-                      )}
                     </div>
                   </SidebarMenuItem>
                 ))}
@@ -506,13 +560,44 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 ))}
               </SidebarMenu>
             </SidebarGroup>
+            <SidebarGroup>
+              <SidebarGroupLabel>{collapsed ? <span className="sr-only">{t("shell.test")}</span> : t("shell.test")}</SidebarGroupLabel>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.pathname.startsWith("/effectiveness")}>
+                    <NavLink to="/effectiveness">
+                      <FlaskConicalIcon aria-hidden="true" />
+                      {collapsed ? <span className="sr-only">{t("effect.title")}</span> : t("effect.title")}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.pathname.includes("/history")}>
+                    <NavLink to="/skills/skill-research/history">
+                      <HistoryIcon aria-hidden="true" />
+                      {collapsed ? <span className="sr-only">{t("history.title")}</span> : t("history.title")}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.pathname.startsWith("/compare")}>
+                    <NavLink to="/compare/fixture">
+                      <GitCompareIcon aria-hidden="true" />
+                      {collapsed ? <span className="sr-only">{t("compare.title")}</span> : t("compare.title")}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
             {lobsterRows.length === 0 ? null : (
               <SidebarGroup>
                 <SidebarGroupLabel>{t("lobster.title")}</SidebarGroupLabel>
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild>
-                      <NavLink to="/lobster-workspace">{collapsed ? "L" : t("lobster.all")}</NavLink>
+                      <NavLink to="/lobster-workspace">
+                        {collapsed ? <><span aria-hidden="true">L</span><span className="sr-only">{t("lobster.all")}</span></> : t("lobster.all")}
+                      </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   {lobsterRows.map((agent) => (
@@ -543,26 +628,34 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
           <header
             data-testid="header"
-            className="sticky top-0 z-10 flex h-11 items-center justify-between gap-3 border-b border-border bg-background px-6"
+            className={cn("sticky top-0 z-10 flex h-11 items-center justify-between gap-3 border-b border-border bg-background", pagePad, "py-0")}
           >
             <div className="min-w-0">
-              <div data-testid="breadcrumb" className="truncate font-mono text-[18px] font-medium leading-7 tracking-tight">{title}</div>
+              <div data-testid="breadcrumb" className="truncate text-overline font-semibold tracking-[0.04em] text-muted-foreground uppercase">{crumb}</div>
             </div>
-            <div data-testid="toolbar" className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => setHelpOpen(true)}>{t("help.title")}</Button>
-              <Button type="button" size="sm" variant="outline" data-testid="request-close" onClick={() => setCloseOpen(true)}>{t("close.dialog")}</Button>
-              <Kbd>Mod+K</Kbd>
+            <div data-testid="toolbar" className="flex items-center gap-1">
+              <Button type="button" size="sm" variant="outline" className="text-muted-foreground" onClick={() => setPaletteOpen(true)}>
+                <SearchIcon aria-hidden="true" />
+                {t("shell.search")}
+                <Kbd>Mod+K</Kbd>
+              </Button>
+              <Button type="button" size="icon-sm" variant="ghost" aria-label={t("help.title")} onClick={() => setHelpOpen(true)}>
+                <CircleHelpIcon aria-hidden="true" />
+              </Button>
+              <Button type="button" size="icon-sm" variant="ghost" aria-label={t("close.dialog")} data-testid="request-close" onClick={() => setCloseOpen(true)}>
+                <XIcon aria-hidden="true" />
+              </Button>
             </div>
           </header>
           <main
             data-testid="content"
-            className="min-h-0 flex-1 overflow-auto px-6 py-4"
+            className={cn("min-h-0 flex-1 overflow-auto", pagePad)}
             style={{ scrollPaddingTop: "44px" }}
           >
             {job && !job.done ? (
               <JobBanner job={job} onCancel={() => { void silent("cancel_job"); setJob(null); }} />
             ) : null}
-            <div className="mx-auto w-full max-w-[1280px]">
+            <div className="mx-auto w-full max-w-[1600px]">
               <DataPhaseContext.Provider value={dataPhase}>
               <RetryContext.Provider value={retryData}>
               <RouteErrorBoundary route={location.pathname}>
@@ -600,7 +693,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       >
         <span className="flex items-center gap-2">
           <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
-          {authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : "Ready"}
+          {job && !job.done ? t("job.working") : authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : t("shell.ready")}
         </span>
         <Link to="/runs/run-fixture" data-testid="run-chip" className="rounded px-1 hover:bg-accent">{t("run.chip")}</Link>
         <span className="font-mono tabular-nums">Skill Hive 1.0.0</span>

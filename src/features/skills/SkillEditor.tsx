@@ -110,9 +110,9 @@ export function SkillEditor() {
         <Button type="button" variant="outline" size="sm">{t("editor.rename")}</Button>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => saveSkill(draft)}>{t("editor.save")}</Button>
+        <Button type="button" size="sm" onClick={() => saveSkill(draft)}>{t("editor.save")}</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => snapshotSkill(draft.id, "snapshot")}>{t("editor.snapshot")}</Button>
-        <Button type="button" variant="default" size="sm" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""} onClick={() => publish(false)}>{t("editor.publish")}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""} onClick={() => publish(false)}>{t("editor.publish")}</Button>
         <Button type="button" variant="outline" size="sm" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""} onClick={() => publish(false)}>{t("editor.package")}</Button>
         <Button type="button" variant="outline" size="sm" disabled={blocked} title={blocked ? t("editor.blocking", { count: String(errors) }) : ""} onClick={() => publish(false)}>{t("editor.deploy")}</Button>
         <Button type="button" disabled title={t("editor.runTests.later")} variant="outline" size="sm">{t("library.menu.tests")}</Button>

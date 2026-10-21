@@ -9,13 +9,18 @@ import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
 import { applyAvailableSkillUpdates, checkSkillUpdate, silent } from "@/lib/ipc/actions";
 import { listAgents, type AgentRow } from "@/lib/ipc/catalog";
-import { agentDisplayName, agentIcon, detectedAgents } from "@/lib/agents";
+import { agentDisplayName, detectedAgents } from "@/lib/agents";
+import { AgentMark } from "@/components/app/AgentBadge";
+import { SourceBadge } from "@/components/app/SourceBadge";
+import { sourceLabel } from "@/lib/source";
+import { useShellBand } from "@/lib/shell-width";
+import { toast } from "sonner";
 import { useVirtualGrid } from "@/lib/virtual-grid";
 import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
 import { UpdateFlow } from "@/features/library/UpdateFlow";
-import { EmptyState, Screen, SearchField, StatePanel } from "@/components/chrome";
+import { EmptyState, PrimaryLink, Screen, SearchField, StatePanel } from "@/components/chrome";
 import { LibrarySkeleton } from "@/components/skeletons";
 import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { Badge } from "@/components/ui/badge";
@@ -61,10 +66,9 @@ function AgentPlacement({
         {installed.length === 0 ? <p className="mt-1 text-sm text-muted-foreground">{t("library.installedNone")}</p> : null}
         <ul className="mt-2 space-y-2">
           {installed.map((agent) => {
-            const Icon = agentIcon(agent.key);
             return (
               <li key={agent.key} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm">
-                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                <AgentMark agent={agent.key} name={agent.name} />
                 <span className="font-medium">{agent.name}</span>
                 <span className="text-muted-foreground">{t("install.installed")}</span>
                 <Button type="button" variant="ghost" size="sm" className="ml-auto" aria-label={`${t("library.removeAgent")} ${agent.name}`} onClick={() => onToggle(agent.key)}>
@@ -92,17 +96,14 @@ function AgentPlacement({
         <PopoverContent className="w-72 p-2" align="start">
           <Input aria-label={t("library.addAgent.search")} value={query} onChange={(event) => onQuery(event.target.value)} className="h-8" />
           <ul className="mt-2 max-h-56 space-y-1 overflow-auto">
-            {choices.map((agent) => {
-              const Icon = agentIcon(agent.key);
-              return (
+            {choices.map((agent) => (
                 <li key={agent.key}>
                   <button type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => onToggle(agent.key)}>
-                    <Icon className="size-4" aria-hidden="true" />
+                    <AgentMark agent={agent.key} name={agent.name} />
                     {agent.name}
                   </button>
                 </li>
-              );
-            })}
+            ))}
           </ul>
           <Button type="button" variant="ghost" size="sm" className="mt-1" aria-pressed={showAll} onClick={onShowAll}>
             {t("library.showAllAgents")}
@@ -177,6 +178,7 @@ export function LibraryView({
   onToggleAgent: (skillId: string, agent: string) => void | Promise<void>;
 }) {
   const phase = useShellPhase();
+  const band = useShellBand();
   const retry = useContext(RetryContext);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<LibraryFilter>("all");
@@ -269,7 +271,7 @@ export function LibraryView({
   }
 
   return (
-    <Screen testId="library" title={t("library.title")}>
+    <Screen testId="library" title={t("library.title")} actions={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
       <div className="flex flex-wrap items-center gap-2">
         <SearchField
           aria-label={t("library.search")}
@@ -324,18 +326,18 @@ export function LibraryView({
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {sources.map((item) => (
-          <Button key={item} type="button" variant={source === item ? "default" : "secondary"} size="xs" className="rounded-full shadow-none" onClick={() => setSource(source === item ? null : item)}>
-            {item}
+          <Button key={item} type="button" variant={source === item ? "secondary" : "outline"} size="xs" className="rounded-full shadow-none" onClick={() => setSource(source === item ? null : item)}>
+            {sourceLabel(item)}
           </Button>
         ))}
-        <Button type="button" variant={tag === "untagged" ? "default" : "secondary"} size="xs" className="rounded-full shadow-none" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
+        <Button type="button" variant={tag === "untagged" ? "secondary" : "outline"} size="xs" className="rounded-full shadow-none" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
           Untagged
         </Button>
         {tags.map((item) => (
           <Button
             key={item}
             type="button"
-            variant={tag === item ? "default" : "secondary"}
+            variant={tag === item ? "secondary" : "outline"}
             size="xs"
             className="rounded-full shadow-none"
             onClick={() => setTag(tag === item ? null : item)}
@@ -361,7 +363,9 @@ export function LibraryView({
           </Button>
         </form>
       ) : null}
-      <ol data-testid="preset-order" className="flex flex-wrap items-center gap-1.5">
+      <details className="rounded-lg border border-border bg-card px-3 py-2">
+        <summary className="cursor-pointer text-sm font-medium">{t("library.presetOrder")}</summary>
+      <ol data-testid="preset-order" className="mt-2 space-y-1">
         {memberIds.map((id) => {
           const name = skills.find((skill) => skill.id === id)?.name ?? id;
           return (
@@ -376,7 +380,7 @@ export function LibraryView({
                 onReorderMembers(moveById(memberIds, dragId, id, (item) => item));
                 setDragId(null);
               }}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-xs"
+              className="flex items-center gap-2 rounded-md px-1 py-1 text-sm"
             >
               <button type="button" className="text-muted-foreground" title={t("library.reorder")} aria-label={t("library.reorder")}>
                 <GripVerticalIcon className="size-3" aria-hidden="true" />
@@ -386,6 +390,7 @@ export function LibraryView({
           );
         })}
       </ol>
+      </details>
       <p className="sr-only">{presetName}: {members.join(", ")}</p>
       {checked ? (
         <p role="status">
@@ -394,12 +399,13 @@ export function LibraryView({
         </p>
       ) : null}
       {selected.length > 0 ? (
-        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
-          <span className="font-mono text-xs text-muted-foreground">{selected.length}</span>
-          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, true)}>{t("library.batch.enable")}</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</Button>
+        <div data-testid="bulk-bar" className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
+          <span className="text-xs text-muted-foreground">{t("library.selected", { count: String(selected.length) })}</span>
+          <Button type="button" size="sm" onClick={() => { const ids = [...selected]; void onSetEnabled(ids, true); toast.success(t("library.batch.enable"), { action: { label: t("shell.undo"), onClick: () => void onSetEnabled(ids, false) } }); }}>{t("library.batch.enable")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { const ids = [...selected]; void onSetEnabled(ids, false); toast.success(t("library.batch.disable"), { action: { label: t("shell.undo"), onClick: () => void onSetEnabled(ids, true) } }); }}>{t("library.batch.disable")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setSelected([])}>{t("library.bulkClear")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => { void applyAvailableSkillUpdates(); void silent("batch_update_skills", { ids: selected }); }}>{t("library.batch.update")}</Button>
           <Button type="button" size="sm" onClick={() => setSyncOpen(true)}>
             {t("library.sync")}
@@ -429,7 +435,9 @@ export function LibraryView({
             const chosen = (showAllAgents ? catalogAgents : detectedAgents(catalogAgents))
               .filter((agent) => data.get(agent.key) === "on")
               .map((agent) => agent.key);
-            onSync(selected, chosen);
+            const previous = selected.map((id) => ({ id, agents: skills.find((skill) => skill.id === id)?.agents ?? [] }));
+            void onSync(selected, chosen);
+            toast.success(t("library.sync"), { action: { label: t("shell.undo"), onClick: () => { for (const row of previous) void onSync([row.id], row.agents); } } });
             setSyncOpen(false);
           }}
         >
@@ -445,13 +453,14 @@ export function LibraryView({
       {phase === "loading" ? <LibrarySkeleton /> : null}
       {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
       {phase === "ready" && rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
-      {phase === "ready" ? <div ref={grid.ref} className="max-h-[36rem] overflow-auto">
+      <div className={cn("flex min-w-0 flex-col gap-4", open && band >= 1440 && "flex-row items-start")}>
+      {phase === "ready" ? <div ref={grid.ref} className="max-h-[36rem] min-w-0 flex-1 overflow-auto">
       <ul
         data-testid="library-cards"
         data-layout={layout}
-        data-columns={grid.columns}
+        data-columns={open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}
         className={layout === "grid" ? "grid gap-3" : "space-y-2"}
-        style={layout === "grid" ? { gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))` } : undefined}
+        style={layout === "grid" ? { gridTemplateColumns: `repeat(${open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}, minmax(0, 1fr))` } : undefined}
       >
         {rendered.map((skill) => (
           <li key={skill.id} data-virtual-card="">
@@ -519,7 +528,7 @@ export function LibraryView({
               </div>
               <div className="mt-3 space-y-2 border-t border-border px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="shrink-0 whitespace-nowrap font-normal">{skill.source}</Badge>
+                  <SourceBadge source={skill.source} />
                   <span className="relative inline-flex size-4 shrink-0 items-center justify-center" title={t("library.membership")}>
                     <span
                       aria-hidden="true"
@@ -542,7 +551,7 @@ export function LibraryView({
       </ul>
       </div> : null}
       {open ? (
-        <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
+        <aside data-testid="detail-panel" className={cn("rounded-lg border border-border bg-card p-3", band < 1440 && "fixed inset-y-0 right-0 z-30 w-[min(560px,100%)] overflow-auto shadow-lg", band >= 1920 ? "w-[520px] shrink-0" : band >= 1440 ? "w-[440px] shrink-0" : undefined)}>
           <div className="inline-flex rounded-lg bg-muted p-0.5">
             {(["local", "diff", "source", "edit"] as const).map((item) => (
               <Button key={item} type="button" aria-pressed={tab === item} variant="ghost" size="sm" className={cn("h-7", tab === item && "bg-background shadow-sm")} onClick={() => setTab(item)}>
@@ -610,6 +619,7 @@ export function LibraryView({
           </div>
         </aside>
       ) : null}
+      </div>
     </Screen>
   );
 }

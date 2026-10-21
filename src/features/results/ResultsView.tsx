@@ -112,12 +112,7 @@ export function ResultsView() {
   const lede = paused ? t("results.pause") : phase === "ready" ? t("results.heatmap") : undefined;
   if (phase === "loading" && cells.length === 0) {
     return (
-      <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} actions={
-        <>
-          <Button type="button" size="sm" disabled>{t("results.budget")}</Button>
-          <Button type="button" variant="secondary" size="sm" disabled>{t("results.export")}</Button>
-        </>
-      }>
+      <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")}>
         <ResultsSkeleton />
       </Screen>
     );
@@ -125,8 +120,8 @@ export function ResultsView() {
   return (
     <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} lede={lede} actions={
       <>
-        <Button type="button" size="sm" aria-busy={phase === "loading" && cells.length > 0} disabled={phase === "loading" && cells.length > 0} onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
-        <Button type="button" variant="secondary" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>{t("results.export")}</Button>
+        <Button type="button" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>{t("results.export")}</Button>
+        <Button type="button" variant="outline" size="sm" aria-busy={phase === "loading" && cells.length > 0} disabled={phase === "loading" && cells.length > 0} onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
       </>
     }>
       {(phase === "error" || phase === "offline") && cells.length === 0 ? (
@@ -165,7 +160,7 @@ export function ResultsView() {
                 className={cn("flex h-28 flex-col items-start justify-between rounded-lg border p-3 text-left", rateTone(cell.passRate), cellIndex === index && "ring-2 ring-ring")}
                 onClick={() => setIndex(cellIndex)}
               >
-                <span className="text-sm font-medium">{cell.label}</span>
+                <span className="text-sm font-medium">{cell.id.startsWith("without") ? t("results.withoutSkill") : cell.id.startsWith("with") ? t("results.withSkill") : cell.label}</span>
                 <span className="font-mono text-3xl font-semibold tabular-nums">{Math.round(cell.passRate * 100)}%</span>
                 <span className="font-mono text-xs tabular-nums">{cell.passRate}</span>
               </button>
@@ -174,16 +169,13 @@ export function ResultsView() {
         </Panel>
         <div className="flex flex-col gap-3">
           <Panel title={t("results.sheet")} testId={open ? "cell-sheet" : undefined} className="h-full">
-            {open ? <p data-testid="heatmap-open" className="font-mono text-sm">{open}</p> : <p className="text-sm text-muted-foreground">{t("results.heatmap")}</p>}
-            {selected && open ? <p className="mt-1 text-sm">{selected.label} {selected.passRate}</p> : null}
-            <ul className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.transcript")}</li>
-              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.timeline")}</li>
-              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.outputs")}</li>
-              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.grading")}</li>
-              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.checks")}</li>
-              <li className="rounded-md border border-border bg-muted/30 px-2 py-2">{t("results.feedback")}</li>
-            </ul>
+            {open ? <p data-testid="heatmap-open" className="text-sm font-medium">{open.startsWith("without") ? t("results.withoutSkill") : open.startsWith("with") ? t("results.withSkill") : open}</p> : <p className="text-sm text-muted-foreground">{t("results.heatmap")}</p>}
+            {selected && open ? <p className="mt-1 text-sm">{selected.id.startsWith("without") ? t("results.withoutSkill") : t("results.withSkill")} {Math.round(selected.passRate * 100)}%</p> : null}
+            <div className="mt-3 flex flex-wrap gap-1" role="tablist" aria-label={t("results.sheet")}>
+              {[t("results.transcript"), t("results.timeline"), t("results.outputs"), t("results.grading"), t("results.checks"), t("results.feedback")].map((label, index) => (
+                <span key={label} role="tab" aria-selected={index === 0} className={index === 0 ? "rounded-md bg-background px-2 py-1 text-xs shadow-sm" : "rounded-md px-2 py-1 text-xs text-muted-foreground"}>{label}</span>
+              ))}
+            </div>
           </Panel>
           {notes.length ? (
             <Panel title={t("results.notes")} testId="analyst-notes">

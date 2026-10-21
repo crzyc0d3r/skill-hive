@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DeltaBar, VerdictChip } from "@/components/app/VerdictChip";
 import { Panel, Screen, Stat, StatePanel } from "@/components/chrome";
+import { scoreDelta } from "@/lib/verdict";
 import { EffectivenessSkeleton } from "@/components/skeletons";
 import { t } from "@/lib/i18n";
 import { demoEnabled } from "@/lib/demo";
@@ -128,6 +130,7 @@ export function EffectivenessView() {
   }
 
   const code = verdictKey(report.verdict);
+  const scores = scoreDelta(report.axes);
   return (
     <Screen
       testId="effectiveness"
@@ -140,6 +143,14 @@ export function EffectivenessView() {
         </Button>
       }
     >
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm" data-testid="verdict-hero">
+        <VerdictChip delta={scores.delta} large />
+        <p className="mt-2 text-sm">{verdictText(code)}</p>
+        <div className="mt-3 max-w-xl"><DeltaBar delta={scores.delta} /></div>
+        {scores.withScore !== null && scores.withoutScore !== null ? (
+          <p className="mt-2 text-xs text-muted-foreground">{t("verdict.numbers", { with: String(Math.round(scores.withScore)), without: String(Math.round(scores.withoutScore)) })} · {report.grade} ({report.grade_score})</p>
+        ) : null}
+      </div>
       {open ? (
         <>
           <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.7fr)]">

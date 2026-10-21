@@ -18,7 +18,7 @@ it("opens a heatmap cell with the keyboard and jumps to evidence", async () => {
     const grid = await screen.findByTestId("heatmap");
     grid.focus();
     await user.keyboard("{ArrowRight}{Enter}");
-    expect(screen.getByTestId("heatmap-open")).toHaveTextContent("without-1");
+    expect(screen.getByTestId("heatmap-open")).toHaveTextContent("Without skill");
     await user.type(screen.getByLabelText("Jump to evidence"), "2");
     await user.click(screen.getAllByRole("button", { name: "Jump to evidence" })[0]);
     expect(screen.getByTestId("evidence-anchor")).toHaveTextContent("step-2");

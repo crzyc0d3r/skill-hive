@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { t } from "../../lib/i18n";
 import { recordVerdict, useGenerate } from "@/features/generate/store";
 import { demoEnabled } from "@/lib/demo";
+import { DeltaBar, VerdictChip } from "@/components/app/VerdictChip";
 import { Panel, Screen, StatePanel } from "@/components/chrome";
 import { CompareSkeleton } from "@/components/skeletons";
 import { previewPhase, useOnline, useShellPhase } from "@/lib/view-state";
@@ -48,7 +49,7 @@ export function CompareView() {
           <Panel className="min-h-64">
             <div className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-md bg-muted text-muted-foreground"><LockIcon className="size-4" aria-hidden="true" /></span>
-              <h2 className="font-mono text-base font-medium">{revealed ? "security-reviewer v2" : t("compare.outputA")}</h2>
+              <h2 className="font-sans text-base font-semibold">{revealed ? "security-reviewer v2" : t("compare.outputA")}</h2>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">{t("compare.sealed")}</p>
             {revealed ? <p className="mt-4 text-sm">{t("compare.unblind")}</p> : <Bars />}
@@ -56,7 +57,7 @@ export function CompareView() {
           <Panel className="min-h-64">
             <div className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-md bg-muted text-muted-foreground"><LockIcon className="size-4" aria-hidden="true" /></span>
-              <h2 className="font-mono text-base font-medium">{revealed ? "security-reviewer v1" : t("compare.outputB")}</h2>
+              <h2 className="font-sans text-base font-semibold">{revealed ? "security-reviewer v1" : t("compare.outputB")}</h2>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">{t("compare.sealed")}</p>
             {revealed ? <p className="mt-4 text-sm">{t("compare.verdict")}</p> : <Bars />}
@@ -69,6 +70,15 @@ export function CompareView() {
       ) : (
         shell === "loading" ? null : <StatePanel tone="empty" title={t("compare.empty")} />
       )}
+      {demo ? (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <VerdictChip delta={12} />
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <DeltaBar delta={12} />
+            <DeltaBar delta={-4} />
+          </div>
+        </div>
+      ) : null}
       {revealed && demo ? (
         <p data-testid="compare-unblind" className="rounded-md border border-success/40 bg-success-subtle px-3 py-2 text-sm text-success-text">
           {t("compare.unblind")}: {wizard.verdict}

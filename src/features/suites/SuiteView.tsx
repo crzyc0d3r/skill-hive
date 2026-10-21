@@ -152,7 +152,7 @@ export function SuiteView() {
         <Panel title={t("suite.progress")}>
           <div data-testid="suite-progress" className="flex flex-col gap-3">
             <p className="text-sm">{t("suite.progress")}: {progress}</p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">
               {cells.map((cell) => (
                 <div
                   key={`${cell.condition}-${cell.index}`}

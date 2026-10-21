@@ -5,7 +5,10 @@ import { t } from "../../lib/i18n";
 import { HISTORY_ROWS, type HistoryRow } from "@/features/history/model";
 import { writeHistoryBaseline } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
+import { VerdictChip } from "@/components/app/VerdictChip";
 import { Panel, Screen, StatePanel } from "@/components/chrome";
+import { verdictFromDelta } from "@/lib/verdict";
+import { Link } from "react-router-dom";
 import { HistorySkeleton } from "@/components/skeletons";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
@@ -34,6 +37,7 @@ export function HistoryView() {
   const [phase, setPhase] = useState<ViewPhase>(() => previewPhase() ?? (demoEnabled() ? "ready" : "loading"));
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [picked, setPicked] = useState<string[]>([]);
 
   useEffect(() => {
     if (forced) {
@@ -127,22 +131,32 @@ export function HistoryView() {
           <TableCaption className="sr-only">{t("history.table")}</TableCaption>
           <TableHeader>
             <TableRow>
+              <TableHead />
               <TableHead>{t("history.version")}</TableHead>
               <TableHead>{t("history.rate")}</TableHead>
               <TableHead>{t("history.result")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
+            {rows.map((row, index) => {
+              const previous = index === 0 ? null : Number(rows[index - 1]?.rate);
+              const current = Number(row.rate);
+              const delta = previous === null || !Number.isFinite(previous) || !Number.isFinite(current) ? null : Math.round((current - previous) * 100);
+              return (
               <TableRow key={row.version} data-testid={`history-${row.version}`} className={row.best ? "bg-success-subtle" : "odd:bg-muted/30"}>
+                <TableCell>
+                  <input type="checkbox" aria-label={t("history.select", { version: row.version })} checked={picked.includes(row.version)} onChange={() => setPicked((currentIds) => currentIds.includes(row.version) ? currentIds.filter((item) => item !== row.version) : [...currentIds, row.version])} />
+                </TableCell>
                 <TableCell className="font-mono">{row.version}</TableCell>
                 <TableCell className="font-mono tabular-nums">{row.rate}</TableCell>
-                <TableCell>{row.best ? t("history.baseline") : row.result}</TableCell>
+                <TableCell><VerdictChip kind={verdictFromDelta(delta)} /></TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>}
+      {picked.length === 2 ? <Button asChild type="button" size="sm"><Link to="/compare/fixture">{t("history.compare")}</Link></Button> : <Button type="button" size="sm" variant="outline" disabled>{t("history.compare")}</Button>}
     </Screen>
   );
 }

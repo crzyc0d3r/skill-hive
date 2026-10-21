@@ -19,6 +19,8 @@ pub struct ScannedSkill {
     pub name: String,
     pub fingerprint: String,
     pub already_managed: bool,
+    /// Another copy of this name has different content.
+    pub differs: bool,
 }
 
 pub fn scan_roots(store: &SkillStore, roots: &[(&str, &Path)]) -> Result<Vec<ScannedSkill>> {
@@ -60,17 +62,25 @@ pub fn scan_roots_with_central(
                 name: doc.name,
                 fingerprint: fingerprint.clone(),
                 already_managed: managed.contains(&fingerprint) || linked,
+                differs: false,
             });
         }
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
     let mut grouped = Vec::new();
-    for skill in found {
+    for mut skill in found {
         if let Some(existing) = grouped
             .iter_mut()
             .find(|row: &&mut ScannedSkill| row.name.eq_ignore_ascii_case(&skill.name))
         {
-            if skill.already_managed {
+            let different = !skill.fingerprint.is_empty()
+                && !existing.fingerprint.is_empty()
+                && skill.fingerprint != existing.fingerprint;
+            if different {
+                existing.differs = true;
+                skill.differs = true;
+                grouped.push(skill);
+            } else if skill.already_managed {
                 existing.already_managed = true;
             }
             continue;
@@ -232,5 +242,30 @@ mod tests {
             .join("top")
             .join("SKILL.md")
             .is_file());
+    }
+
+    #[test]
+    fn copies_with_different_content_stay_visible() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("codex");
+        write_skill(&root.join("shared"), "shared");
+        let other = tmp.path().join("cursor");
+        let copy = other.join("shared");
+        fs::create_dir_all(&copy).unwrap();
+        fs::write(
+            copy.join("SKILL.md"),
+            "---\nname: shared\ndescription: d\n---\nother body\n",
+        )
+        .unwrap();
+        let store = SkillStore::new(&tmp.path().join("hive.db")).unwrap();
+        let rows = scan_roots_with_central(
+            &store,
+            &[("codex", root.as_path()), ("cursor", other.as_path())],
+            None,
+        )
+        .unwrap();
+        let shared: Vec<_> = rows.iter().filter(|row| row.name == "shared").collect();
+        assert_eq!(shared.len(), 2);
+        assert!(shared.iter().all(|row| row.differs));
     }
 }

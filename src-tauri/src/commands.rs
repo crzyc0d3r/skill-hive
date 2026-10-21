@@ -126,6 +126,8 @@ pub struct ScanDto {
     pub tool: String,
     pub path: String,
     pub already_managed: bool,
+    pub differs: bool,
+    pub fingerprint: String,
 }
 
 #[derive(Serialize)]
@@ -336,6 +338,8 @@ fn to_scan(rows: Vec<ScannedSkill>) -> Vec<ScanDto> {
             tool: row.tool,
             path: row.path,
             already_managed: row.already_managed,
+            differs: row.differs,
+            fingerprint: row.fingerprint,
         })
         .collect()
 }

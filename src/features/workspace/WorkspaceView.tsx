@@ -15,6 +15,8 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatePanel } from "@/components/chrome";
 import { WorkspaceSkeleton } from "@/components/skeletons";
 import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { AgentName } from "@/components/app/AgentBadge";
+import { agentDisplayName } from "@/lib/agents";
 
 export interface WorkspaceCard {
   id: string;
@@ -130,16 +132,19 @@ export function WorkspaceView({
   if (!agentKey) {
     return (
       <section data-testid="global-workspace">
-        <h1 className="font-mono text-[22px] font-semibold">{t("workspace.title")}</h1>
+        <h1 className="font-sans text-display font-semibold">{t("workspace.title")}</h1>
         <form
-          className="mt-3 flex gap-2"
+          className="mt-3 flex flex-wrap items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             void onCreate(name);
           }}
         >
-          <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8 w-56" />
-          <Button type="submit" variant="outline" size="sm">{t("preset.new")}</Button>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs text-muted-foreground">{t("workspace.preset.hint")}</span>
+            <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8 w-56" />
+          </label>
+          <Button type="submit" size="sm">{t("preset.new")}</Button>
         </form>
         {phase === "loading" ? <WorkspaceSkeleton /> : null}
         {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
@@ -171,11 +176,11 @@ export function WorkspaceView({
             );
           })}
         </div>
-        <ul className="mt-4 grid grid-cols-2 gap-3" data-testid="agent-catalog">
+        <ul className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]" data-testid="agent-catalog">
           {agents.map((agent) => (
-            <li key={agent.key} className="rounded-lg border border-border bg-card p-3 text-sm shadow-none">
-              <Link to={`/global-workspace/${agent.key}`}>{agent.name}</Link>
-              <div className="text-muted-foreground">{agent.path}</div>
+            <li key={agent.key} className="rounded-lg border border-border bg-card p-3 text-sm shadow-sm">
+              <Link to={`/global-workspace/${agent.key}`} className="font-medium"><AgentName agent={agent.key} displayName={agent.name} /></Link>
+              <div className="mt-1 font-mono text-xs text-muted-foreground">{agent.path}</div>
             </li>
           ))}
         </ul>
@@ -187,7 +192,7 @@ export function WorkspaceView({
   return (
     <section data-testid="global-workspace">
       <div data-testid="agent-page">
-        <h1 className="font-mono text-[22px] font-semibold">{agentKey}</h1>
+        <h1 className="font-sans text-display font-semibold">{agentDisplayName(agentKey, agents)}</h1>
         <div className="mt-3 flex flex-wrap gap-2">
           <div className="relative">
             <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />

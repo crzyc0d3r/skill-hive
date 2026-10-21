@@ -1,3 +1,4 @@
+import { designColumns } from "./shell-width";
 import { columnCount, windowSlice } from "./virtual-grid";
 
 describe("virtual grid", () => {
@@ -6,6 +7,10 @@ describe("virtual grid", () => {
     expect(columnCount(496)).toBe(1);
     expect(columnCount(796)).toBe(2);
     expect(columnCount(1136)).toBe(3);
+    expect(designColumns(800)).toBe(1);
+    expect(designColumns(1100)).toBe(2);
+    expect(designColumns(1440)).toBe(3);
+    expect(designColumns(1920)).toBe(4);
   });
 
   it("caps an unmeasured window so a large library does not mount every card", () => {

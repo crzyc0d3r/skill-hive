@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { installIpc, renderAt } from "@/test/render-app";
 
 const screens = [
-  ["/", "dashboard", "Good day", "dashboard"],
+  ["/", "dashboard", "Overview", "dashboard"],
   ["/my-skills", "library", "Library", "library"],
   ["/agents", "agents", "Agents", "agents"],
   ["/install", "install", "Install Skills", "install"],

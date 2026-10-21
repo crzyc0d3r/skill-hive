@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { designColumns } from "@/lib/shell-width";
 
 const MIN_CARD = 280;
 const GAP = 12;
@@ -21,6 +22,7 @@ export function windowSlice<T>(items: T[], scrollTop: number, height: number, ro
 export function useVirtualGrid<T>(items: T[], layout: "grid" | "list") {
   const ref = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0, scrollTop: 0, rowHeight: layout === "grid" ? 196 : 92 });
+  const [viewport, setViewport] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
@@ -32,6 +34,7 @@ export function useVirtualGrid<T>(items: T[], layout: "grid" | "list") {
         scrollTop: node.scrollTop,
         rowHeight: card && card.offsetHeight > 0 ? card.offsetHeight : layout === "grid" ? 196 : 92,
       };
+      setViewport(window.innerWidth);
       setFrame((current) =>
         current.width === next.width && current.height === next.height && current.scrollTop === next.scrollTop && current.rowHeight === next.rowHeight
           ? current
@@ -49,7 +52,7 @@ export function useVirtualGrid<T>(items: T[], layout: "grid" | "list") {
       window.removeEventListener("resize", measure);
     };
   }, [layout, items.length]);
-  const columns = layout === "list" ? 1 : columnCount(frame.width);
+  const columns = layout === "list" ? 1 : designColumns(viewport || frame.width);
   return {
     ref,
     columns,
