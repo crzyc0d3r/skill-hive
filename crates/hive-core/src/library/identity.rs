@@ -1,3 +1,7 @@
+// Derived from skills-manager (https://github.com/xingkongliang/skills-manager)
+// commit 73d6b8f77bba6719924885c1f3be56b828d5a192, MIT License.
+// Copyright (c) 2026 Tianliang Zhang
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -97,7 +101,10 @@ pub fn group_instances(roots: &[PathBuf]) -> Vec<Vec<SkillInstance>> {
             let Some(hit) = identify(&path) else {
                 continue;
             };
-            if hits.iter().any(|existing: &SkillInstance| existing.path == hit.path) {
+            if hits
+                .iter()
+                .any(|existing: &SkillInstance| existing.path == hit.path)
+            {
                 continue;
             }
             hits.push(hit);

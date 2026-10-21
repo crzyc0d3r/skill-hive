@@ -19,22 +19,23 @@ fn watch_windows(window: &tauri::WebviewWindow) {
                 return;
             }
         };
-        let handler = match webview2_com::ProcessFailedEventHandler::create(Box::new(|_sender, args| {
-            let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
-            if let Some(args) = args.as_ref() {
-                unsafe {
-                    let _ = args.ProcessFailedKind(&mut kind);
+        let handler =
+            match webview2_com::ProcessFailedEventHandler::create(Box::new(|_sender, args| {
+                let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
+                if let Some(args) = args.as_ref() {
+                    unsafe {
+                        let _ = args.ProcessFailedKind(&mut kind);
+                    }
                 }
-            }
-            log::error!("webview-process-failed kind={kind:?}");
-            Ok(())
-        })) {
-            Ok(handler) => handler,
-            Err(err) => {
-                log::error!("webview-process-failed handler: {err}");
-                return;
-            }
-        };
+                log::error!("webview-process-failed kind={kind:?}");
+                Ok(())
+            })) {
+                Ok(handler) => handler,
+                Err(err) => {
+                    log::error!("webview-process-failed handler: {err}");
+                    return;
+                }
+            };
         let mut token = 0i64;
         if let Err(err) = unsafe { core.add_ProcessFailed(&handler, &mut token) } {
             log::error!("webview-process-failed subscribe: {err}");

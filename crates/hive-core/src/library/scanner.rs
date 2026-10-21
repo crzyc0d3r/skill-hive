@@ -66,9 +66,10 @@ pub fn scan_roots_with_central(
     found.sort_by(|a, b| a.name.cmp(&b.name));
     let mut grouped = Vec::new();
     for skill in found {
-        if let Some(existing) = grouped.iter_mut().find(|row: &&mut ScannedSkill| {
-            row.name.eq_ignore_ascii_case(&skill.name)
-        }) {
+        if let Some(existing) = grouped
+            .iter_mut()
+            .find(|row: &&mut ScannedSkill| row.name.eq_ignore_ascii_case(&skill.name))
+        {
             if skill.already_managed {
                 existing.already_managed = true;
             }

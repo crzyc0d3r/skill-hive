@@ -139,12 +139,7 @@ fn the_same_skill_in_several_agent_dirs_and_a_link_is_one_card() {
     write_named(&cursor.join("nested").join("autopilot"), "autopilot");
     fs::create_dir_all(&wind).unwrap();
     link_skill(&claude.join("autopilot"), &wind.join("autopilot"));
-    let rows = list_agent_skills_in(
-        &store,
-        "claude_code",
-        &[claude, codex, cursor, wind],
-    )
-    .unwrap();
+    let rows = list_agent_skills_in(&store, "claude_code", &[claude, codex, cursor, wind]).unwrap();
     assert_eq!(rows.len(), 1, "copies and the link stay one card");
     assert_eq!(rows[0].name, "autopilot");
     assert_eq!(rows[0].status, WorkspaceStatus::LocalOnly);

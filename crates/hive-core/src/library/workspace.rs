@@ -74,10 +74,7 @@ pub fn list_agent_skills_in(
         let status = status_for_group(matched.map(|skill| skill.central_path.as_str()), &group);
         rows.push(WorkspaceSkill {
             name,
-            path: locations
-                .first()
-                .cloned()
-                .unwrap_or_default(),
+            path: locations.first().cloned().unwrap_or_default(),
             locations,
             skill_id: matched.map(|skill| skill.id.clone()),
             status,
@@ -85,7 +82,10 @@ pub fn list_agent_skills_in(
     }
     let anchor = roots.first().cloned().unwrap_or_default();
     for skill in &managed {
-        if seen_names.iter().any(|name| name == &skill.name.to_ascii_lowercase()) {
+        if seen_names
+            .iter()
+            .any(|name| name == &skill.name.to_ascii_lowercase())
+        {
             continue;
         }
         let deployed = store

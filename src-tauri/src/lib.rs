@@ -94,7 +94,11 @@ fn log_startup_event(label: String, elapsed_ms: u64) {
 #[tauri::command]
 fn log_frontend_error(message: String, stack: String, route: String) {
     let clean = |value: String, limit: usize| {
-        value.chars().filter(|c| !c.is_control() || *c == '\n').take(limit).collect::<String>()
+        value
+            .chars()
+            .filter(|c| !c.is_control() || *c == '\n')
+            .take(limit)
+            .collect::<String>()
     };
     log::error!(
         "frontend error route={} message={} stack={}",
