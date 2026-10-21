@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const SCREENS = [
@@ -16,8 +18,18 @@ const SCREENS = [
   { id: "backup", path: "/backup", landmark: "backup" },
 ] as const;
 
+const EXTRAS = [
+  { id: "install-market", path: "/install?tab=leaderboard", landmark: "install" },
+  { id: "install-folder", path: "/install?tab=local", landmark: "install" },
+  { id: "install-git", path: "/install?tab=git", landmark: "install" },
+  { id: "settings-agents", path: "/settings?tab=agents", landmark: "settings" },
+  { id: "workspace-agent", path: "/global-workspace/claude_code", landmark: "global-workspace" },
+  { id: "presets", path: "/global-workspace?view=presets", landmark: "global-workspace" },
+] as const;
+
 const WIDTHS = [800, 1100, 1440, 1920] as const;
 const THEMES = ["light", "dark"] as const;
+const LEGACY: Record<number, string> = { 1100: "1100x640", 1440: "1440x860" };
 
 async function boot(page: Page, theme: "light" | "dark", width: number) {
   await page.addInitScript((choice) => {
@@ -27,38 +39,43 @@ async function boot(page: Page, theme: "light" | "dark", width: number) {
   await page.setViewportSize({ width, height: 900 });
 }
 
+async function saveShot(page: Page, theme: "light" | "dark", width: number, name: string) {
+  const design = path.join("docs/parity/screenshots", theme, `design-${name}-${width}.png`);
+  await page.screenshot({ path: design, fullPage: false });
+  const auditDir = path.join("docs/ui-audit/after", theme, String(width));
+  fs.mkdirSync(auditDir, { recursive: true });
+  fs.copyFileSync(design, path.join(auditDir, `${name}.png`));
+  const legacy = LEGACY[width];
+  if (legacy) {
+    const legacyDir = path.join("docs/ui-audit/after", theme, legacy);
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.copyFileSync(design, path.join(legacyDir, `${name}.png`));
+  }
+}
+
 for (const theme of THEMES) {
   for (const width of WIDTHS) {
     test(`design ${theme} ${width}`, async ({ page }) => {
-      test.setTimeout(180_000);
+      test.setTimeout(240_000);
       await boot(page, theme, width);
-      for (const screen of SCREENS) {
+      for (const screen of [...SCREENS, ...EXTRAS]) {
         await page.goto(screen.path);
         await expect(page.getByTestId(screen.landmark)).toBeVisible();
         await expect(page.getByTestId("route-error")).toHaveCount(0);
         const overflow = await page.locator("body").evaluate((node) => node.scrollWidth - node.clientWidth);
         expect(overflow).toBeLessThanOrEqual(1);
-        await page.screenshot({
-          path: `docs/parity/screenshots/${theme}/design-${screen.id}-${width}.png`,
-          fullPage: false,
-        });
+        await saveShot(page, theme, width, screen.id);
       }
       await page.goto("/my-skills");
       await page.getByRole("button", { name: /research-notes/ }).first().click();
       await expect(page.getByTestId("detail-panel")).toBeVisible();
-      await page.screenshot({
-        path: `docs/parity/screenshots/${theme}/design-detail-${width}.png`,
-        fullPage: false,
-      });
+      await saveShot(page, theme, width, "detail");
       await page.goto("/my-skills?crash=route");
       await expect(page.getByTestId("route-error")).toBeVisible();
       if (await page.locator("vite-error-overlay").count()) {
         await page.locator("vite-error-overlay").evaluate((node) => node.remove());
       }
-      await page.screenshot({
-        path: `docs/parity/screenshots/${theme}/design-error-route-${width}.png`,
-        fullPage: false,
-      });
+      await saveShot(page, theme, width, "error-route");
       await page.goto("/?crash=app");
       await expect(page.getByTestId("route-error")).toBeVisible();
       await expect(page.getByText("Top-level render failed")).toBeVisible();
@@ -67,26 +84,29 @@ for (const theme of THEMES) {
       if (await page.locator("vite-error-overlay").count()) {
         await page.locator("vite-error-overlay").evaluate((node) => node.remove());
       }
-      await page.screenshot({
-        path: `docs/parity/screenshots/${theme}/design-error-app-${width}.png`,
-        fullPage: false,
-      });
+      await saveShot(page, theme, width, "error-app");
     });
-  }
 
-  for (const state of ["empty", "loading", "error"] as const) {
-    test(`design ${theme} ${state}`, async ({ page }) => {
-      test.setTimeout(180_000);
-      await boot(page, theme, 1440);
-      for (const screen of SCREENS) {
-        const join = screen.path.includes("?") ? "&" : "?";
-        await page.goto(`${screen.path}${join}state=${state}`);
-        await expect(page.getByTestId(screen.landmark)).toBeVisible();
-        await page.screenshot({
-          path: `docs/parity/screenshots/${theme}/design-${screen.id}-${state}.png`,
-          fullPage: false,
-        });
-      }
-    });
+    for (const state of ["empty", "loading", "error"] as const) {
+      test(`design ${theme} ${width} ${state}`, async ({ page }) => {
+        test.setTimeout(240_000);
+        await boot(page, theme, width);
+        for (const screen of SCREENS) {
+          const join = screen.path.includes("?") ? "&" : "?";
+          await page.goto(`${screen.path}${join}state=${state}`);
+          await expect(page.getByTestId(screen.landmark)).toBeVisible();
+          await saveShot(page, theme, width, `${screen.id}-${state}`);
+          if (width === 1440) {
+            fs.copyFileSync(
+              path.join("docs/parity/screenshots", theme, `design-${screen.id}-${state}-${width}.png`),
+              path.join("docs/parity/screenshots", theme, `design-${screen.id}-${state}.png`),
+            );
+          }
+        }
+        await page.goto(`/my-skills?skill=skill-research&state=${state}`);
+        await expect(page.getByTestId("library")).toBeVisible();
+        await saveShot(page, theme, width, `detail-${state}`);
+      });
+    }
   }
 }

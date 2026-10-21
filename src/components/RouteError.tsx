@@ -70,7 +70,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
     if (topLevel) applyCrashTheme();
     const alert = (
       <div role="alert" data-testid="route-error" className="rounded-lg border border-destructive/40 bg-card px-4 py-4 text-card-foreground">
-        <h1 className="font-mono text-lg font-semibold">{t("shell.error")}</h1>
+        <h1 className="font-sans text-2xl font-semibold">{t("shell.error")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("shell.renderError")}</p>
         <pre className="mt-3 overflow-auto whitespace-pre-wrap font-mono text-xs">{this.state.error.message}</pre>
         <Button type="button" size="sm" className="mt-3" onClick={() => window.location.reload()}>
@@ -79,6 +79,10 @@ export class RouteErrorBoundary extends Component<Props, State> {
       </div>
     );
     if (!topLevel) return alert;
-    return <div className="flex min-h-full bg-background p-6 text-foreground">{alert}</div>;
+    return (
+      <div className="flex min-h-full items-center justify-center bg-background p-6 text-foreground">
+        <div className="w-full max-w-md text-center [&_h1]:font-sans [&_pre]:text-left">{alert}</div>
+      </div>
+    );
   }
 }

@@ -5,6 +5,7 @@ import { cn } from "cn";
 import { t } from "../../lib/i18n";
 import { applyOptimized, optimizeDescription, useGenerate } from "@/features/generate/store";
 import { runEffectivenessSuite, saveSuiteDraft } from "@/lib/ipc/actions";
+import { VerdictChip } from "@/components/app/VerdictChip";
 import { Panel, Screen, StatePanel, TextField } from "@/components/chrome";
 import { SuiteSkeleton } from "@/components/skeletons";
 import { previewPhase, useOnline, useShellPhase, type ViewPhase } from "@/lib/view-state";
@@ -37,6 +38,33 @@ export function SuiteView() {
   const cells = CONDITIONS.flatMap((condition) => Array.from({ length: repetitions }, (_, index) => ({ condition, index: index + 1 })));
   const running = progress === "preparing";
   const finished = progress.length > 0 && !running;
+  function runSuite() {
+    setFailed(false);
+    setProgress("preparing");
+    void saveSuiteDraft(id, prompt, query, check).then((value) => {
+      if (typeof value === "string") setSaved(value);
+    });
+    void runEffectivenessSuite(id, mode, repetitions).then((value) => {
+      if (typeof value !== "string") {
+        setProgress("done");
+        return;
+      }
+      try {
+        const parsed = JSON.parse(value) as { progress?: string[]; matrix?: { models?: string[] } };
+        const steps = parsed.progress?.join(" → ") || "done";
+        const models = parsed.matrix?.models?.join(", ") ?? "";
+        setProgress(models ? `${steps} · ${models}` : steps);
+      } catch {
+        setProgress("done");
+      }
+    }).catch(() => {
+      setFailed(true);
+      setProgress("");
+    });
+  }
+  function conditionLabel(condition: (typeof CONDITIONS)[number]) {
+    return condition === "with_skill" ? t("suite.withSkill") : t("suite.withoutSkill");
+  }
 
   if (forced && forced !== "loading") {
     return (
@@ -47,7 +75,11 @@ export function SuiteView() {
   }
 
   return (
-    <Screen testId="suite" className="min-h-[calc(100dvh-8.5rem)]" title={t("suite.title")} lede={t("suite.matrix")}>
+    <Screen testId="suite" className="min-h-[calc(100dvh-8.5rem)]" title={t("suite.title")} lede={t("suite.matrix")} actions={
+      <Button type="button" size="sm" aria-busy={progress === "preparing"} disabled={progress === "preparing"} onClick={runSuite}>
+        {progress === "preparing" ? t("shell.loading") : t("suite.run")}
+      </Button>
+    }>
       {!online ? <StatePanel tone="offline" title={t("effect.offline")} /> : null}
       <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <Panel title={t("suite.cases")} className="h-full">
@@ -86,12 +118,21 @@ export function SuiteView() {
           {shell === "loading" ? <SuiteSkeleton /> : (
           <div data-testid="suite-matrix" className="flex h-full flex-col gap-3">
             <p className="text-sm text-muted-foreground">
-              {t("suite.matrix")}: with_skill, without_skill · {t("suite.repetitions")} {repetitions} · {mode}
+              {t("suite.withSkill")} · {t("suite.withoutSkill")} · {t("suite.repetitions")} {repetitions}
             </p>
+            <ul className="space-y-2">
+              {CONDITIONS.map((condition) => (
+                <li key={condition} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                  <span>{conditionLabel(condition)}</span>
+                  <span className="text-muted-foreground">{t("suite.what")}: {check}</span>
+                  <VerdictChip delta={condition === "with_skill" ? 12 : 0} />
+                </li>
+              ))}
+            </ul>
             <div className="grid flex-1 gap-3 sm:grid-cols-2">
               {CONDITIONS.map((condition) => (
                 <div key={condition} className="rounded-md border border-border bg-muted/20 p-3">
-                  <div className="mb-2 font-mono text-xs text-muted-foreground">{condition}</div>
+                  <div className="mb-2 text-xs text-muted-foreground">{conditionLabel(condition)}</div>
                   <div className="grid grid-cols-3 gap-2">
                     {Array.from({ length: repetitions }, (_, index) => (
                       <div key={`${condition}-${index}`} className="flex h-16 flex-col items-center justify-center rounded-md border border-border bg-card">
@@ -111,38 +152,6 @@ export function SuiteView() {
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={() => optimizeDescription(id)}>{t("suite.optimize")}</Button>
         <Button type="button" variant="secondary" size="sm" disabled={!wizard.optimized || wizard.applied} onClick={() => applyOptimized()}>{t("suite.apply")}</Button>
-        <Button
-          type="button"
-          size="sm"
-          aria-busy={progress === "preparing"}
-          disabled={progress === "preparing"}
-          onClick={() => {
-            setFailed(false);
-            setProgress("preparing");
-            void saveSuiteDraft(id, prompt, query, check).then((value) => {
-              if (typeof value === "string") setSaved(value);
-            });
-            void runEffectivenessSuite(id, mode, repetitions).then((value) => {
-              if (typeof value !== "string") {
-                setProgress("done");
-                return;
-              }
-              try {
-                const parsed = JSON.parse(value) as { progress?: string[]; matrix?: { models?: string[] } };
-                const steps = parsed.progress?.join(" → ") || "done";
-                const models = parsed.matrix?.models?.join(", ") ?? "";
-                setProgress(models ? `${steps} · ${models}` : steps);
-              } catch {
-                setProgress("done");
-              }
-            }).catch(() => {
-              setFailed(true);
-              setProgress("");
-            });
-          }}
-        >
-          {progress === "preparing" ? t("shell.loading") : t("suite.run")}
-        </Button>
         <Link to="/effectiveness" data-testid="effectiveness-link" className={buttonVariants({ variant: "secondary", size: "sm" })}>
           {t("suite.effectiveness")}
         </Link>
@@ -162,7 +171,7 @@ export function SuiteView() {
                     finished && "border-success/40 bg-success-subtle text-success-text",
                   )}
                 >
-                  <span className="font-mono text-xs">{cell.condition}</span>
+                  <span className="text-xs">{conditionLabel(cell.condition)}</span>
                   <span className="font-mono text-xl tabular-nums">{cell.index}</span>
                   <span className="text-[11px]">{running ? t("suite.preparing") : t("suite.done")}</span>
                 </div>

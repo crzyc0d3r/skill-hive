@@ -18,9 +18,9 @@ import type { SkillCard } from "@/features/library/model";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { AgentMark } from "@/components/app/AgentBadge";
 import { agentDisplayName } from "@/lib/agents";
-import { StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState } from "@/components/chrome";
 import { ProjectSkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -61,7 +61,7 @@ function fromManaged(skill: SkillCard): ProjectSkill {
 }
 
 export function ProjectView() {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
   const retry = useContext(RetryContext);
   const { id = "fixture" } = useParams();
   const [linked, setLinked] = useState(false);
@@ -142,8 +142,9 @@ export function ProjectView() {
     <section data-testid="project" className="flex w-full flex-col gap-4">
       <h1 className="font-sans text-display font-semibold tracking-tight">{t("project.title")}</h1>
       {phase === "loading" ? <ProjectSkeleton /> : null}
-      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
-      <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 shadow-none">
+      {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+      {phase === "empty" ? <EmptyState title={t("project.title")} body={t("project.linked")} /> : null}
+      {phase === "ready" ? <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 shadow-none">
         <p className="text-sm text-muted-foreground">{t("project.linked")}</p>
         <label className="block text-sm">
           {t("project.skillsRoot")}
@@ -167,7 +168,7 @@ export function ProjectView() {
             {t("project.linked")}
           </Button>
         </div>
-      </Card>
+      </Card> : null}
       {phase === "ready" && linked ? (
         <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 text-sm shadow-none">
           {(rows.length ? rows : [skill]).map((item) => (
@@ -248,6 +249,28 @@ export function ProjectView() {
               }}
             />
           ) : null}
+          <div className="overflow-hidden rounded-lg border border-border">
+            <p className="px-3 py-2 text-sm font-medium">{t("project.compareTitle")}</p>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">{t("library.title")}</th>
+                  <th className="px-3 py-2">{t("project.col.status")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(rows.length ? rows : [skill]).map((item) => {
+                  const same = item.local === item.center;
+                  return (
+                    <tr key={`compare-${item.id}`} className="border-t border-border">
+                      <td className="px-3 py-2">{item.name}</td>
+                      <td className="px-3 py-2">{same ? t("project.same") : item.local ? t("project.onlyHere") : t("project.onlyLibrary")}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </Card>
       ) : null}
     </section>

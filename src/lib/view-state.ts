@@ -22,6 +22,15 @@ export function useShellPhase(): "loading" | "error" | "ready" {
   return dataPhase;
 }
 
+/** Includes the screenshot phases `empty` and `offline`, which the shell phase folds away. */
+export function useViewPhase(): ViewPhase {
+  const forced = previewPhase();
+  if (forced) return forced;
+  const dataPhase = useContext(DataPhaseContext);
+  if (dataPhase === "loading" || dataPhase === "error") return dataPhase;
+  return "ready";
+}
+
 export function useOnline(): boolean {
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
   useEffect(() => {

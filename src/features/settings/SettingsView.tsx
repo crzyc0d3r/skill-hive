@@ -1,9 +1,10 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AgentName } from "@/components/app/AgentBadge";
-import { Screen, StatePanel } from "@/components/chrome";
+import { ErrorState, Screen } from "@/components/chrome";
 import { SettingsSkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { Switch } from "@/components/ui/switch";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useContext, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -47,7 +48,8 @@ export function SettingsView({
   onAgents: (agents: AgentRow[]) => void | Promise<void>;
   onResetPath: (key: string) => Promise<string> | string;
 }) {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
+  const [foldersFor, setFoldersFor] = useState<string | null>(null);
   const retry = useContext(RetryContext);
   const [params, setParams] = useSearchParams();
   const tab = TABS.includes((params.get("tab") ?? "appearance") as (typeof TABS)[number])
@@ -111,15 +113,17 @@ export function SettingsView({
 
   return (
     <Screen testId="settings" title="Settings">
-      <div role="tablist" className="inline-flex max-w-full flex-wrap rounded-lg bg-muted p-0.5">
+      <div className="grid items-start gap-4 min-[1100px]:grid-cols-[12.5rem_minmax(0,720px)]">
+      <div role="tablist" className="flex max-w-full flex-wrap gap-1 min-[1100px]:flex-col">
         {TABS.map((item) => (
-          <Button key={item} type="button" role="tab" aria-selected={tab === item} variant="ghost" size="sm" className={`h-7 rounded-md px-3 shadow-none ${tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
+          <Button key={item} type="button" role="tab" aria-selected={tab === item} variant="ghost" size="sm" className={`h-8 justify-start rounded-md px-3 shadow-none ${tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
             {t(`settings.${item}`)}
           </Button>
         ))}
       </div>
+      <div className="min-w-0 max-w-[720px]">
       {phase === "loading" ? <SettingsSkeleton /> : null}
-      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
       {phase === "ready" && tab === "keyboard" ? (
         <div className="mt-4">
           <h2 className="text-sm font-medium">{t("shortcuts.editor")}</h2>
@@ -146,7 +150,7 @@ export function SettingsView({
           <h2 className="text-sm font-medium">{t("settings.appearance")}</h2>
           <div role="group" aria-label="Theme" className="mt-2 flex gap-2">
             {choices.map((choice) => (
-              <Button key={choice} type="button" size="sm" aria-pressed={theme === choice} variant={theme === choice ? "default" : "outline"} onClick={() => setTheme(choice)}>
+              <Button key={choice} type="button" size="sm" aria-pressed={theme === choice} variant={theme === choice ? "default" : "outline"} className={theme === choice ? "!bg-primary !text-primary-foreground" : undefined} onClick={() => setTheme(choice)}>
                 {t(`settings.theme.${choice}`)}
               </Button>
             ))}
@@ -250,11 +254,24 @@ export function SettingsView({
             <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</Button>
             <Button type="submit" size="sm">{t("settings.agents.new")}</Button>
           </form>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input type="checkbox" aria-label={t("settings.detectedOnly")} checked={!showAllAgents} onChange={(event) => setShowAllAgents(!event.target.checked)} />
+            {t("settings.detectedOnly")}
+          </label>
           <Button type="button" variant="outline" size="sm" className="mt-3" aria-pressed={showAllAgents} onClick={() => setShowAllAgents((current) => !current)}>{t("settings.agents.showAll")}</Button>
           <p className="mt-2 text-sm text-muted-foreground">{showAllAgents ? t("settings.agents.showingAll") : t("settings.agents.detected")}</p>
-          <ul data-testid="agent-order" className="mt-3 space-y-2">
+          <Table data-testid="agent-order" className="mt-3">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("agents.field.import")}</TableHead>
+                <TableHead>{t("settings.agents.detected")}</TableHead>
+                <TableHead>{t("settings.agents.enable")}</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
             {(showAllAgents ? agents : agents.filter((agent) => agent.installed)).map((agent) => (
-              <li
+              <TableRow
                 key={agent.key}
                 draggable
                 data-agent={agent.key}
@@ -268,31 +285,40 @@ export function SettingsView({
                   void writeSetting("agent_order", next.map((item) => item.key).join(","));
                   setDragKey(null);
                 }}
-                className="rounded-md border border-border p-2 text-sm"
               >
-                <AgentName agent={agent.key} displayName={agent.name} />
-                <label className="ml-2 text-sm">
-                  <input type="checkbox" aria-label={`${t("settings.agents.enable")} ${agent.name}`} checked={agent.enabled} onChange={(event) => { const enabled = event.target.checked; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, enabled } : item)); void setToolEnabled(agent.key, enabled); }} /> {t("settings.agents.enable")}
-                </label>
-                <span className="ml-2 text-muted-foreground">{agent.enabled ? "Enabled" : "Disabled"}</span>
-                <span className="ml-2 text-muted-foreground">{agent.installed ? "Detected" : "Other supported"}</span>
-                <div className="mt-2 grid gap-2">
-                <label className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
+                <TableCell><AgentName agent={agent.key} displayName={agent.name} /></TableCell>
+                <TableCell className="text-muted-foreground">{agent.installed ? "Detected" : "—"}</TableCell>
+                <TableCell>
+                  <Switch aria-label={`${t("settings.agents.enable")} ${agent.name}`} checked={agent.enabled} onCheckedChange={(enabled) => { void onAgents(agents.map((item) => item.key === agent.key ? { ...item, enabled } : item)); void setToolEnabled(agent.key, enabled); }} />
+                  <span className="sr-only">{agent.enabled ? "Enabled" : "Disabled"}</span>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setFoldersFor(agent.key)}>{t("settings.changeFolders")} {agent.name}</Button>
+                  {agent.custom ? (
+                    <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void onAgents(agents.filter((item) => item.key !== agent.key)); void removeCustomTool(agent.key); }}>{t("settings.agents.remove")} {agent.name}</Button>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            ))}
+            </TableBody>
+          </Table>
+          {foldersFor ? (() => {
+            const agent = agents.find((item) => item.key === foldersFor);
+            if (!agent) return null;
+            return (
+              <div role="dialog" aria-label={`${t("settings.changeFolders")} ${agent.name}`} className="mt-3 max-w-xl space-y-3 rounded-lg border border-border bg-card p-4">
+                <label className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2 text-sm">
                   <span>{t("settings.agents.global")}</span>
                   <Input aria-label={`${t("settings.agents.global")} ${agent.name}`} value={agent.path} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: pathValue } : item)); void setCustomToolPath(agent.key, pathValue); }} className="h-8 w-full" />
                 </label>
-                <label className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
+                <label className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2 text-sm">
                   <span>{t("settings.agents.project")}</span>
                   <Input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, projectPath: pathValue } : item)); void setCustomToolProjectPath(agent.key, pathValue); }} className="h-8 w-full" />
                 </label>
-                </div>
-                <Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => { void silent("reset_custom_tool_project_path", { key: agent.key }); Promise.resolve(onResetPath(agent.key)).then((next) => { if (next) return onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: next } : item)); }); }}>{t("settings.agents.reset")}</Button>
-                {agent.custom ? (
-                  <Button type="button" variant="outline" size="sm" className="ml-2 mt-1" onClick={() => { void onAgents(agents.filter((item) => item.key !== agent.key)); void removeCustomTool(agent.key); }}>{t("settings.agents.remove")} {agent.name}</Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                <Button type="button" variant="outline" size="sm" onClick={() => { void silent("reset_custom_tool_project_path", { key: agent.key }); Promise.resolve(onResetPath(agent.key)).then((next) => { if (next) return onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: next } : item)); }); }}>{t("settings.agents.reset")}</Button>
+              </div>
+            );
+          })() : null}
         </div>
       ) : null}
       {phase === "ready" && tab === "backup" ? (
@@ -347,6 +373,8 @@ export function SettingsView({
           <p className="mt-1 text-muted-foreground">{t("settings.about.mit")}</p>
         </div>
       ) : null}
+      </div>
+      </div>
     </Screen>
   );
 }

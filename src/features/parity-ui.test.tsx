@@ -170,7 +170,7 @@ describe("ui parity invokes", () => {
     setProjectSkillRows([{ name: "billing", path: "/tmp/billing", enabled: true, agent: "claude_code" }]);
     const user = userEvent.setup();
     renderAt("/project/field");
-    expect(await screen.findByText("billing")).toBeInTheDocument();
+    expect((await screen.findAllByText("billing")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^notes$/)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Skills root"), "/tmp/skills-root");
     await user.click(screen.getByTestId("link-project"));
@@ -201,7 +201,7 @@ describe("ui parity invokes", () => {
     installIpc();
     const user = userEvent.setup();
     renderAt("/project/fixture");
-    expect(await screen.findByText("research-notes")).toBeInTheDocument();
+    expect((await screen.findAllByText("research-notes")).length).toBeGreaterThan(0);
     await user.click(screen.getByTestId("link-project"));
     expect(screen.queryByText("research-notes")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Pull center" }));
@@ -223,7 +223,7 @@ describe("ui parity invokes", () => {
     installIpc();
     const user = userEvent.setup();
     renderAt("/settings?tab=agents");
-    await user.click(await screen.findByRole("checkbox", { name: "Enable Claude Code" }));
+    await user.click(await screen.findByRole("switch", { name: "Enable Claude Code" }));
     expect(calls("set_tool_enabled").some((entry) => entry.args.key === "claude_code" && entry.args.enabled === false)).toBe(true);
     await user.click(screen.getByRole("tab", { name: "Appearance" }));
     await user.click(screen.getByRole("button", { name: "Small" }));

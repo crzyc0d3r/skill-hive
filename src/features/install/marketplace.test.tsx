@@ -45,7 +45,7 @@ it("searches the marketplace, installs one skill, and cancels the next", async (
         <InstallView scanned={[]} marketplaceReachable={false} onImportAll={() => {}} onImportOne={() => {}} onPreview={() => {}} onImportGit={() => {}} onCancel={() => {}} onInstallLocal={() => {}} onInstallArchive={() => {}} />
       </MemoryRouter>,
     );
-    expect(screen.queryByRole("tab", { name: "Leaderboard" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Marketplace" })).not.toBeInTheDocument();
     render(
       <QueryClientProvider client={new QueryClient()}>
         <MarketplacePanel reachable={false} />

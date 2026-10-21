@@ -20,9 +20,9 @@ import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
 import { UpdateFlow } from "@/features/library/UpdateFlow";
-import { EmptyState, PrimaryLink, Screen, SearchField, StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, PrimaryLink, Screen, SearchField } from "@/components/chrome";
 import { LibrarySkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -69,8 +69,11 @@ function AgentPlacement({
             return (
               <li key={agent.key} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm">
                 <AgentMark agent={agent.key} name={agent.name} />
-                <span className="font-medium">{agent.name}</span>
-                <span className="text-muted-foreground">{t("install.installed")}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{agent.name}</span>
+                  <span className="block truncate font-mono text-xs text-muted-foreground" title={`~/.agents/${agent.key}/skills/${skill.name}`}>{`~/.agents/${agent.key}/skills/${skill.name}`}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">{skill.updateStatus && skill.updateStatus !== "clean" ? t("library.outOfDate") : t("library.synced")}</span>
                 <Button type="button" variant="ghost" size="sm" className="ml-auto" aria-label={`${t("library.removeAgent")} ${agent.name}`} onClick={() => onToggle(agent.key)}>
                   {t("library.removeAgent")}
                 </Button>
@@ -164,7 +167,9 @@ export function LibraryView({
   onBatchTag: (ids: string[], tag: string) => void | Promise<void>;
   onToggleAgent: (skillId: string, agent: string) => void | Promise<void>;
 }) {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const band = useShellBand();
   const retry = useContext(RetryContext);
   const [query, setQuery] = useState("");
@@ -258,7 +263,7 @@ export function LibraryView({
   }
 
   return (
-    <Screen testId="library" title={t("library.title")} actions={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
+    <Screen testId="library" title={t("library.title")} lede={t("library.emptyBody")} actions={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
       <div className="flex flex-wrap items-center gap-2">
         <SearchField
           aria-label={t("library.search")}
@@ -282,9 +287,15 @@ export function LibraryView({
             </Button>
           ))}
         </div>
+        <Button type="button" variant="outline" size="sm" aria-pressed={tagsOpen} onClick={() => setTagsOpen((current) => !current)}>{t("library.filterTags")}</Button>
         <div className="ml-auto flex items-center gap-1">
-          <GitStatusButton />
-          <UpdateFlow skills={skills} />
+          <div>
+            <Button type="button" variant="outline" size="sm" aria-expanded={moreOpen} onClick={() => setMoreOpen((current) => !current)}>{t("shell.more")}</Button>
+            <div className={moreOpen ? "mt-2 flex flex-col gap-1" : "sr-only"}>
+              <GitStatusButton />
+              <UpdateFlow skills={skills} />
+            </div>
+          </div>
           <Button type="button" size="icon-sm" variant={layout === "grid" ? "secondary" : "ghost"} aria-label={t("library.view.grid")} title={t("library.view.grid")} onClick={() => setLayout("grid")}>
             <LayoutGridIcon aria-hidden="true" />
           </Button>
@@ -311,7 +322,7 @@ export function LibraryView({
           </Button>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className={tagsOpen ? "flex flex-wrap items-center gap-1.5" : "sr-only"}>
         {sources.map((item) => (
           <Button key={item} type="button" variant={source === item ? "secondary" : "outline"} size="xs" className="rounded-full shadow-none" onClick={() => setSource(source === item ? null : item)}>
             {sourceLabel(item)}
@@ -350,7 +361,7 @@ export function LibraryView({
           </Button>
         </form>
       ) : null}
-      <details className="rounded-lg border border-border bg-card px-3 py-2">
+      <details className="sr-only">
         <summary className="cursor-pointer text-sm font-medium">{t("library.presetOrder")}</summary>
       <ol data-testid="preset-order" className="mt-2 space-y-1">
         {memberIds.map((id) => {
@@ -438,20 +449,22 @@ export function LibraryView({
         </form>
       ) : null}
       {phase === "loading" ? <LibrarySkeleton /> : null}
-      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
-      {phase === "ready" && rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
+      {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+      {phase === "empty" || (phase === "ready" && rendered.length === 0) ? (
+        <EmptyState title={t("library.emptyTitle")} body={t("library.emptyBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} />
+      ) : null}
       <div className={cn("flex min-w-0 flex-col gap-4", open && band >= 1440 && "flex-row items-start")}>
       {phase === "ready" ? <div ref={grid.ref} className="max-h-[36rem] min-w-0 flex-1 overflow-auto">
       <ul
         data-testid="library-cards"
         data-layout={layout}
         data-columns={open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}
-        className={layout === "grid" ? "grid gap-3" : "space-y-2"}
+        className={layout === "grid" ? "grid items-stretch gap-3" : "space-y-2"}
         style={layout === "grid" ? { gridTemplateColumns: `repeat(${open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}, minmax(0, 1fr))` } : undefined}
       >
         {rendered.map((skill) => (
-          <li key={skill.id} data-virtual-card="">
-            <Card className={cn("group/card gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "flex-row")}>
+          <li key={skill.id} data-virtual-card="" className="h-full">
+            <Card className={cn("group/card flex h-full flex-col gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "flex-row")}>
               <div className="flex items-start gap-2.5 px-3 pt-3">
                 <input
                   type="checkbox"
@@ -513,7 +526,7 @@ export function LibraryView({
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="mt-3 space-y-2 border-t border-border px-3 py-2">
+              <div className="mt-auto space-y-2 border-t border-border px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <SourceBadge source={skill.source} />
                   <span className="relative inline-flex size-4 shrink-0 items-center justify-center" title={t("library.membership")}>
@@ -530,7 +543,8 @@ export function LibraryView({
                   </span>
                   {memberIds.includes(skill.id) ? <span className="whitespace-nowrap text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
-                <InstalledTiles skill={skill} agents={catalogAgents} />
+                  <span className="text-xs text-muted-foreground">{t("library.inAgents", { count: String(skill.agents.length) })}</span>
+                  <InstalledTiles skill={skill} agents={catalogAgents} />
               </div>
             </Card>
           </li>
@@ -539,10 +553,17 @@ export function LibraryView({
       </div> : null}
       {open ? (
         <aside data-testid="detail-panel" className={cn("rounded-lg border border-border bg-card p-3", band < 1440 && "fixed inset-y-0 right-0 z-30 w-[min(560px,100%)] overflow-auto shadow-lg", band >= 1920 ? "w-[520px] shrink-0" : band >= 1440 ? "w-[440px] shrink-0" : undefined)}>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-sans text-title font-semibold">{open.name}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{open.description}</p>
+            </div>
+            <Button asChild size="sm"><Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link></Button>
+          </div>
           <div className="inline-flex rounded-lg bg-muted p-0.5">
             {(["local", "diff", "source", "edit"] as const).map((item) => (
               <Button key={item} type="button" aria-pressed={tab === item} variant="ghost" size="sm" className={cn("h-7", tab === item && "bg-background shadow-sm")} onClick={() => setTab(item)}>
-                {t(`library.detail.${item}`)}
+                {item === "local" ? t("library.detail.content") : item === "diff" ? t("library.detail.changes") : item === "source" ? t("library.detail.tests") : t("library.detail.history")}
               </Button>
             ))}
           </div>
@@ -557,15 +578,19 @@ export function LibraryView({
           />
           {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
           {tab === "local" && open && !open.body && detail?.id !== open.id ? <div data-testid="detail-loading" className="mt-3 h-24 animate-pulse rounded-md bg-muted" /> : null}
-          {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{openBody}</pre> : null}
-          {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.sourceBody}</pre> : null}
+          {tab === "local" ? (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm text-muted-foreground">{t("library.viewSource")}</summary>
+              <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{openBody}</pre>
+            </details>
+          ) : null}
+          {tab === "source" ? <p className="mt-3 text-sm">{open.description}</p> : null}
+          {tab === "edit" ? <p className="mt-3 text-sm text-muted-foreground">{t("library.detail.history")}</p> : null}
           {tab === "local" ? (
             <div className="mt-3" data-testid="origin-meta">
-              <p className="text-xs text-muted-foreground">{open.source} · {open.updateStatus ?? t("library.checked")}</p>
-              <ul className="mt-2 text-sm">
-                <li>{t("library.origin.type")}: {open.source}</li>
-                {open.sourceRef || sourceRef ? <li>{t("library.origin.ref")}: {open.sourceRef || sourceRef}</li> : null}
-              </ul>
+              <p className="text-sm">{sourceLabel(open.source)}</p>
+              <p className="sr-only">{t("library.origin.type")}: {open.source}</p>
+              {open.sourceRef || sourceRef ? <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{open.sourceRef || sourceRef}</p> : null}
             </div>
           ) : null}
           {tab === "diff" ? (
@@ -594,8 +619,8 @@ export function LibraryView({
               </ul>
             </>
           ) : null}
-          <div className="mt-3 text-sm">
-            <button type="button" className="text-muted-foreground" onClick={() => { void silent<{ id: string; name: string }[]>("get_projects").then((rows) => setPlacements(rows ?? [])); }}>{t("library.detail.projects")}</button>
+          <div className="sr-only">
+            <button type="button" onClick={() => { void silent<{ id: string; name: string }[]>("get_projects").then((rows) => setPlacements(rows ?? [])); }}>{t("library.detail.projects")}</button>
             <ul>
               {placements.map((project) => (
                 <li key={project.id}>

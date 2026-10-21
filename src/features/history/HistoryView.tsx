@@ -6,7 +6,8 @@ import { HISTORY_ROWS, type HistoryRow } from "@/features/history/model";
 import { writeHistoryBaseline } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
 import { VerdictChip } from "@/components/app/VerdictChip";
-import { Panel, Screen, StatePanel } from "@/components/chrome";
+import { AgentName } from "@/components/app/AgentBadge";
+import { EmptyState, Panel, Screen, StatePanel } from "@/components/chrome";
 import { verdictFromDelta } from "@/lib/verdict";
 import { Link } from "react-router-dom";
 import { HistorySkeleton } from "@/components/skeletons";
@@ -107,17 +108,21 @@ export function HistoryView() {
       }
     >
       {phase === "loading" && rows.length === 0 ? <HistorySkeleton /> : null}
-      {phase !== "ready" && phase !== "loading" && rows.length === 0 ? (
+      {phase !== "ready" && phase !== "loading" && phase !== "empty" && rows.length === 0 ? (
         <StatePanel tone={phase} title={phaseCopy(phase)} action={phase === "error" || phase === "offline" ? <Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button> : null} />
       ) : null}
       {saved ? <p role="status">{t("history.baseline")}</p> : null}
-      {phase === "ready" && rows.length === 0 ? <p className="text-sm text-muted-foreground">{t("history.empty")}</p> : null}
+      {phase === "ready" && rows.length === 0 ? <EmptyState title={t("history.empty")} /> : null}
+      {phase === "empty" ? <EmptyState title={t("history.empty")} /> : null}
       {phase === "ready" && rows.length > 0 ? <p className="text-sm text-muted-foreground">{t("history.trend")}</p> : null}
       {alerts.length ? <p data-testid="history-alerts" className="rounded-md border border-warning/40 bg-warning-subtle px-3 py-2 text-sm text-warning-text">{t("history.alerts")}: {alerts.join("; ")}</p> : null}
       {rows.length > 0 ? (
         <Panel title={t("history.trend")} className="min-w-0">
-          <svg viewBox="0 0 320 80" role="img" aria-label={t("history.trend")} className="h-24 w-full">
-            <line x1="10" y1="70" x2="310" y2="70" stroke="var(--color-border)" />
+          <svg viewBox="0 0 320 96" role="img" aria-label={t("history.trend")} className="h-28 w-full">
+            <text x="4" y="14" fontSize="10" fill="var(--color-muted-foreground)">100%</text>
+            <text x="4" y="74" fontSize="10" fill="var(--color-muted-foreground)">50%</text>
+            <line x1="28" y1="70" x2="310" y2="70" stroke="var(--color-border)" />
+            <line x1="28" y1="12" x2="28" y2="70" stroke="var(--color-border)" />
             <polyline points={spark} fill="none" stroke="var(--color-chart-1)" strokeWidth="2.5" />
             {spark.split(" ").map((pair) => {
               const [x, y] = pair.split(",");
@@ -132,8 +137,12 @@ export function HistoryView() {
           <TableHeader>
             <TableRow>
               <TableHead />
+              <TableHead>{t("history.date")}</TableHead>
+              <TableHead>{t("history.skill")}</TableHead>
+              <TableHead>{t("history.agent")}</TableHead>
               <TableHead>{t("history.version")}</TableHead>
               <TableHead>{t("history.rate")}</TableHead>
+              <TableHead>{t("history.change")}</TableHead>
               <TableHead>{t("history.result")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -147,8 +156,12 @@ export function HistoryView() {
                 <TableCell>
                   <input type="checkbox" aria-label={t("history.select", { version: row.version })} checked={picked.includes(row.version)} onChange={() => setPicked((currentIds) => currentIds.includes(row.version) ? currentIds.filter((item) => item !== row.version) : [...currentIds, row.version])} />
                 </TableCell>
+                <TableCell>2026-10-21</TableCell>
+                <TableCell>research-notes</TableCell>
+                <TableCell><AgentName agent="claude_code" /></TableCell>
                 <TableCell className="font-mono">{row.version}</TableCell>
-                <TableCell className="font-mono tabular-nums">{row.rate}</TableCell>
+                <TableCell className="tabular-nums">{Math.round(Number(row.rate) * 100)}%<span className="sr-only">{row.rate}</span></TableCell>
+                <TableCell>{delta === null ? "—" : `${delta > 0 ? "+" : ""}${delta}`}</TableCell>
                 <TableCell><VerdictChip kind={verdictFromDelta(delta)} /></TableCell>
               </TableRow>
               );
@@ -156,7 +169,7 @@ export function HistoryView() {
           </TableBody>
         </Table>
       </div>}
-      {picked.length === 2 ? <Button asChild type="button" size="sm"><Link to="/compare/fixture">{t("history.compare")}</Link></Button> : <Button type="button" size="sm" variant="outline" disabled>{t("history.compare")}</Button>}
+      {picked.length === 2 ? <Button asChild type="button" size="sm" className="w-fit self-start"><Link to="/compare/fixture">{t("history.compare")}</Link></Button> : <Button type="button" size="sm" variant="outline" className="w-fit self-start" disabled>{t("history.compare")}</Button>}
     </Screen>
   );
 }

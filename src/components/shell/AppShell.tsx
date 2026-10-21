@@ -2,11 +2,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArchiveIcon,
+  BookmarkIcon,
   BotIcon,
   CircleHelpIcon,
   DownloadIcon,
+  ClipboardListIcon,
   FlaskConicalIcon,
+  FolderIcon,
   GitCompareIcon,
+  LayoutGridIcon,
+  ListChecksIcon,
   GripVerticalIcon,
   HexagonIcon,
   HistoryIcon,
@@ -447,7 +452,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location.pathname === "/global-workspace"}>
                     <NavLink to="/global-workspace">
-                      {collapsed ? <><span aria-hidden="true">G</span><span className="sr-only">{t("workspace.allAgents")}</span></> : t("workspace.allAgents")}
+                      <LayoutGridIcon aria-hidden="true" />
+                      {collapsed ? <span className="sr-only">{t("workspace.allAgents")}</span> : t("workspace.allAgents")}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -492,7 +498,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                     >
                       <SidebarMenuButton asChild className="flex-1">
                         <NavLink to="/global-workspace" onClick={() => { setActivePresetId(preset.id); void switchPreset(preset.id); }}>
-                          {collapsed ? <span aria-hidden="true">{preset.name.slice(0, 1)}</span> : null}
+                          {collapsed ? <BookmarkIcon aria-hidden="true" /> : null}
                           <span className={collapsed ? "sr-only" : undefined}>{preset.name}</span>
                           {collapsed || preset.skillIds.length === 0 ? null : <span aria-hidden="true" className="ml-auto text-xs text-muted-foreground tabular-nums group-hover/preset:invisible">{preset.skillIds.length}</span>}
                         </NavLink>
@@ -541,7 +547,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                     <SidebarMenuButton asChild>
                       <NavLink to="/project/fixture" className="flex items-center gap-2">
                         <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block size-2 rounded-full bg-info" />
-                        {collapsed ? "P" : t("project.title")}
+                        <FolderIcon aria-hidden="true" />
+                        {collapsed ? <span className="sr-only">{t("project.title")}</span> : t("project.title")}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -550,7 +557,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                     <SidebarMenuButton asChild>
                       <NavLink to={`/project/${project.id}`} className="flex items-center gap-2">
                         <span data-testid="sidebar-project-dot" data-color={projectDot} className="inline-block size-2 rounded-full bg-info" />
-                        {collapsed ? project.name.slice(0, 1) : project.name}
+                        <FolderIcon aria-hidden="true" />
+                        {collapsed ? <span className="sr-only">{project.name}</span> : project.name}
                       </NavLink>
                     </SidebarMenuButton>
                     <Button type="button" size="icon-xs" variant="ghost" aria-label={`${t("sidebar.removeProject")} ${project.name}`} onClick={() => { setProjectRows((current) => current.filter((item) => item.id !== project.id)); void silent("remove_project", { id: project.id }); }}>
@@ -580,6 +588,22 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.pathname.includes("/tests")}>
+                    <NavLink to="/skills/skill-research/tests">
+                      <ListChecksIcon aria-hidden="true" />
+                      {collapsed ? <span className="sr-only">{t("suite.title")}</span> : t("suite.title")}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.pathname.startsWith("/runs")}>
+                    <NavLink to="/runs/run-fixture">
+                      <ClipboardListIcon aria-hidden="true" />
+                      {collapsed ? <span className="sr-only">{t("results.title")}</span> : t("results.title")}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location.pathname.startsWith("/compare")}>
                     <NavLink to="/compare/fixture">
                       <GitCompareIcon aria-hidden="true" />
@@ -596,7 +620,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild>
                       <NavLink to="/lobster-workspace">
-                        {collapsed ? <><span aria-hidden="true">L</span><span className="sr-only">{t("lobster.all")}</span></> : t("lobster.all")}
+                        <BotIcon aria-hidden="true" />
+                        {collapsed ? <span className="sr-only">{t("lobster.all")}</span> : t("lobster.all")}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -698,7 +723,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
           {job && !job.done ? t("job.working") : authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : t("shell.ready")}
         </span>
-        <Link to="/runs/run-fixture" data-testid="run-chip" className="rounded px-1 hover:bg-accent">{t("run.chip")}</Link>
+        <Link to="/runs/run-fixture" data-testid="run-chip" aria-label={t("results.title")} className="inline-flex text-muted-foreground">
+          <ClipboardListIcon className="size-3.5" aria-hidden="true" />
+        </Link>
         <span className="font-mono tabular-nums">Skill Hive 1.0.0</span>
       </footer>
       <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>

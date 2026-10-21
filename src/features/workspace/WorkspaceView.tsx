@@ -4,7 +4,7 @@ import { SearchIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useContext, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
 import { useVirtualGrid } from "@/lib/virtual-grid";
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
@@ -12,9 +12,9 @@ import { deleteManagedSkills, silent, syncSkillToTool, unsyncSkillFromTool } fro
 import { useDebounced } from "@/lib/use-debounced";
 import { t } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState } from "@/components/chrome";
 import { WorkspaceSkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { AgentName } from "@/components/app/AgentBadge";
 import { agentDisplayName } from "@/lib/agents";
 
@@ -46,7 +46,10 @@ export function WorkspaceView({
   onApply: (id: string) => void | Promise<void>;
   onCreate: (name: string) => void | Promise<void>;
 }) {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
+  const [params] = useSearchParams();
+  const [creating, setCreating] = useState(false);
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const retry = useContext(RetryContext);
   const [applied, setApplied] = useState<string | null>(null);
   const [name, setName] = useState("Research");
@@ -133,21 +136,29 @@ export function WorkspaceView({
     return (
       <section data-testid="global-workspace">
         <h1 className="font-sans text-display font-semibold">{t("workspace.title")}</h1>
-        <form
-          className="mt-3 flex flex-wrap items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onCreate(name);
-          }}
-        >
-          <label className="text-sm">
-            <span className="mb-1 block text-xs text-muted-foreground">{t("workspace.preset.hint")}</span>
-            <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8 w-56" />
-          </label>
-          <Button type="submit" size="sm">{t("preset.new")}</Button>
-        </form>
+        <p className="mt-1 text-sm text-muted-foreground">{t("workspace.lede")}</p>
+        <Button type="button" size="sm" className="mt-3" onClick={() => setCreating(true)}>{t("preset.new")}</Button>
+        {creating ? (
+          <form
+            role="dialog"
+            aria-label={t("preset.new")}
+            className="mt-3 max-w-md space-y-3 rounded-lg border border-border bg-card p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onCreate(name);
+              setCreating(false);
+            }}
+          >
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-muted-foreground">{t("workspace.preset.hint")}</span>
+              <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8" />
+            </label>
+            <Button type="submit" size="sm">{t("preset.new")}</Button>
+          </form>
+        ) : null}
         {phase === "loading" ? <WorkspaceSkeleton /> : null}
-        {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+        {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+        {phase === "empty" ? <EmptyState title={t("workspace.title")} body={t("workspace.lede")} /> : null}
         {phase === "ready" ? <>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="preset-bar">
           {shownPresets.map((preset) => {
@@ -176,14 +187,36 @@ export function WorkspaceView({
             );
           })}
         </div>
+        {params.get("view") === "presets" ? (
+          <section className="mt-4 rounded-lg border border-border bg-card p-4">
+            <h2 className="font-sans text-title font-semibold">{t("library.presetOrder")}</h2>
+            <ol className="mt-3 space-y-2">
+              {shownPresets.map((preset) => (
+                <li key={preset.id} className="rounded-md border border-border px-3 py-2">
+                  <p className="font-medium">{preset.name}</p>
+                  <p className="text-xs text-muted-foreground">{t("workspace.skillsCount", { count: String(preset.skillIds.length) })}</p>
+                  <ol className="mt-2 space-y-1 text-sm">
+                    {preset.skillIds.map((id) => <li key={id}>{coverageSkills.find((skill) => skill.id === id)?.name ?? id}</li>)}
+                  </ol>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
         <ul className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]" data-testid="agent-catalog">
-          {agents.map((agent) => (
-            <li key={agent.key} className="rounded-lg border border-border bg-card p-3 text-sm shadow-sm">
+          {(showAllAgents ? agents : agents.filter((agent) => agent.installed).slice(0, 8).concat(agents.filter((agent) => agent.installed).length ? [] : agents.slice(0, 4))).map((agent) => {
+            const count = coverageSkills.filter((skill) => skill.agents.includes(agent.key)).length;
+            return (
+            <li key={agent.key} className="flex h-full flex-col rounded-lg border border-border bg-card p-3 text-sm shadow-sm">
               <Link to={`/global-workspace/${agent.key}`} className="font-medium"><AgentName agent={agent.key} displayName={agent.name} /></Link>
-              <div className="mt-1 font-mono text-xs text-muted-foreground">{agent.path}</div>
+              <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{agent.path}</div>
+              <p className="mt-2 text-sm">{t("workspace.skillsCount", { count: String(count) })}</p>
+              <Button asChild type="button" variant="outline" size="sm" className="mt-3 w-fit"><Link to={`/global-workspace/${agent.key}`}>{t("workspace.open")}</Link></Button>
             </li>
-          ))}
+            );
+          })}
         </ul>
+        {showAllAgents ? null : <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => setShowAllAgents(true)}>{t("workspace.showAll")}</Button>}
         </> : null}
       </section>
     );

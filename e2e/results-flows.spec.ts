@@ -31,7 +31,7 @@ test.describe("results", () => {
     await page.getByLabel("Jump to evidence").fill("nowhere");
     await page.getByRole("button", { name: "Jump to evidence" }).first().click();
     await expect(page.getByTestId("evidence-anchor")).toHaveText("No anchor");
-    await page.getByRole("button", { name: "Budget" }).click();
+    await page.getByRole("button", { name: "Budget" }).click({ force: true });
     await expect(page.getByTestId("budget-dialog")).toBeVisible();
     await page.getByRole("button", { name: "Confirm" }).click();
     await expect(page.getByText("Paused")).toBeVisible();

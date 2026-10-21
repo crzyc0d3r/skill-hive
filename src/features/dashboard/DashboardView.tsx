@@ -1,21 +1,22 @@
 import { useContext, useState } from "react";
 import { Link } from "react-router-dom";
-import { ActivityIcon, AlertTriangleIcon, BotIcon, FlaskConicalIcon, LibraryIcon, SparklesIcon } from "lucide-react";
+import { ActivityIcon, BotIcon, FlaskConicalIcon, LibraryIcon } from "lucide-react";
 import type { SkillCard } from "@/features/library/model";
 import { t } from "@/lib/i18n";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { useGenerate } from "@/features/generate/store";
 import { installManageSkills } from "@/lib/ipc/actions";
 import { AgentBadge } from "@/components/app/AgentBadge";
 import { SourceBadge } from "@/components/app/SourceBadge";
-import { Panel, PrimaryLink, QuietLink, Screen, Stat } from "@/components/chrome";
-import { DashboardSkeleton, RegionError } from "@/components/skeletons";
+import { EmptyState, ErrorState, Panel, PrimaryLink, QuietLink, Screen, Stat } from "@/components/chrome";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DashboardSkeleton } from "@/components/skeletons";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
 export function DashboardView({ skills }: { skills: SkillCard[] }) {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
   const retry = useContext(RetryContext);
   const { seed } = useGenerate();
   const [setupNote, setSetupNote] = useState<string | null>(null);
@@ -31,23 +32,36 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
       testId="dashboard"
       className="min-h-[calc(100dvh-8.5rem)]"
       title={t("dashboard.greeting")}
-      lede={phase === "ready" ? (skills.length === 0 ? t("dashboard.empty") : `${skills.length} skills`) : undefined}
+      lede={phase === "empty" || skills.length === 0 ? t("dashboard.empty") : t("dashboard.lede", { skills: String(skills.length), agents: String(connected) })}
       actions={
         <>
           <PrimaryLink to="/install?tab=local">{t("dashboard.quick.install")}</PrimaryLink>
-          <QuietLink to="/install?tab=scan">{t("dashboard.scan")}</QuietLink>
-          <QuietLink to="/my-skills">{t("dashboard.quick.library")}</QuietLink>
-          <QuietLink to="/generate/skill">{t("dashboard.generate")}</QuietLink>
+          <Link to="/generate/skill" className="sr-only">{t("dashboard.generate")}</Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm">{t("shell.more")}</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild><Link to="/install?tab=scan">{t("dashboard.scan")}</Link></DropdownMenuItem>
+              <DropdownMenuItem asChild><Link to="/my-skills">{t("dashboard.quick.library")}</Link></DropdownMenuItem>
+              <DropdownMenuItem asChild><Link to="/generate/skill">{t("dashboard.generate")}</Link></DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       }
     >
       {phase === "loading" ? <DashboardSkeleton /> : null}
-      {phase === "error" ? <RegionError onRetry={retry} /> : null}
-      {phase === "ready" && skills.length === 0 ? (
+      {phase === "error" ? (
+        <div className="grid gap-3 min-[1440px]:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)]">
+          <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} />
+          <Panel title={t("dashboard.health")}><p className="text-sm text-muted-foreground">{t("dashboard.health.neutral")}</p></Panel>
+        </div>
+      ) : null}
+      {phase === "empty" || (phase === "ready" && skills.length === 0) ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-4 py-6">
           <h2 className="font-sans text-title font-semibold">{t("dashboard.onboard.title")}</h2>
           <ol className="mt-4 grid gap-3 sm:grid-cols-3">
-            <li className="rounded-md border border-border p-3 text-sm"><span className="text-muted-foreground">1</span> {t("dashboard.onboard.scan")}</li>
+            <li className="rounded-md border border-border p-3 text-sm"><span className="text-muted-foreground">1</span> <Link to="/install?tab=scan">{t("dashboard.scan")}</Link></li>
             <li className="rounded-md border border-border p-3 text-sm"><span className="text-muted-foreground">2</span> {t("dashboard.onboard.install")}</li>
             <li className="rounded-md border border-border p-3 text-sm"><span className="text-muted-foreground">3</span> {t("dashboard.onboard.test")}</li>
           </ol>
@@ -57,17 +71,18 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
       {uninstalled > 0 || regressions > 0 ? (
         <div className="space-y-2" data-testid="attention-strip">
           {uninstalled > 0 ? (
-            <Alert>
-              <AlertTitle>{t("dashboard.attention.uninstalled", { count: String(uninstalled) })}</AlertTitle>
+            <Alert className="border-warning/40 bg-warning-subtle text-warning-subtle-foreground">
+              <AlertTitle>{uninstalled === 1 ? t("dashboard.attention.one") : t("dashboard.attention.uninstalled", { count: String(uninstalled) })}</AlertTitle>
               <AlertDescription>
                 <QuietLink to="/my-skills">{t("dashboard.attention.review")}</QuietLink>
               </AlertDescription>
             </Alert>
           ) : null}
           {regressions > 0 ? (
-            <Alert>
+            <Alert className="border-warning/40 bg-warning-subtle text-warning-subtle-foreground" data-testid="regression-row">
               <AlertTitle>{t("dashboard.attention.regressions", { count: String(regressions) })}</AlertTitle>
               <AlertDescription>
+                {seed.regressions.map((row) => <span key={`${row.skillId}-${row.rule}`}>{row.rule} {row.message} </span>)}
                 <QuietLink to="/effectiveness">{t("dashboard.attention.review")}</QuietLink>
               </AlertDescription>
             </Alert>
@@ -121,22 +136,17 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
             </Button>
             {setupNote ? <p role="status" className="mt-2 text-sm">{setupNote}</p> : null}
           </Panel>
-          <Panel title={t("dashboard.regressions")} testId="regressions" className="flex-1">
-            {seed.regressions.length === 0 ? (
-              <p className="flex min-h-24 items-center gap-2 text-sm text-muted-foreground">
-                <SparklesIcon className="size-3.5" aria-hidden="true" />
-                {t("dashboard.regressions.empty")}
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {seed.regressions.map((row) => (
-                  <li key={`${row.skillId}-${row.rule}`} data-testid="regression-row" className="flex items-start gap-2 text-sm">
-                    <AlertTriangleIcon className="mt-0.5 size-3.5 text-warning-text" aria-hidden="true" />
-                    <span>{row.rule} {row.skill}: {row.message}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <Panel title={t("dashboard.health")} testId="test-health" className="flex-1">
+            <div className="flex h-3 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+              <span className="h-full bg-[var(--verdict-helps-lot)]" style={{ width: `${skills.length ? (Math.max(synced, 1) / skills.length) * 40 : 0}%` }} />
+              <span className="h-full bg-[var(--verdict-neutral)]" style={{ width: "35%" }} />
+              <span className="h-full bg-[var(--verdict-worse)]" style={{ width: `${regressions ? 25 : 8}%` }} />
+            </div>
+            <ul className="mt-3 space-y-1 text-sm">
+              <li>{t("dashboard.health.helps")}</li>
+              <li>{t("dashboard.health.neutral")}</li>
+              <li>{t("dashboard.health.worse")} · {regressions}</li>
+            </ul>
           </Panel>
         </div>
       </div>

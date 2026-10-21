@@ -52,11 +52,6 @@ export function SkillCardSkeleton() {
 export function LibrarySkeleton() {
   return (
     <LoadingRegion kind="library">
-      <div className="flex gap-1.5">
-        <Bone className="h-6 w-16 rounded-full" />
-        <Bone className="h-6 w-20 rounded-full" />
-        <Bone className="h-6 w-14 rounded-full" />
-      </div>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }, (_, index) => (
           <li key={index}>
@@ -379,8 +374,8 @@ export function CompareSkeleton() {
 export function HistorySkeleton() {
   return (
     <LoadingRegion kind="history">
-      <ChartSkeleton />
-      <TableSkeleton columns={3} rows={4} />
+      <Bone className="h-24 w-full" />
+      <TableSkeleton columns={5} rows={4} />
     </LoadingRegion>
   );
 }

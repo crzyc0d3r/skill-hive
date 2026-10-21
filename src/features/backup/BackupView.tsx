@@ -22,9 +22,9 @@ import { restoreBackupRemote, revokeBackupToken, setAsideBackup, storeBackupPat,
 import { demoEnabled } from "@/lib/demo";
 import { backupNow, restoreSnapshot } from "@/features/backup/model";
 import { t } from "@/lib/i18n";
-import { Screen, StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, Screen } from "@/components/chrome";
 import { BackupSkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { toast } from "sonner";
 
 interface ConflictRow {
@@ -39,7 +39,7 @@ function repoNameFrom(url: string): string {
 }
 
 export function BackupView() {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
   const retry = useContext(RetryContext);
   const [body, setBody] = useState("library v1");
   const [history, setHistory] = useState<SnapshotRow[]>([]);
@@ -128,21 +128,39 @@ export function BackupView() {
     }
   }
 
-  if (phase === "loading" || phase === "error") {
+  if (phase === "loading" || phase === "error" || phase === "empty") {
     return (
-      <Screen testId="backup" title={t("backup.title")}>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" data-testid="backup-now" size="sm" disabled={phase === "loading"} aria-busy={phase === "loading"}>
-            {t("backup.now")}
-          </Button>
-        </div>
-        {phase === "loading" ? <BackupSkeleton /> : <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} />}
+      <Screen testId="backup" title={t("backup.title")} lede={t("backup.lede")} actions={
+        <Button type="button" data-testid="backup-now" size="sm" disabled={phase !== "empty"} aria-busy={phase === "loading"}>
+          {t("backup.now")}
+        </Button>
+      }>
+        {phase === "loading" ? <BackupSkeleton /> : null}
+        {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+        {phase === "empty" ? <EmptyState title={t("backup.snapshots")} body={t("backup.lede")} /> : null}
       </Screen>
     );
   }
 
   return (
-    <Screen testId="backup" title={t("backup.title")}>
+    <Screen testId="backup" title={t("backup.title")} lede={t("backup.lede")} actions={
+      <Button type="button" data-testid="backup-now" disabled={busy} aria-busy={busy} size="sm" onClick={() =>
+          void run(async () => {
+            if (demoEnabled()) {
+              const snap = backupNow(body, [])[0];
+              setHistory((current) => [{ id: snap.id, label: snap.label }, ...current]);
+              setBody(snap.label);
+              return;
+            }
+            const snap = await gitBackupSync(body);
+            setHistory((current) => [snap, ...current]);
+            setBody(snap.label);
+          })
+        }
+      >
+        {t("backup.now")}
+      </Button>
+    }>
       <p className="mt-2 text-sm" role="status">{body}</p>
       {status ? (
         <p data-testid="backup-status" className="text-sm">
@@ -150,23 +168,9 @@ export function BackupView() {
           {status.remote ? ` · ${status.remote}` : ""}
         </p>
       ) : null}
-      <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        <Button type="button" data-testid="backup-now" disabled={busy} aria-busy={busy} size="sm" onClick={() =>
-            void run(async () => {
-              if (demoEnabled()) {
-                const snap = backupNow(body, [])[0];
-                setHistory((current) => [{ id: snap.id, label: snap.label }, ...current]);
-                setBody(snap.label);
-                return;
-              }
-              const snap = await gitBackupSync(body);
-              setHistory((current) => [snap, ...current]);
-              setBody(snap.label);
-            })
-          }
-        >
-          {t("backup.now")}
-        </Button>
+      <details className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+        <summary className="cursor-pointer">{t("shell.more")}</summary>
+        <div className="mt-2 flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { const snap = await gitBackupSync("sync"); setHistory((current) => [snap, ...current]); setNote(snap.label); })}>{t("backup.sync")}</Button>
         {authMethod === "pat" ? (
           <Button type="button" variant="outline" size="sm" onClick={() =>
@@ -210,13 +214,14 @@ export function BackupView() {
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={() => void run(async () => { await gitBackupInit(); const status = await gitBackupStatus(); setNote(status.branch || "repository ready"); })}>{t("backup.setup")}</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => void gitBackupFetch().then(() => gitBackupStatus()).then((status) => setNote(status.head || "no commits yet")).catch((err: Error) => setError(err.message))}>{t("backup.recovery")}</Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => { void setAsideBackup(body); setNote("Set aside"); }}>{t("backup.setAside")}</Button>
-      </div>
+        <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => { void setAsideBackup(body); setNote("Set aside"); }}>{t("backup.setAside")}</Button>
+        </div>
+      </details>
       <p className="mt-2 text-sm">{t("backup.public")}</p>
       {authMethod === "pat" ? (
-        <label className="mt-2 block text-sm">
-          {t("backup.pat")}
-          <Input aria-label={t("backup.pat")} className="ml-2 h-8 w-56" value={pat} onChange={(event) => {
+        <label className="mt-3 block max-w-md text-sm">
+          <span className="mb-1.5 block text-muted-foreground">{t("backup.pat")}</span>
+          <Input aria-label={t("backup.pat")} className="h-8 w-full" value={pat} onChange={(event) => {
               const next = event.target.value;
               setPat(next);
               if (next.trim()) void storeBackupPat(next.trim());
@@ -233,19 +238,19 @@ export function BackupView() {
         <label className="mr-3"><input type="checkbox" aria-label={t("backup.scope.presets")} checked={scope.presets} onChange={(event) => writeScope({ ...scope, presets: event.target.checked })} /> {t("backup.scope.presets")}</label>
         <label><input type="checkbox" aria-label={t("backup.scope.settings")} checked={scope.settings} onChange={(event) => writeScope({ ...scope, settings: event.target.checked })} /> {t("backup.scope.settings")}</label>
       </fieldset>
-      <label className="mt-2 block text-sm">
-        {t("backup.advanced")}
-        <Input aria-label={t("backup.advanced")} className="ml-2 h-8 w-56" value={remote} onChange={(event) => setRemote(event.target.value)} />
+      <label className="mt-3 block max-w-md text-sm">
+        <span className="mb-1.5 block text-muted-foreground">{t("backup.advanced")}</span>
+        <Input aria-label={t("backup.advanced")} className="h-8 w-full" value={remote} onChange={(event) => setRemote(event.target.value)} />
       </label>
       <p className="mt-2 text-sm text-muted-foreground">{t("settings.engine.note")}</p>
-      <Button type="button" variant="outline" size="sm" onClick={() => { void silent("set_settings", { key: "git_backup_engine", value: "git2" }); }}>{t("settings.engine.libgit2")}</Button>
-      <label className="mt-3 block text-sm">
-        {t("backup.device")}
-        <Input aria-label={t("backup.device")} className="ml-2 h-8 w-56" value={device} onChange={(event) => setDevice(event.target.value)}
+      <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => { void silent("set_settings", { key: "git_backup_engine", value: "git2" }); }}>{t("settings.engine.libgit2")}</Button>
+      <label className="mt-3 block max-w-md text-sm">
+        <span className="mb-1.5 block text-muted-foreground">{t("backup.device")}</span>
+        <Input aria-label={t("backup.device")} className="h-8 w-full" value={device} onChange={(event) => setDevice(event.target.value)}
           onBlur={() => { if (device.trim()) void backupSetDeviceName(device.trim()); }}
         />
       </label>
-      <p className="mt-2 text-sm text-muted-foreground">{t("backup.remote")} {remote}</p>
+      <p className="mt-2 text-sm text-muted-foreground"><span className="block text-xs">{t("backup.remote")}</span>{remote}</p>
       <p className="text-sm">{t("backup.scope")}</p>
       {conflicts.length > 0 ? (
         <ul className="mt-2 space-y-1 text-sm">
@@ -261,11 +266,15 @@ export function BackupView() {
       ) : null}
       {note ? <p role="status">{note}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
-      <ul className="mt-2 space-y-1 text-sm">
+      <div className="overflow-hidden rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <caption className="px-3 py-2 text-left text-sm font-medium">{t("backup.snapshots")}</caption>
+          <tbody>
         {history.map((snap) => (
-          <li key={snap.id}>
-            {snap.label}
-            <Button type="button" data-testid="backup-restore" variant="outline" size="sm" className="ml-2" onClick={() =>
+          <tr key={snap.id} className="border-t border-border">
+            <td className="px-3 py-2">{snap.label}</td>
+            <td className="px-3 py-2 text-right">
+            <Button type="button" data-testid="backup-restore" variant="outline" size="sm" onClick={() =>
                 void run(async () => {
                   if (demoEnabled()) {
                     const restored = restoreSnapshot([{ id: snap.id, label: snap.label, body }], snap.id);
@@ -281,9 +290,12 @@ export function BackupView() {
             >
               {t("backup.restore")}
             </Button>
-          </li>
+            </td>
+          </tr>
         ))}
-      </ul>
+          </tbody>
+        </table>
+      </div>
       {safety ? <p role="status">{t("backup.history")} {safety}</p> : null}
       <form
         className="mt-3 space-y-2 text-sm"
@@ -296,11 +308,11 @@ export function BackupView() {
         }}
       >
         <p>{t("backup.firstRun")}</p>
-        <label>
-          Remote
-          <Input name="remote" aria-label="Restore remote" className="mt-1 h-8 max-w-xl" />
+        <label className="block">
+          <span className="mb-1.5 block text-muted-foreground">{t("backup.remote")}</span>
+          <Input name="remote" aria-label="Restore remote" className="h-8 max-w-xl" />
         </label>
-        <Button type="submit" variant="outline" size="sm" className="ml-2">Use remote library</Button>
+        <Button type="submit" variant="outline" size="sm">Use remote library</Button>
       </form>
     </Screen>
   );

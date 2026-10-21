@@ -214,4 +214,12 @@ export const I18N_CATALOG = [
   t("settings.merge.object"),
   t("settings.engine.git"),
   t("project.fromLibrary"),
+  t("agents.budget"),
+  t("compare.sealed"),
+  t("dashboard.onboard.scan"),
+  t("dashboard.regressions"),
+  t("dashboard.regressions.empty"),
+  t("effect.omitted"),
+  t("install.scan.locations"),
+  t("library.origin.ref"),
 ];

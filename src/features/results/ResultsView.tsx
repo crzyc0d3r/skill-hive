@@ -17,9 +17,18 @@ function scrollToId(id: string) {
 }
 
 function rateTone(rate: number): string {
-  if (rate >= 0.8) return "border-success/40 bg-success-subtle text-success-text";
-  if (rate >= 0.5) return "border-warning/40 bg-warning-subtle text-warning-text";
-  return "border-destructive/30 bg-destructive/15 text-destructive";
+  if (rate >= 0.8) return "border-success/40 bg-success-subtle text-success-subtle-foreground";
+  if (rate >= 0.5) return "border-warning/40 bg-warning-subtle text-warning-subtle-foreground";
+  return "border-destructive/40 bg-destructive-subtle text-destructive-subtle-foreground";
+}
+
+function taskLabel(cell: { id: string; label: string }): string {
+  if (cell.id.startsWith("with") || cell.id.startsWith("without")) {
+    const side = cell.id.startsWith("without") ? t("results.withoutSkill") : t("results.withSkill");
+    const task = cell.id.split("-")[1];
+    return task ? `${side} · ${t("suite.tests")} ${task}` : side;
+  }
+  return cell.label;
 }
 
 function phaseCopy(phase: ViewPhase): string {
@@ -42,6 +51,7 @@ export function ResultsView() {
   const [open, setOpen] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [anchor, setAnchor] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [exported, setExported] = useState("");
@@ -121,7 +131,7 @@ export function ResultsView() {
     <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} lede={lede} actions={
       <>
         <Button type="button" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>{t("results.export")}</Button>
-        <Button type="button" variant="outline" size="sm" aria-busy={phase === "loading" && cells.length > 0} disabled={phase === "loading" && cells.length > 0} onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
+        <Button type="button" variant="outline" size="sm" className="sr-only" aria-busy={phase === "loading" && cells.length > 0} disabled={phase === "loading" && cells.length > 0} onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
       </>
     }>
       {(phase === "error" || phase === "offline") && cells.length === 0 ? (
@@ -132,7 +142,13 @@ export function ResultsView() {
         />
       ) : null}
       {phase === "empty" ? <StatePanel tone="empty" title={t("results.empty")} /> : null}
-      <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(16rem,0.9fr)]">
+      {phase === "ready" && cells.length > 0 ? (
+        <div className="rounded-lg border border-border bg-card p-4" data-testid="verdict-hero">
+          <p className="text-sm font-medium">{t("results.title")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("verdict.numbers", { with: String(Math.round((cells.find((cell) => cell.id.startsWith("with"))?.passRate ?? 0) * 100)), without: String(Math.round((cells.find((cell) => cell.id.startsWith("without"))?.passRate ?? 0) * 100)) })}</p>
+        </div>
+      ) : null}
+      {phase === "ready" || cells.length > 0 ? <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(16rem,0.9fr)]">
         <Panel title={t("results.heatmap")} className="min-w-0">
           <div
             role="grid"
@@ -160,23 +176,22 @@ export function ResultsView() {
                 className={cn("flex h-28 flex-col items-start justify-between rounded-lg border p-3 text-left", rateTone(cell.passRate), cellIndex === index && "ring-2 ring-ring")}
                 onClick={() => setIndex(cellIndex)}
               >
-                <span className="text-sm font-medium">{cell.id.startsWith("without") ? t("results.withoutSkill") : cell.id.startsWith("with") ? t("results.withSkill") : cell.label}</span>
-                <span className="font-mono text-3xl font-semibold tabular-nums">{Math.round(cell.passRate * 100)}%</span>
-                <span className="font-mono text-xs tabular-nums">{cell.passRate}</span>
+                <span className="text-sm font-medium">{taskLabel(cell)}</span>
+                <span className="text-3xl font-semibold tabular-nums">{Math.round(cell.passRate * 100)}%</span>
               </button>
             ))}
           </div>
         </Panel>
         <div className="flex flex-col gap-3">
-          <Panel title={t("results.sheet")} testId={open ? "cell-sheet" : undefined} className="h-full">
-            {open ? <p data-testid="heatmap-open" className="text-sm font-medium">{open.startsWith("without") ? t("results.withoutSkill") : open.startsWith("with") ? t("results.withSkill") : open}</p> : <p className="text-sm text-muted-foreground">{t("results.heatmap")}</p>}
+          {open ? <Panel title={t("results.sheet")} testId="cell-sheet" className="h-full">
+            <p data-testid="heatmap-open" className="text-sm font-medium">{open.startsWith("without") ? t("results.withoutSkill") : open.startsWith("with") ? t("results.withSkill") : open}</p>
             {selected && open ? <p className="mt-1 text-sm">{selected.id.startsWith("without") ? t("results.withoutSkill") : t("results.withSkill")} {Math.round(selected.passRate * 100)}%</p> : null}
             <div className="mt-3 flex flex-wrap gap-1" role="tablist" aria-label={t("results.sheet")}>
               {[t("results.transcript"), t("results.timeline"), t("results.outputs"), t("results.grading"), t("results.checks"), t("results.feedback")].map((label, index) => (
                 <span key={label} role="tab" aria-selected={index === 0} className={index === 0 ? "rounded-md bg-background px-2 py-1 text-xs shadow-sm" : "rounded-md px-2 py-1 text-xs text-muted-foreground"}>{label}</span>
               ))}
             </div>
-          </Panel>
+          </Panel> : null}
           {notes.length ? (
             <Panel title={t("results.notes")} testId="analyst-notes">
               <ul className="space-y-2 text-sm">{notes.map((note) => <li key={note}>{note}</li>)}</ul>
@@ -188,8 +203,8 @@ export function ResultsView() {
             </Panel>
           ) : <div data-testid="trigger-panel" className="hidden" />}
         </div>
-      </div>
-      <Panel title={t("results.timeline")}>
+      </div> : null}
+      {phase === "ready" || steps.length > 0 ? <Panel title={t("results.timeline")}>
         <div className="flex h-14 overflow-hidden rounded-md border border-border">
           {steps.map((step) => (
             <button key={step.id} type="button" className="flex min-w-24 flex-1 flex-col items-start justify-center border-r border-border bg-chart-1/15 px-3 text-left last:border-r-0" style={{ flexGrow: Math.max(stepDuration(step), 1) }} onClick={() => scrollToId(`step-${step.id}`)}>
@@ -211,25 +226,26 @@ export function ResultsView() {
             ))
           )}
         </div>
-      </Panel>
-      <Panel title={t("results.evidence")}>
+        {open ? (
         <form
-          className="flex flex-wrap items-end gap-2"
+          className="mt-3 flex flex-wrap items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             const next = evidenceAnchor(query);
+            setSearched(true);
             setAnchor(next);
             if (next) scrollToId(next);
           }}
         >
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("results.evidence")}</span>
-            <Input className="h-8" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("results.transcript")}</span>
+            <Input aria-label={t("results.evidence")} className="h-8" value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
           <Button type="submit" size="sm">{t("results.evidence")}</Button>
         </form>
-        <p className="mt-2 font-mono text-sm" data-testid="evidence-anchor">{anchor ?? t("results.noAnchor")}</p>
-      </Panel>
+        ) : null}
+        {searched ? <p className="mt-2 font-mono text-sm" data-testid="evidence-anchor">{anchor ?? t("results.noAnchor")}</p> : <p className="sr-only" data-testid="evidence-anchor" />}
+      </Panel> : null}
       {budgetOpen ? (
         <div role="dialog" data-testid="budget-dialog" className="rounded-lg border border-border bg-card p-4 shadow-sm">
           <p className="text-sm font-medium">{t("results.budget")}</p>

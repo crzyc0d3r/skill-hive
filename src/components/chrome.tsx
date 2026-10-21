@@ -41,7 +41,7 @@ export function Stat({ label, value, hint, icon }: { label: string; value: React
     <Card className="gap-1 rounded-lg border-border bg-card py-3 shadow-none">
       <div className="flex items-start justify-between gap-3 px-3">
         <div className="min-w-0">
-          <div className="text-overline font-semibold tracking-[0.04em] text-muted-foreground uppercase">{label}</div>
+          <div className="text-overline font-semibold text-muted-foreground uppercase">{label}</div>
           <div className="font-sans text-metric font-semibold tracking-tight tabular-nums">{value}</div>
           {hint ? <div className="text-xs text-muted-foreground">{hint}</div> : null}
         </div>
@@ -72,12 +72,31 @@ export function Panel({
   );
 }
 
-export function EmptyState({ title, action }: { title: string; action?: ReactNode }) {
+export function EmptyState({ title, body, action }: { title: string; body?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-8">
-      <InboxIcon className="size-5 text-muted-foreground" aria-hidden="true" />
-      <p className="max-w-prose text-sm text-muted-foreground">{title}</p>
+    <div data-testid="empty-state" className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-muted/40 px-6 py-10 text-center">
+      <InboxIcon className="size-10 text-muted-foreground" aria-hidden="true" />
+      <h2 className="font-sans text-title font-semibold">{title}</h2>
+      {body ? <p className="max-w-prose text-sm text-muted-foreground">{body}</p> : null}
       {action}
+    </div>
+  );
+}
+
+export function ErrorState({ title, detail, onRetry }: { title: string; detail?: string; onRetry?: () => void }) {
+  return (
+    <div role="alert" data-testid="error-state" className="rounded-lg border border-destructive/40 bg-card px-4 py-4 text-card-foreground">
+      <h2 className="font-sans text-base font-semibold">{title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{t("shell.renderError")}</p>
+      {onRetry ? (
+        <Button type="button" size="sm" className="mt-3" onClick={onRetry}>
+          {t("banner.retry")}
+        </Button>
+      ) : null}
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm">{t("shell.details")}</summary>
+        <pre className="mt-2 overflow-auto whitespace-pre-wrap font-mono text-xs">{detail || title}</pre>
+      </details>
     </div>
   );
 }
@@ -112,7 +131,7 @@ export function StatePanel({
       role={tone === "error" ? "alert" : tone === "loading" ? "progressbar" : "status"}
       aria-busy={tone === "loading" ? true : undefined}
       data-testid={testId ?? (tone === "loading" ? "loading-state" : undefined)}
-      className={cn("flex min-h-72 flex-1 flex-col justify-center gap-4 rounded-lg border px-5 py-8", surface)}
+      className={cn("flex flex-col gap-3 rounded-lg border px-4 py-4", tone === "error" ? "max-w-xl" : "min-h-40 flex-1 justify-center", surface)}
     >
       {icon}
       <p className="max-w-prose text-sm text-foreground">{title || (tone === "offline" ? t("shell.offline") : t("shell.empty"))}</p>
