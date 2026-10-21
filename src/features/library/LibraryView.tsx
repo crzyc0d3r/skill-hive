@@ -113,6 +113,36 @@ function AgentPlacement({
   );
 }
 
+function letterHue(key: string): number {
+  let hash = 0;
+  for (const char of key) hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
+  return hash % 360;
+}
+
+function InstalledTiles({ skill, agents }: { skill: SkillCard; agents: AgentRow[] }) {
+  const installed = skill.agents.map((key) => ({ key, name: agentDisplayName(key, agents) }));
+  const shown = installed.slice(0, 3);
+  const extra = installed.length - shown.length;
+  const names = installed.map((agent) => agent.name).join(", ");
+  return (
+    <div className="flex items-center justify-end gap-1" data-testid={`sync-dots-${skill.id}`} title={names}>
+      {shown.map((agent) => (
+        <span
+          key={agent.key}
+          data-filled="true"
+          title={agent.name}
+          aria-label={agent.name}
+          className="inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-semibold leading-none text-white"
+          style={{ backgroundColor: `oklch(0.58 0.14 ${letterHue(agent.key)})` }}
+        >
+          {agent.name.trim().slice(0, 1).toUpperCase() || "?"}
+        </span>
+      ))}
+      {extra > 0 ? <span className="text-xs text-muted-foreground" title={names}>+{extra}</span> : null}
+    </div>
+  );
+}
+
 export function LibraryView({
   skills,
   initialId,
@@ -487,10 +517,10 @@ export function LibraryView({
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="mt-3 flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Badge variant="outline" className="font-normal">{skill.source}</Badge>
-                  <span className="relative inline-flex size-4 items-center justify-center" title={t("library.membership")}>
+              <div className="mt-3 space-y-2 border-t border-border px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="shrink-0 whitespace-nowrap font-normal">{skill.source}</Badge>
+                  <span className="relative inline-flex size-4 shrink-0 items-center justify-center" title={t("library.membership")}>
                     <span
                       aria-hidden="true"
                       className={cn("size-2 rounded-full", memberIds.includes(skill.id) ? "bg-primary shadow-[0_0_0_3px_var(--muted)]" : "bg-muted-foreground/30")}
@@ -502,20 +532,9 @@ export function LibraryView({
                       className="absolute inset-0 opacity-0 focus-visible:opacity-100"
                     />
                   </span>
-                  {memberIds.includes(skill.id) ? <span className="truncate text-xs text-muted-foreground">{presetName}</span> : null}
+                  {memberIds.includes(skill.id) ? <span className="whitespace-nowrap text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
-                <div className="flex gap-1" data-testid={`sync-dots-${skill.id}`}>
-                  {detectedAgents(catalogAgents).map((agent) => {
-                    const filled = skill.agents.includes(agent.key);
-                    const Icon = agentIcon(agent.key);
-                    return (
-                      <button key={agent.key} type="button" data-filled={filled ? "true" : "false"} title={agent.name} aria-label={agent.name} className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" onClick={() => onToggleAgent(skill.id, agent.key)}>
-                        <Icon className="size-3" aria-hidden="true" />
-                        <span className={cn("size-1.5 rounded-full", filled ? "bg-primary" : "bg-muted-foreground/40")} aria-hidden="true" />
-                      </button>
-                    );
-                  })}
-                </div>
+                <InstalledTiles skill={skill} agents={catalogAgents} />
               </div>
             </Card>
           </li>

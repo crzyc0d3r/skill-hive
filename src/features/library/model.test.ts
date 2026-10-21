@@ -59,6 +59,15 @@ describe("library filter and diff", () => {
     expect(grouped[0].locations).toEqual(["/a", "/b"]);
   });
 
+  it("keeps one description when copies were stamped copy N", () => {
+    const copies: SkillCard[] = [
+      { ...skills[0], id: "one", name: "autopilot", description: "autopilot copy 1", agents: ["claude_code"] },
+      { ...skills[0], id: "two", name: "autopilot", description: "Keep a long task moving", agents: ["codex"] },
+    ];
+    expect(groupSkillCards(copies)).toHaveLength(1);
+    expect(groupSkillCards(copies)[0].description).toBe("Keep a long task moving");
+  });
+
   it("labels preset fill", () => {
     expect(presetFill(2, 2)).toBe("active");
     expect(presetFill(1, 2)).toBe("partial");

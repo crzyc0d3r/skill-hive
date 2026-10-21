@@ -68,7 +68,9 @@ describe("ui parity invokes", () => {
     const user = userEvent.setup();
     renderAt("/my-skills");
     expect(await screen.findByText("research-notes")).toBeInTheDocument();
-    await user.click((await screen.findAllByTitle("Claude Code"))[0]);
+    await user.click(screen.getByRole("button", { name: /^research-notes/ }));
+    await user.click(screen.getByRole("button", { name: "Add to agent" }));
+    await user.click(screen.getByRole("button", { name: "Claude Code" }));
     expect(calls("sync_skill_to_tool").some((entry) => entry.args.tool === "claude_code" && entry.args.skillId === "skill-research")).toBe(true);
 
     await user.click(screen.getByRole("link", { name: /Tools/ }));

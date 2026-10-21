@@ -27,7 +27,7 @@ describe("settings", () => {
     expect(screen.getByText("Enabled")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     expect(screen.getByText("Agents refreshed")).toBeInTheDocument();
-    const path = screen.getByRole("textbox", { name: "Reset path Claude Code" });
+    const path = screen.getByRole("textbox", { name: "Global path Claude Code" });
     await user.clear(path);
     await user.type(path, "/tmp/claude");
     await user.click(screen.getByRole("button", { name: "Reset path" }));

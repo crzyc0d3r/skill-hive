@@ -32,7 +32,7 @@ import {
   unsyncSkillFromTool,
 } from "@/lib/ipc/actions";
 import { groupSkillCards, type SkillCard } from "@/features/library/model";
-import { RouteErrorBoundary } from "@/components/RouteError";
+import { DevCrash, RouteErrorBoundary } from "@/components/RouteError";
 import type { WorkspaceCard } from "./features/workspace/WorkspaceView";
 import { PlaceholderView, TokensView } from "./views/Screens";
 import { DashboardView } from "./features/dashboard/DashboardView";
@@ -306,6 +306,7 @@ export function App({ client }: { client: QueryClient }) {
       <TooltipProvider>
         <FrontendErrorLog />
         <RouteErrorBoundary>
+        <DevCrash level="app">
         <Routes>
           <Route element={<AppShell platform={platform} />}>
             {APP_ROUTES.map((route) => (
@@ -313,6 +314,7 @@ export function App({ client }: { client: QueryClient }) {
             ))}
           </Route>
         </Routes>
+        </DevCrash>
         </RouteErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>

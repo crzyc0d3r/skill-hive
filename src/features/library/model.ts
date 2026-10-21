@@ -22,6 +22,10 @@ export interface SkillCard {
   locations?: string[];
 }
 
+function copyStamp(description: string): boolean {
+  return / copy \d+$/i.test(description.trim());
+}
+
 export function groupSkillCards(skills: SkillCard[]): SkillCard[] {
   const grouped: SkillCard[] = [];
   for (const skill of skills) {
@@ -33,6 +37,9 @@ export function groupSkillCards(skills: SkillCard[]): SkillCard[] {
     }
     existing.agents = [...new Set([...existing.agents, ...skill.agents])];
     existing.locations = [...new Set([...(existing.locations ?? []), ...(skill.locations ?? [])])];
+    if (skill.description && (!existing.description || (copyStamp(existing.description) && !copyStamp(skill.description)))) {
+      existing.description = skill.description;
+    }
   }
   return grouped;
 }

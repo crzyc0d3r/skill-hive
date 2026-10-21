@@ -114,6 +114,32 @@ for (const theme of ["light", "dark"] as const) {
     });
   });
 
+  test(`error boundary ${theme}`, async ({ page }) => {
+    await prepare(page, theme, 1100, {});
+    await page.goto("/my-skills?crash=route");
+    await expect(page.getByTestId("sidebar")).toBeVisible();
+    await expect(page.getByTestId("route-error")).toBeVisible();
+    await expect(page.getByText("Route render failed")).toBeVisible();
+    if (await page.locator("vite-error-overlay").count()) {
+      await page.locator("vite-error-overlay").evaluate((node) => node.remove());
+    }
+    await page.screenshot({
+      path: `docs/parity/screenshots/${theme}/error-route.png`,
+      fullPage: false,
+    });
+    await page.goto("/?crash=app");
+    await expect(page.getByTestId("route-error")).toBeVisible();
+    await expect(page.getByText("Top-level render failed")).toBeVisible();
+    await expect(page.getByTestId("sidebar")).toHaveCount(0);
+    if (await page.locator("vite-error-overlay").count()) {
+      await page.locator("vite-error-overlay").evaluate((node) => node.remove());
+    }
+    await page.screenshot({
+      path: `docs/parity/screenshots/${theme}/error-app.png`,
+      fullPage: false,
+    });
+  });
+
   test(`install scan ${theme}`, async ({ page }) => {
     await prepare(page, theme, 1100, { "skill-hive-preview-agents": "1" });
     await page.goto("/install?tab=scan");

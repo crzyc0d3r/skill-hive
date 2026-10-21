@@ -1,4 +1,15 @@
 import { Component, type ReactNode } from "react";
+
+/** Dev-only throw so screenshots can show each error boundary. */
+export function DevCrash({ level, children }: { level: "app" | "route"; children: ReactNode }) {
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    const crash = new URLSearchParams(window.location.search).get("crash");
+    if (crash === level) {
+      throw new Error(level === "app" ? "Top-level render failed" : "Route render failed");
+    }
+  }
+  return children;
+}
 import { Button } from "@/components/ui/button";
 import { silent } from "@/lib/ipc/actions";
 import { t } from "@/lib/i18n";

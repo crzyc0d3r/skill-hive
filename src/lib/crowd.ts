@@ -22,6 +22,12 @@ export function previewLibrary(): SkillCard[] {
 }
 
 const DUPLICATES = ["autopilot", "azure-outage", "bigquery-sql", "breakit"] as const;
+const DUPLICATE_DESCRIPTIONS: Record<(typeof DUPLICATES)[number], string> = {
+  autopilot: "Keep a long task moving without stopping for every confirmation.",
+  "azure-outage": "Check Azure service health and draft an incident note.",
+  "bigquery-sql": "Write and explain BigQuery SQL for a question.",
+  breakit: "Find a small breaking case for the change under review.",
+};
 const HOSTS = ["claude_code", "codex", "cursor", "gemini_cli", "github_copilot", "windsurf", "amp", "antigravity", "augment", "iflow"];
 
 export function crowdEnabled(): boolean {
@@ -36,7 +42,7 @@ export function crowdSkills(): SkillCard[] {
       rows.push({
         id: `${name}-${agent}`,
         name,
-        description: `${name} copy ${index + 1}`,
+        description: DUPLICATE_DESCRIPTIONS[name],
         source: "local",
         tags: index === 0 ? ["tools"] : [],
         enabled: true,
