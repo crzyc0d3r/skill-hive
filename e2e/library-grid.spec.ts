@@ -131,6 +131,8 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.getByTestId("route-error")).toBeVisible();
     await expect(page.getByText("Top-level render failed")).toBeVisible();
     await expect(page.getByTestId("sidebar")).toHaveCount(0);
+    const dark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    expect(dark).toBe(theme === "dark");
     if (await page.locator("vite-error-overlay").count()) {
       await page.locator("vite-error-overlay").evaluate((node) => node.remove());
     }

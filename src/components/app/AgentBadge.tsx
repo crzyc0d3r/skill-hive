@@ -1,16 +1,18 @@
-import { agentDisplayName, agentHue } from "@/lib/agents";
+import { agentCode, agentDisplayName, agentHue } from "@/lib/agents";
 import { cn } from "cn";
 
 export function AgentMark({ agent, name }: { agent: string; name: string }) {
-  const letter = name.trim().slice(0, 1).toUpperCase() || "?";
+  const code = agentCode(agent);
   return (
     <span
       aria-hidden="true"
       data-agent-mark={agent}
-      className="inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-semibold leading-none text-white"
-      style={{ backgroundColor: `oklch(0.58 0.14 ${agentHue(agent)})` }}
+      data-code={code}
+      title={name}
+      className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[4px] px-0.5 text-[9px] font-semibold leading-none tracking-tight text-white"
+      style={{ backgroundColor: `oklch(0.52 0.16 ${agentHue(agent)})` }}
     >
-      {letter}
+      {code}
     </span>
   );
 }

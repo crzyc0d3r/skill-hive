@@ -463,7 +463,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   }}>
                     <SidebarMenuButton asChild isActive={location.pathname === `/global-workspace/${agent.key}`}>
                       <NavLink to={`/global-workspace/${agent.key}`}>
-                        {collapsed ? <span aria-hidden="true">{agent.name.slice(0, 1)}</span> : <AgentMark agent={agent.key} name={agent.name} />}
+                        <AgentMark agent={agent.key} name={agent.name} />
                         <span className={collapsed ? "sr-only" : undefined}>{`${agent.name}\u200b`}</span>
                       </NavLink>
                     </SidebarMenuButton>
@@ -603,7 +603,10 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   {lobsterRows.map((agent) => (
                     <SidebarMenuItem key={agent.key}>
                       <SidebarMenuButton asChild>
-                        <NavLink to={`/lobster-workspace/${agent.key}`}>{collapsed ? agent.name.slice(0, 1) : agent.name}</NavLink>
+                        <NavLink to={`/lobster-workspace/${agent.key}`}>
+                          <AgentMark agent={agent.key} name={agent.name} />
+                          <span className={collapsed ? "sr-only" : undefined}>{agent.name}</span>
+                        </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}

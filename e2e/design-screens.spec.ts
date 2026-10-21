@@ -50,6 +50,27 @@ for (const theme of THEMES) {
         path: `docs/parity/screenshots/${theme}/design-detail-${width}.png`,
         fullPage: false,
       });
+      await page.goto("/my-skills?crash=route");
+      await expect(page.getByTestId("route-error")).toBeVisible();
+      if (await page.locator("vite-error-overlay").count()) {
+        await page.locator("vite-error-overlay").evaluate((node) => node.remove());
+      }
+      await page.screenshot({
+        path: `docs/parity/screenshots/${theme}/design-error-route-${width}.png`,
+        fullPage: false,
+      });
+      await page.goto("/?crash=app");
+      await expect(page.getByTestId("route-error")).toBeVisible();
+      await expect(page.getByText("Top-level render failed")).toBeVisible();
+      const dark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+      expect(dark).toBe(theme === "dark");
+      if (await page.locator("vite-error-overlay").count()) {
+        await page.locator("vite-error-overlay").evaluate((node) => node.remove());
+      }
+      await page.screenshot({
+        path: `docs/parity/screenshots/${theme}/design-error-app-${width}.png`,
+        fullPage: false,
+      });
     });
   }
 

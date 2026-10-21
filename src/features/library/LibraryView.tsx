@@ -114,12 +114,6 @@ function AgentPlacement({
   );
 }
 
-function letterHue(key: string): number {
-  let hash = 0;
-  for (const char of key) hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
-  return hash % 360;
-}
-
 function InstalledTiles({ skill, agents }: { skill: SkillCard; agents: AgentRow[] }) {
   const installed = skill.agents.map((key) => ({ key, name: agentDisplayName(key, agents) }));
   const shown = installed.slice(0, 3);
@@ -128,15 +122,8 @@ function InstalledTiles({ skill, agents }: { skill: SkillCard; agents: AgentRow[
   return (
     <div className="flex items-center justify-end gap-1" data-testid={`sync-dots-${skill.id}`} title={names}>
       {shown.map((agent) => (
-        <span
-          key={agent.key}
-          data-filled="true"
-          title={agent.name}
-          aria-label={agent.name}
-          className="inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-semibold leading-none text-white"
-          style={{ backgroundColor: `oklch(0.58 0.14 ${letterHue(agent.key)})` }}
-        >
-          {agent.name.trim().slice(0, 1).toUpperCase() || "?"}
+        <span key={agent.key} data-filled="true" title={agent.name} aria-label={agent.name}>
+          <AgentMark agent={agent.key} name={agent.name} />
         </span>
       ))}
       {extra > 0 ? <span className="text-xs text-muted-foreground" title={names}>+{extra}</span> : null}
