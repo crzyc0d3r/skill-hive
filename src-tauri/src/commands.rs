@@ -63,10 +63,12 @@ fn slug(input: &str) -> String {
     }
 }
 
-fn read_body(path: &str) -> String {
-    read_skill_document(Path::new(path))
-        .map(|doc| doc.body)
-        .unwrap_or_default()
+fn report(job: &str, current: u32, total: u32, message: &str) -> Result<(), AppError> {
+    if crate::progress::step(job, current, total, message) {
+        Ok(())
+    } else {
+        Err(AppError::invalid_input("cancelled"))
+    }
 }
 
 #[derive(Serialize)]
@@ -172,11 +174,11 @@ pub struct BackupStatusDto {
 }
 
 fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
+    crate::progress::emit("library", 0, 1, "Reading the library", false);
     let tags = store.get_tags_map().map_err(db)?;
     let targets = store.get_all_targets().map_err(db)?;
     let mut skills = Vec::new();
     for skill in store.get_all_skills().map_err(db)? {
-        let body = read_body(&skill.central_path);
         let mut agents: Vec<String> = targets
             .iter()
             .filter(|target| target.skill_id == skill.id && target.status != "removed")
@@ -184,15 +186,6 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
             .collect();
         agents.sort();
         agents.dedup();
-        let files = skill_tree_files(
-            Path::new(&skill.central_path),
-            source_dir(&skill).as_deref(),
-        );
-        let source_body = files
-            .iter()
-            .find(|file| file.path == "SKILL.md")
-            .map(|file| file.remote.clone())
-            .unwrap_or_else(|| body.clone());
         skills.push(ManagedSkill {
             id: skill.id.clone(),
             name: skill.name.clone(),
@@ -200,15 +193,16 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
             source: skill.source_type.clone(),
             tags: tags.get(&skill.id).cloned().unwrap_or_default(),
             enabled: skill.enabled,
-            source_body,
-            files,
-            body,
+            source_body: String::new(),
+            files: Vec::new(),
+            body: String::new(),
             agents,
             updated_at: skill.updated_at,
             update_status: skill.update_status.clone(),
         });
     }
     skills.sort_by(|left, right| left.name.cmp(&right.name));
+    crate::progress::emit("library", 1, 1, "Library ready", true);
     Ok(skills)
 }
 
@@ -287,7 +281,9 @@ fn scan(store: &SkillStore) -> Result<Vec<ScannedSkill>, AppError> {
     let found = scanner::scan_roots_with_central(store, &refs, Some(&central_repo::skills_dir()))
         .map_err(|err| AppError::io(err.to_string()))?;
     store.clear_discovered().map_err(db)?;
-    for skill in &found {
+    let total = found.len() as u32;
+    report("scan", 0, total.max(1), "Scanning local skills")?;
+    for (index, skill) in found.iter().enumerate() {
         store
             .insert_discovered(&DiscoveredSkillRecord {
                 id: format!("{}:{}", skill.tool, skill.path),
@@ -299,7 +295,9 @@ fn scan(store: &SkillStore) -> Result<Vec<ScannedSkill>, AppError> {
                 imported_skill_id: None,
             })
             .map_err(db)?;
+        report("scan", index as u32 + 1, total.max(1), "Saving discoveries")?;
     }
+    crate::progress::finish("scan", "Scan finished");
     Ok(found)
 }
 
@@ -541,121 +539,195 @@ fn encode_query(input: &str) -> String {
 }
 
 #[tauri::command]
-pub fn get_managed_skills(
+pub async fn get_managed_skills(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<ManagedSkill>, AppError> {
-    managed(store.inner())
+    let store = store.inner().clone();
+    crate::offload::offload(move || managed(store.as_ref())).await
 }
 
 #[tauri::command]
-pub fn list_presets(store: State<'_, Arc<SkillStore>>) -> Result<Vec<PresetDto>, AppError> {
-    let store = store.inner();
-    let mut presets = Vec::new();
-    for scenario in store.get_all_scenarios().map_err(db)? {
-        let skill_ids = store.get_skill_ids_for_scenario(&scenario.id).map_err(db)?;
-        let synced = skill_ids.len();
-        presets.push(PresetDto {
-            id: scenario.id,
-            name: scenario.name,
-            skill_ids,
-            synced,
-        });
-    }
-    Ok(presets)
+pub async fn get_skill_files(
+    skill_id: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<Vec<SkillFile>, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        let skill = store
+            .get_skill_by_id(skill_id.trim())
+            .map_err(db)?
+            .ok_or_else(|| AppError::not_found("skill"))?;
+        report("library", 0, 1, "Reading skill files")?;
+        let source = source_dir(&skill);
+        let files = skill_tree_files(Path::new(&skill.central_path), source.as_deref());
+        crate::progress::finish("library", "Skill files ready");
+        Ok(files)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn get_tool_status(store: State<'_, Arc<SkillStore>>) -> Result<Vec<AgentDto>, AppError> {
-    let home = home_dir().ok_or_else(|| AppError::io("home directory is not set"))?;
-    let rows = tool_service::tool_statuses(store.inner(), &home).map_err(db)?;
-    Ok(rows
-        .into_iter()
-        .map(|row| AgentDto {
-            key: row.key,
-            name: row.display_name,
-            installed: row.installed,
-            enabled: row.enabled,
-            path: row.skills_dir,
-            project_path: row.project_dir,
-            custom: row.is_custom,
-            category: row.category,
-        })
-        .collect())
+pub async fn cancel_job() -> bool {
+    crate::progress::request_cancel();
+    crate::progress::finish("job", "Cancelled");
+    true
 }
 
 #[tauri::command]
-pub fn scan_local_skills(store: State<'_, Arc<SkillStore>>) -> Result<Vec<ScanDto>, AppError> {
-    Ok(to_scan(scan(store.inner())?))
+pub async fn list_presets(store: State<'_, Arc<SkillStore>>) -> Result<Vec<PresetDto>, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        let mut presets = Vec::new();
+        for scenario in store.get_all_scenarios().map_err(db)? {
+            let skill_ids = store.get_skill_ids_for_scenario(&scenario.id).map_err(db)?;
+            let synced = skill_ids.len();
+            presets.push(PresetDto {
+                id: scenario.id,
+                name: scenario.name,
+                skill_ids,
+                synced,
+            });
+        }
+        Ok(presets)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn install_local_skill(
+pub async fn get_tool_status(store: State<'_, Arc<SkillStore>>) -> Result<Vec<AgentDto>, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let home = home_dir().ok_or_else(|| AppError::io("home directory is not set"))?;
+        let rows = tool_service::tool_statuses(store.as_ref(), &home).map_err(db)?;
+        Ok(rows
+            .into_iter()
+            .map(|row| AgentDto {
+                key: row.key,
+                name: row.display_name,
+                installed: row.installed,
+                enabled: row.enabled,
+                path: row.skills_dir,
+                project_path: row.project_dir,
+                custom: row.is_custom,
+                category: row.category,
+            })
+            .collect())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn scan_local_skills(
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<Vec<ScanDto>, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || Ok(to_scan(scan(store.as_ref())?))).await
+}
+
+#[tauri::command]
+pub async fn install_local_skill(
     path: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<InstalledDto, AppError> {
-    let source = PathBuf::from(path.trim());
-    if !source.is_dir() {
-        return Err(AppError::invalid_input("Choose a skill folder"));
-    }
-    let installed = installer::install_from_local(&source, None)
-        .map_err(|err| AppError::io(err.to_string()))?;
-    persist_install(
-        store.inner(),
-        &installed,
-        "local",
-        Some(source.to_string_lossy().to_string()),
-    )
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        crate::progress::reset_cancel();
+        let source = PathBuf::from(path.trim());
+        if !source.is_dir() {
+            return Err(AppError::invalid_input("Choose a skill folder"));
+        }
+        report("install", 0, 2, "Installing from a folder")?;
+        let installed = installer::install_from_local(&source, None)
+            .map_err(|err| AppError::io(err.to_string()))?;
+        report("install", 1, 2, "Saving the skill")?;
+        let saved = persist_install(
+            store.as_ref(),
+            &installed,
+            "local",
+            Some(source.to_string_lossy().to_string()),
+        );
+        crate::progress::finish("install", "Installed");
+        saved
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn install_archive_skill(
+pub async fn install_archive_skill(
     path: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<InstalledDto, AppError> {
-    let archive = PathBuf::from(path.trim());
-    if !archive.is_file() {
-        return Err(AppError::invalid_input("Choose a .zip or .skill archive"));
-    }
-    let installed = installer::install_from_local(&archive, None)
-        .map_err(|err| AppError::io(err.to_string()))?;
-    persist_install(
-        store.inner(),
-        &installed,
-        "local",
-        Some(archive.to_string_lossy().to_string()),
-    )
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        crate::progress::reset_cancel();
+        let archive = PathBuf::from(path.trim());
+        if !archive.is_file() {
+            return Err(AppError::invalid_input("Choose a .zip or .skill archive"));
+        }
+        report("install", 0, 2, "Installing from an archive")?;
+        let installed = installer::install_from_local(&archive, None)
+            .map_err(|err| AppError::io(err.to_string()))?;
+        report("install", 1, 2, "Saving the skill")?;
+        let saved = persist_install(
+            store.as_ref(),
+            &installed,
+            "local",
+            Some(archive.to_string_lossy().to_string()),
+        );
+        crate::progress::finish("install", "Installed");
+        saved
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn import_existing_skill(
+pub async fn import_existing_skill(
     path: String,
     rename: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<InstalledDto, AppError> {
-    let store = store.inner();
-    let found = scan(store)?;
-    let skill = found
-        .iter()
-        .find(|row| row.path == path || row.name == path)
-        .cloned()
-        .ok_or_else(|| AppError::not_found("scanned skill was not found"))?;
-    let name = scanner::import_scanned(store, &root(), &skill, rename.as_deref())
-        .map_err(|err| AppError::io(err.to_string()))?;
-    let id = store
-        .get_all_skills()
-        .map_err(db)?
-        .into_iter()
-        .find(|row| row.name == name)
-        .map(|row| row.id)
-        .unwrap_or_default();
-    Ok(InstalledDto { id, name })
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        let found = scan(store)?;
+        let skill = found
+            .iter()
+            .find(|row| row.path == path || row.name == path)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("scanned skill was not found"))?;
+        let name = scanner::import_scanned(store, &root(), &skill, rename.as_deref())
+            .map_err(|err| AppError::io(err.to_string()))?;
+        let id = store
+            .get_all_skills()
+            .map_err(db)?
+            .into_iter()
+            .find(|row| row.name == name)
+            .map(|row| row.id)
+            .unwrap_or_default();
+        Ok(InstalledDto { id, name })
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn import_all_discovered(store: State<'_, Arc<SkillStore>>) -> Result<Vec<String>, AppError> {
-    let store = store.inner();
-    let found = scan(store)?;
-    scanner::import_all(store, &root(), &found).map_err(|err| AppError::io(err.to_string()))
+pub async fn import_all_discovered(
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<Vec<String>, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        crate::progress::reset_cancel();
+        let store = store.as_ref();
+        report("import", 0, 2, "Finding skills to import")?;
+        let found = scan(store)?;
+        report("import", 1, 2, "Importing discovered skills")?;
+        let names = scanner::import_all(store, &root(), &found)
+            .map_err(|err| AppError::io(err.to_string()))?;
+        crate::progress::finish("import", "Import finished");
+        Ok(names)
+    })
+    .await
 }
 
 pub fn normalize_install_source(url: &str) -> (String, Option<String>) {
@@ -680,27 +752,32 @@ pub fn normalize_install_source(url: &str) -> (String, Option<String>) {
 }
 
 #[tauri::command]
-pub fn preview_git_install(url: String) -> Result<GitPreviewDto, AppError> {
-    let (source, subpath) = normalize_install_source(&url);
-    let mut preview = preview_repository(&source)?;
-    if let Some(subpath) = subpath {
-        preview.skills.retain(|skill| {
-            skill.relative == subpath
-                || skill.relative.ends_with(&format!("/{subpath}"))
-                || skill.name == subpath
-        });
-    }
-    Ok(preview)
+pub async fn preview_git_install(url: String) -> Result<GitPreviewDto, AppError> {
+    crate::offload::offload(move || {
+        let (source, subpath) = normalize_install_source(&url);
+        let mut preview = preview_repository(&source)?;
+        if let Some(subpath) = subpath {
+            preview.skills.retain(|skill| {
+                skill.relative == subpath
+                    || skill.relative.ends_with(&format!("/{subpath}"))
+                    || skill.name == subpath
+            });
+        }
+        Ok(preview)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn confirm_git_install_skill(
+pub async fn confirm_git_install_skill(
     preview_id: String,
     relative: String,
     rename: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<String>, AppError> {
-    confirm_preview(store.inner(), &preview_id, &relative, rename)
+    let store = store.inner().clone();
+    crate::offload::offload(move || confirm_preview(store.as_ref(), &preview_id, &relative, rename))
+        .await
 }
 
 pub fn confirm_preview(
@@ -731,8 +808,7 @@ pub fn confirm_preview(
     Ok(vec![dto.name])
 }
 
-#[tauri::command]
-pub fn cancel_install(preview_id: Option<String>) -> Result<bool, AppError> {
+pub fn cancel_install_now(preview_id: Option<String>) -> Result<bool, AppError> {
     if let Some(id) = preview_id.filter(|id| !id.is_empty()) {
         let mut guard = PREVIEWS.lock().expect("previews");
         if let Some(index) = guard.iter().position(|preview| preview.id == id) {
@@ -745,12 +821,17 @@ pub fn cancel_install(preview_id: Option<String>) -> Result<bool, AppError> {
         drop(guard);
         if cancel_registered_install(&id) {
             if id == "market" || id.starts_with("market:") {
-                let _ = cancel_market_install();
+                let _ = cancel_market_install_now();
             }
             return Ok(true);
         }
     }
     Ok(false)
+}
+
+#[tauri::command]
+pub async fn cancel_install(preview_id: Option<String>) -> Result<bool, AppError> {
+    crate::offload::offload(move || cancel_install_now(preview_id)).await
 }
 
 static INSTALLS: Mutex<BTreeMap<String, bool>> = Mutex::new(BTreeMap::new());
@@ -781,160 +862,190 @@ fn cancel_registered_install(key: &str) -> bool {
 }
 
 #[tauri::command]
-pub fn delete_managed_skills(
+pub async fn delete_managed_skills(
     ids: Vec<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    let store = store.inner();
-    for id in ids {
-        if let Some(skill) = store.get_skill_by_id(&id).map_err(db)? {
-            for target in store.get_targets_for_skill(&id).map_err(db)? {
-                let _ = std::fs::remove_dir_all(Path::new(&target.target_path));
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        for id in ids {
+            if let Some(skill) = store.get_skill_by_id(&id).map_err(db)? {
+                for target in store.get_targets_for_skill(&id).map_err(db)? {
+                    let _ = std::fs::remove_dir_all(Path::new(&target.target_path));
+                }
+                let central = PathBuf::from(&skill.central_path);
+                if central.exists() {
+                    std::fs::remove_dir_all(&central).map_err(AppError::io)?;
+                }
+                let sidecar = root()
+                    .join(".skill-hive")
+                    .join("skills")
+                    .join(format!("{id}.json"));
+                let _ = std::fs::remove_file(sidecar);
             }
-            let central = PathBuf::from(&skill.central_path);
-            if central.exists() {
-                std::fs::remove_dir_all(&central).map_err(AppError::io)?;
-            }
-            let sidecar = root()
-                .join(".skill-hive")
-                .join("skills")
-                .join(format!("{id}.json"));
-            let _ = std::fs::remove_file(sidecar);
+            store.delete_skill(&id).map_err(db)?;
         }
-        store.delete_skill(&id).map_err(db)?;
-    }
-    Ok(())
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_skills_enabled(
+pub async fn set_skills_enabled(
     ids: Vec<String>,
     enabled: bool,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    for id in ids {
-        store
-            .inner()
-            .update_skill_enabled(&id, enabled)
-            .map_err(db)?;
-    }
-    Ok(())
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        for id in ids {
+            store.update_skill_enabled(&id, enabled).map_err(db)?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_skill_tags(
+pub async fn set_skill_tags(
     skill_id: String,
     tags: Vec<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    store
-        .inner()
-        .set_tags_for_skill(&skill_id, &tags)
-        .map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || store.set_tags_for_skill(&skill_id, &tags).map_err(db)).await
 }
 
 #[tauri::command]
-pub fn rename_tag(
+pub async fn rename_tag(
     from: String,
     to: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<String>, AppError> {
-    store.inner().rename_tag(&from, &to).map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || store.as_ref().rename_tag(&from, &to).map_err(db)).await
 }
 
 #[tauri::command]
-pub fn delete_tag(tag: String, store: State<'_, Arc<SkillStore>>) -> Result<Vec<String>, AppError> {
-    store.inner().delete_tag(&tag).map_err(db)
+pub async fn delete_tag(
+    tag: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<Vec<String>, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || store.as_ref().delete_tag(&tag).map_err(db)).await
 }
 
 #[tauri::command]
-pub fn sync_skill_to_tool(
+pub async fn sync_skill_to_tool(
     skill_id: String,
     tool: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    sync_skill(store.inner(), &skill_id, &tool, true)
+    let store = store.inner().clone();
+    crate::offload::offload(move || sync_skill(store.as_ref(), &skill_id, &tool, true)).await
 }
 
 #[tauri::command]
-pub fn unsync_skill_from_tool(
+pub async fn unsync_skill_from_tool(
     skill_id: String,
     tool: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    sync_skill(store.inner(), &skill_id, &tool, false)
+    let store = store.inner().clone();
+    crate::offload::offload(move || sync_skill(store.as_ref(), &skill_id, &tool, false)).await
 }
 
 #[tauri::command]
-pub fn add_skill_to_preset(
+pub async fn add_skill_to_preset(
     preset_id: String,
     skill_id: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    let tools = tool_service::installed_keys(
-        store.inner(),
-        &home_dir().unwrap_or_else(|| PathBuf::from(".")),
-    )
-    .map_err(db)?;
-    membership::add_membership(store.inner(), &preset_id, &skill_id, &tools).map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let tools = tool_service::installed_keys(
+            store.as_ref(),
+            &home_dir().unwrap_or_else(|| PathBuf::from(".")),
+        )
+        .map_err(db)?;
+        membership::add_membership(store.as_ref(), &preset_id, &skill_id, &tools).map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn remove_skill_from_preset(
+pub async fn remove_skill_from_preset(
     preset_id: String,
     skill_id: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    store
-        .inner()
-        .remove_skill_from_scenario(&preset_id, &skill_id)
-        .map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        store
+            .remove_skill_from_scenario(&preset_id, &skill_id)
+            .map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn reorder_preset_skills(
+pub async fn reorder_preset_skills(
     preset_id: String,
     skill_ids: Vec<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    store
-        .inner()
-        .reorder_scenario_skills(&preset_id, &skill_ids)
-        .map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        store
+            .reorder_scenario_skills(&preset_id, &skill_ids)
+            .map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn create_preset(name: String, store: State<'_, Arc<SkillStore>>) -> Result<String, AppError> {
-    let name = name.trim();
-    if name.is_empty() {
-        return Err(AppError::invalid_input("Preset name is required"));
-    }
-    let id = format!("preset-{}", now());
-    let stamp = now();
-    store
-        .inner()
-        .insert_scenario(&ScenarioRecord {
-            id: id.clone(),
-            name: name.to_string(),
-            description: None,
-            icon: None,
-            sort_order: 0,
-            created_at: stamp,
-            updated_at: stamp,
-        })
-        .map_err(db)?;
-    Ok(id)
+pub async fn create_preset(
+    name: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<String, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(AppError::invalid_input("Preset name is required"));
+        }
+        let id = format!("preset-{}", now());
+        let stamp = now();
+        store
+            .insert_scenario(&ScenarioRecord {
+                id: id.clone(),
+                name: name.to_string(),
+                description: None,
+                icon: None,
+                sort_order: 0,
+                created_at: stamp,
+                updated_at: stamp,
+            })
+            .map_err(db)?;
+        Ok(id)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn update_preset(
+pub async fn update_preset(
     id: String,
     name: String,
     description: Option<String>,
     icon: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    update_preset_record(store.inner(), &id, &name, description, icon)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        update_preset_record(store.as_ref(), &id, &name, description, icon)
+    })
+    .await
 }
 
 pub fn update_preset_record(
@@ -958,152 +1069,194 @@ pub fn update_preset_record(
 }
 
 #[tauri::command]
-pub fn delete_preset(id: String, store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
-    store.inner().delete_scenario(&id).map_err(db)
+pub async fn delete_preset(id: String, store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || store.as_ref().delete_scenario(&id).map_err(db)).await
 }
 
 #[tauri::command]
-pub fn reorder_presets(
+pub async fn reorder_presets(
     ids: Vec<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    store.inner().reorder_scenarios(&ids).map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || store.as_ref().reorder_scenarios(&ids).map_err(db)).await
 }
 
 #[tauri::command]
-pub fn apply_preset(
+pub async fn apply_preset(
     preset_id: String,
     tool: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<usize, AppError> {
-    let store = store.inner();
-    if let Some(tool) = tool.filter(|key| !key.is_empty()) {
-        let skills = store.get_skill_ids_for_scenario(&preset_id).map_err(db)?;
-        scenario_service::apply_skills_to_tools(store, &skills, &[tool], BatchApplyMode::Add)?;
-        return Ok(skills.len());
-    }
-    apply_preset_by_id(store, &preset_id)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        if let Some(tool) = tool.filter(|key| !key.is_empty()) {
+            let skills = store.get_skill_ids_for_scenario(&preset_id).map_err(db)?;
+            scenario_service::apply_skills_to_tools(store, &skills, &[tool], BatchApplyMode::Add)?;
+            return Ok(skills.len());
+        }
+        apply_preset_by_id(store, &preset_id)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn add_custom_tool(
+pub async fn add_custom_tool(
     name: String,
     path: String,
     project_path: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<AgentDto, AppError> {
-    let name = name.trim();
-    let path = path.trim();
-    if name.is_empty() || path.is_empty() {
-        return Err(AppError::invalid_input(
-            "Agent name and skills path are required",
-        ));
-    }
-    let key = slug(name);
-    let added = tool_service::add_custom_tool(
-        store.inner(),
-        CustomToolDef {
-            key: key.clone(),
-            display_name: name.to_string(),
-            skills_dir: path.to_string(),
-            project_relative_skills_dir: project_path.filter(|value| !value.trim().is_empty()),
-            category: ToolCategory::Coding,
-        },
-    )
-    .map_err(db)?;
-    if added == CustomAdd::SkippedCollision {
-        return Err(AppError::invalid_input(format!("{name} already exists")));
-    }
-    Ok(AgentDto {
-        key,
-        name: name.to_string(),
-        installed: true,
-        enabled: true,
-        path: path.to_string(),
-        project_path: String::new(),
-        custom: true,
-        category: "coding".into(),
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let name = name.trim();
+        let path = path.trim();
+        if name.is_empty() || path.is_empty() {
+            return Err(AppError::invalid_input(
+                "Agent name and skills path are required",
+            ));
+        }
+        let key = slug(name);
+        let added = tool_service::add_custom_tool(
+            store.as_ref(),
+            CustomToolDef {
+                key: key.clone(),
+                display_name: name.to_string(),
+                skills_dir: path.to_string(),
+                project_relative_skills_dir: project_path.filter(|value| !value.trim().is_empty()),
+                category: ToolCategory::Coding,
+            },
+        )
+        .map_err(db)?;
+        if added == CustomAdd::SkippedCollision {
+            return Err(AppError::invalid_input(format!("{name} already exists")));
+        }
+        Ok(AgentDto {
+            key,
+            name: name.to_string(),
+            installed: true,
+            enabled: true,
+            path: path.to_string(),
+            project_path: String::new(),
+            custom: true,
+            category: "coding".into(),
+        })
     })
+    .await
 }
 
 #[tauri::command]
-pub fn remove_custom_tool(key: String, store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
-    tool_service::remove_custom_tool(store.inner(), &key).map_err(db)
+pub async fn remove_custom_tool(
+    key: String,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<(), AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        tool_service::remove_custom_tool(store.as_ref(), &key).map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_tool_enabled(
+pub async fn set_tool_enabled(
     key: String,
     enabled: bool,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    tool_service::set_tool_enabled(store.inner(), &key, enabled).map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        tool_service::set_tool_enabled(store.as_ref(), &key, enabled).map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_all_tools_enabled(
+pub async fn set_all_tools_enabled(
     enabled: bool,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    if enabled {
-        tool_service::enable_all(store.inner()).map_err(db)
-    } else {
-        tool_service::disable_all(store.inner()).map_err(db)
-    }
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        if enabled {
+            tool_service::enable_all(store.as_ref()).map_err(db)
+        } else {
+            tool_service::disable_all(store.as_ref()).map_err(db)
+        }
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_tool_order_cmd(
+pub async fn set_tool_order_cmd(
     keys: Vec<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    tool_service::reorder_tools(store.inner(), &keys).map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || tool_service::reorder_tools(store.as_ref(), &keys).map_err(db))
+        .await
 }
 
 #[tauri::command]
-pub fn set_custom_tool_path(
+pub async fn set_custom_tool_path(
     key: String,
     path: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    tool_service::set_tool_path(store.inner(), &key, path.trim()).map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        tool_service::set_tool_path(store.as_ref(), &key, path.trim()).map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn reset_custom_tool_path(
+pub async fn reset_custom_tool_path(
     key: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let store = store.inner();
-    tool_service::reset_tool_path(store, &key).map_err(db)?;
-    tool_dir(store, &key).map(|path| path.to_string_lossy().to_string())
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        tool_service::reset_tool_path(store, &key).map_err(db)?;
+        tool_dir(store, &key).map(|path| path.to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_custom_tool_project_path(
+pub async fn set_custom_tool_project_path(
     key: String,
     path: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    tool_service::set_project_path(store.inner(), &key, path.trim()).map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        tool_service::set_project_path(store.as_ref(), &key, path.trim()).map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn get_central_repo_path() -> String {
-    central_repo::base_dir().to_string_lossy().to_string()
+pub async fn get_central_repo_path() -> String {
+    crate::offload::offload(move || central_repo::base_dir().to_string_lossy().to_string()).await
 }
 
 #[tauri::command]
-pub fn set_central_repo_path(path: String) -> Result<String, AppError> {
-    let trimmed = path.trim();
-    let override_path = if trimmed.is_empty() || trimmed == "~/.skill-hive" {
-        None
-    } else {
-        Some(trimmed.to_string())
-    };
-    central_repo::set_base_dir_override(override_path)
-        .map(|path| path.to_string_lossy().to_string())
-        .map_err(|err| AppError::io(err.to_string()))
+pub async fn set_central_repo_path(path: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let trimmed = path.trim();
+        let override_path = if trimmed.is_empty() || trimmed == "~/.skill-hive" {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+        central_repo::set_base_dir_override(override_path)
+            .map(|path| path.to_string_lossy().to_string())
+            .map_err(|err| AppError::io(err.to_string()))
+    })
+    .await
 }
 
 fn source_dir(skill: &SkillRecord) -> Option<PathBuf> {
@@ -1190,43 +1343,56 @@ pub fn maybe_run_auto_update(store: &SkillStore, now_ms: i64) -> Result<u32, App
 
 pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
     let skills = store.get_all_skills().map_err(db)?;
+    let total = skills.len() as u32;
     let mut available = 0u32;
-    for skill in &skills {
+    for (index, skill) in skills.iter().enumerate() {
+        report("scan", index as u32, total.max(1), "Checking for updates")?;
         let status = remember_check(store, skill)?;
         if status == "update_available" || status == "pending_removals" {
             available += 1;
         }
     }
+    crate::progress::finish("scan", "Update check finished");
     Ok(available)
 }
 
 #[tauri::command]
-pub fn check_all_skill_updates(store: State<'_, Arc<SkillStore>>) -> Result<u32, AppError> {
-    check_updates_in(store.inner())
+pub async fn check_all_skill_updates(store: State<'_, Arc<SkillStore>>) -> Result<u32, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || check_updates_in(store.as_ref())).await
 }
 
 #[tauri::command]
-pub fn check_skill_update(
+pub async fn check_skill_update(
     skill_id: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let store = store.inner();
-    let skill = store
-        .get_skill_by_id(skill_id.trim())
-        .map_err(db)?
-        .ok_or_else(|| AppError::not_found("Skill not found"))?;
-    remember_check(store, &skill)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        let skill = store
+            .get_skill_by_id(skill_id.trim())
+            .map_err(db)?
+            .ok_or_else(|| AppError::not_found("Skill not found"))?;
+        remember_check(store, &skill)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn apply_available_skill_updates(store: State<'_, Arc<SkillStore>>) -> Result<u32, AppError> {
-    apply_available_in(store.inner())
+pub async fn apply_available_skill_updates(
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<u32, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || apply_available_in(store.as_ref())).await
 }
 
 pub fn apply_available_in(store: &SkillStore) -> Result<u32, AppError> {
     let skills = store.get_all_skills().map_err(db)?;
+    let total = skills.len() as u32;
     let mut applied = 0u32;
-    for skill in skills {
+    for (index, skill) in skills.into_iter().enumerate() {
+        report("sync", index as u32, total.max(1), "Applying updates")?;
         let status = remember_check(store, &skill)?;
         if status != "update_available" {
             continue;
@@ -1255,6 +1421,7 @@ pub fn apply_available_in(store: &SkillStore) -> Result<u32, AppError> {
         let _ = remember_check(store, &skill);
         applied += 1;
     }
+    crate::progress::finish("sync", "Updates applied");
     Ok(applied)
 }
 
@@ -1279,227 +1446,276 @@ fn copy_source_tree(source: &Path, dest: &Path) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn install_manage_skills(store: State<'_, Arc<SkillStore>>) -> Result<InstalledDto, AppError> {
-    let store = store.inner();
-    if let Some(existing) = store
-        .get_all_skills()
-        .map_err(db)?
-        .into_iter()
-        .find(|skill| skill.name == "manage-skills")
-    {
-        return Ok(installed_dto(existing.name, existing.id));
-    }
-    let dir = central_repo::base_dir()
-        .join("sources")
-        .join("manage-skills");
-    std::fs::create_dir_all(&dir)?;
-    let document = dir.join("SKILL.md");
-    if !document.is_file() {
-        std::fs::write(
-            &document,
-            "---\nname: manage-skills\ndescription: Install, update, and remove skills from the Skill Hive library.\n---\n# manage-skills\nUse the library to install and update skills for the connected agents.\n",
-        )?;
-    }
-    let installed =
-        installer::install_from_local(&dir, None).map_err(|err| AppError::io(err.to_string()))?;
-    persist_install(
-        store,
-        &installed,
-        "local",
-        Some(dir.to_string_lossy().to_string()),
-    )
+pub async fn install_manage_skills(
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<InstalledDto, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        if let Some(existing) = store
+            .get_all_skills()
+            .map_err(db)?
+            .into_iter()
+            .find(|skill| skill.name == "manage-skills")
+        {
+            return Ok(installed_dto(existing.name, existing.id));
+        }
+        let dir = central_repo::base_dir()
+            .join("sources")
+            .join("manage-skills");
+        std::fs::create_dir_all(&dir)?;
+        let document = dir.join("SKILL.md");
+        if !document.is_file() {
+            std::fs::write(
+                &document,
+                "---\nname: manage-skills\ndescription: Install, update, and remove skills from the Skill Hive library.\n---\n# manage-skills\nUse the library to install and update skills for the connected agents.\n",
+            )?;
+        }
+        let installed =
+            installer::install_from_local(&dir, None).map_err(|err| AppError::io(err.to_string()))?;
+        persist_install(
+            store,
+            &installed,
+            "local",
+            Some(dir.to_string_lossy().to_string()),
+        )
+    }).await
 }
 
 #[tauri::command]
-pub fn git_backup_status(store: State<'_, Arc<SkillStore>>) -> Result<BackupStatusDto, AppError> {
-    apply_engine_preference(store.inner());
-    let status =
-        git_backup::get_status(&backup_repo()).map_err(|err| AppError::git(err.to_string()))?;
-    Ok(BackupStatusDto {
-        branch: status.branch.unwrap_or_default(),
-        clean: !status.has_changes,
-        remote: status.remote_url,
-        head: status.last_commit.unwrap_or_default(),
-    })
-}
-
-#[tauri::command]
-pub fn git_backup_list_versions(limit: Option<u32>) -> Result<Vec<SnapshotDto>, AppError> {
-    let path = backup_repo();
-    if !path.join(".git").exists() {
-        return Ok(Vec::new());
-    }
-    let versions = git_backup::list_snapshot_versions(&path, limit.map(|value| value as usize))
-        .map_err(|err| AppError::git(err.to_string()))?;
-    Ok(versions
-        .into_iter()
-        .map(|version| SnapshotDto {
-            id: version.tag.clone(),
-            label: format!("{} {}", version.tag, version.message),
+pub async fn git_backup_status(
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<BackupStatusDto, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        apply_engine_preference(store.as_ref());
+        let status =
+            git_backup::get_status(&backup_repo()).map_err(|err| AppError::git(err.to_string()))?;
+        Ok(BackupStatusDto {
+            branch: status.branch.unwrap_or_default(),
+            clean: !status.has_changes,
+            remote: status.remote_url,
+            head: status.last_commit.unwrap_or_default(),
         })
-        .collect())
-}
-
-#[tauri::command]
-pub fn git_backup_sync(message: Option<String>) -> Result<SnapshotDto, AppError> {
-    let path = backup_repo();
-    ensure_backup_repo(&path)?;
-    let note = message.unwrap_or_else(|| "Backup".to_string());
-    match git_backup::commit_all(&path, &note) {
-        Ok(()) => {}
-        Err(err) if err.to_string().contains("Nothing to commit") => {}
-        Err(err) => return Err(AppError::git(err.to_string())),
-    }
-    if git_backup::get_status(&path)
-        .ok()
-        .and_then(|status| status.remote_url)
-        .is_some()
-    {
-        let _ = git_backup::pull(&path);
-        let _ = git_backup::push(&path);
-    }
-    let tag =
-        git_backup::create_snapshot_tag(&path).map_err(|err| AppError::git(err.to_string()))?;
-    Ok(SnapshotDto {
-        id: tag.clone(),
-        label: tag,
     })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_restore_version(tag: String) -> Result<String, AppError> {
-    git_backup::restore_snapshot_version(&backup_repo(), tag.trim())
-        .map_err(|err| AppError::git(err.to_string()))
+pub async fn git_backup_list_versions(limit: Option<u32>) -> Result<Vec<SnapshotDto>, AppError> {
+    crate::offload::offload(move || {
+        let path = backup_repo();
+        if !path.join(".git").exists() {
+            return Ok(Vec::new());
+        }
+        let versions = git_backup::list_snapshot_versions(&path, limit.map(|value| value as usize))
+            .map_err(|err| AppError::git(err.to_string()))?;
+        Ok(versions
+            .into_iter()
+            .map(|version| SnapshotDto {
+                id: version.tag.clone(),
+                label: format!("{} {}", version.tag, version.message),
+            })
+            .collect())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_set_remote(
+pub async fn git_backup_sync(message: Option<String>) -> Result<SnapshotDto, AppError> {
+    crate::offload::offload(move || {
+        crate::progress::reset_cancel();
+        let path = backup_repo();
+        report("sync", 0, 3, "Preparing the backup")?;
+        ensure_backup_repo(&path)?;
+        let note = message.unwrap_or_else(|| "Backup".to_string());
+        match git_backup::commit_all(&path, &note) {
+            Ok(()) => {}
+            Err(err) if err.to_string().contains("Nothing to commit") => {}
+            Err(err) => return Err(AppError::git(err.to_string())),
+        }
+        report("sync", 1, 3, "Syncing the backup")?;
+        if git_backup::get_status(&path)
+            .ok()
+            .and_then(|status| status.remote_url)
+            .is_some()
+        {
+            let _ = git_backup::pull(&path);
+            let _ = git_backup::push(&path);
+        }
+        report("sync", 2, 3, "Tagging the snapshot")?;
+        let tag =
+            git_backup::create_snapshot_tag(&path).map_err(|err| AppError::git(err.to_string()))?;
+        crate::progress::finish("sync", "Backup synced");
+        Ok(SnapshotDto {
+            id: tag.clone(),
+            label: tag,
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_backup_restore_version(tag: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        git_backup::restore_snapshot_version(&backup_repo(), tag.trim())
+            .map_err(|err| AppError::git(err.to_string()))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_backup_set_remote(
     url: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    let path = backup_repo();
-    ensure_backup_repo(&path)?;
-    git_backup::set_remote(&path, url.trim()).map_err(|err| AppError::git(err.to_string()))?;
-    store
-        .set_setting("git_backup_remote_url", url.trim())
-        .map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = backup_repo();
+        ensure_backup_repo(&path)?;
+        git_backup::set_remote(&path, url.trim()).map_err(|err| AppError::git(err.to_string()))?;
+        store
+            .set_setting("git_backup_remote_url", url.trim())
+            .map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_remove_remote(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
-    let path = backup_repo();
-    if path.join(".git").exists() {
-        git_backup::remove_remote(&path).map_err(|err| AppError::git(err.to_string()))?;
-    }
-    store.set_setting("git_backup_remote_url", "").map_err(db)
+pub async fn git_backup_remove_remote(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = backup_repo();
+        if path.join(".git").exists() {
+            git_backup::remove_remote(&path).map_err(|err| AppError::git(err.to_string()))?;
+        }
+        store.set_setting("git_backup_remote_url", "").map_err(db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn backup_set_device_name(
+pub async fn backup_set_device_name(
     name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    let store = store.inner();
-    let trimmed = name.trim();
-    store
-        .set_setting("backup_device_name", trimmed)
-        .map_err(db)?;
-    let path = backup_repo();
-    if path.join(".git").exists() {
-        git_backup::configure_device_identity(&path, trimmed)
-            .map_err(|err| AppError::git(err.to_string()))?;
-    }
-    Ok(())
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        let trimmed = name.trim();
+        store
+            .set_setting("backup_device_name", trimmed)
+            .map_err(db)?;
+        let path = backup_repo();
+        if path.join(".git").exists() {
+            git_backup::configure_device_identity(&path, trimmed)
+                .map_err(|err| AppError::git(err.to_string()))?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn add_project(
+pub async fn add_project(
     name: String,
     path: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let name = if name.trim().is_empty() {
-        "project"
-    } else {
-        name.trim()
-    };
-    let path = if path.trim().is_empty() {
-        root().join("projects").join(sanitize_skill_name(name))
-    } else {
-        PathBuf::from(path.trim())
-    };
-    std::fs::create_dir_all(&path)?;
-    let id = format!("project-{}", now());
-    let stamp = now();
-    store
-        .inner()
-        .insert_project(&ProjectRecord {
-            id: id.clone(),
-            name: name.to_string(),
-            path: path.to_string_lossy().to_string(),
-            workspace_type: "project".into(),
-            linked_agent_key: None,
-            linked_agent_name: None,
-            disabled_path: None,
-            sort_order: 0,
-            created_at: stamp,
-            updated_at: stamp,
-        })
-        .map_err(db)?;
-    Ok(id)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let name = if name.trim().is_empty() {
+            "project"
+        } else {
+            name.trim()
+        };
+        let path = if path.trim().is_empty() {
+            root().join("projects").join(sanitize_skill_name(name))
+        } else {
+            PathBuf::from(path.trim())
+        };
+        std::fs::create_dir_all(&path)?;
+        let id = format!("project-{}", now());
+        let stamp = now();
+        store
+            .insert_project(&ProjectRecord {
+                id: id.clone(),
+                name: name.to_string(),
+                path: path.to_string_lossy().to_string(),
+                workspace_type: "project".into(),
+                linked_agent_key: None,
+                linked_agent_name: None,
+                disabled_path: None,
+                sort_order: 0,
+                created_at: stamp,
+                updated_at: stamp,
+            })
+            .map_err(db)?;
+        Ok(id)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn fetch_leaderboard(board: Option<String>) -> Result<Vec<MarketDto>, AppError> {
-    if let Ok(path) = std::env::var("SKILL_HIVE_MARKET_FIXTURE") {
-        if !path.trim().is_empty() {
-            return Ok(vec![MarketDto {
-                owner: "local".into(),
-                name: "held".into(),
-                installs: 1,
-                source: path,
-            }]);
+pub async fn fetch_leaderboard(board: Option<String>) -> Result<Vec<MarketDto>, AppError> {
+    crate::offload::offload(move || {
+        if let Ok(path) = std::env::var("SKILL_HIVE_MARKET_FIXTURE") {
+            if !path.trim().is_empty() {
+                return Ok(vec![MarketDto {
+                    owner: "local".into(),
+                    name: "held".into(),
+                    installs: 1,
+                    source: path,
+                }]);
+            }
         }
-    }
-    let board = board.unwrap_or_else(|| "all".into());
-    let url = match board.as_str() {
-        "trending" => "https://skills.sh/trending",
-        "hot" => "https://skills.sh/hot",
-        _ => "https://skills.sh/",
-    };
-    let html = fetch_https(url).map_err(|err| AppError::network(err.to_string()))?;
-    let skills =
-        marketplace::parse_leaderboard(&html).map_err(|err| AppError::network(err.to_string()))?;
-    Ok(skills
-        .into_iter()
-        .map(|skill| MarketDto {
-            owner: skill.owner,
-            name: skill.name,
-            installs: skill.installs,
-            source: skill.source,
-        })
-        .collect())
+        let board = board.unwrap_or_else(|| "all".into());
+        let url = match board.as_str() {
+            "trending" => "https://skills.sh/trending",
+            "hot" => "https://skills.sh/hot",
+            _ => "https://skills.sh/",
+        };
+        let html = fetch_https(url).map_err(|err| AppError::network(err.to_string()))?;
+        let skills = marketplace::parse_leaderboard(&html)
+            .map_err(|err| AppError::network(err.to_string()))?;
+        Ok(skills
+            .into_iter()
+            .map(|skill| MarketDto {
+                owner: skill.owner,
+                name: skill.name,
+                installs: skill.installs,
+                source: skill.source,
+            })
+            .collect())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn search_skillssh(query: String, limit: Option<u32>) -> Result<Vec<MarketDto>, AppError> {
-    let limit = limit.unwrap_or(24).clamp(1, 100);
-    let url = format!(
-        "https://skills.sh/api/search?q={}&limit={limit}",
-        encode_query(query.trim())
-    );
-    let body = fetch_https(&url).map_err(|err| AppError::network(err.to_string()))?;
-    let skills =
-        marketplace::parse_search(&body).map_err(|err| AppError::network(err.to_string()))?;
-    Ok(skills
-        .into_iter()
-        .map(|skill| MarketDto {
-            owner: skill.owner,
-            name: skill.name,
-            installs: skill.installs,
-            source: skill.source,
-        })
-        .collect())
+pub async fn search_skillssh(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<MarketDto>, AppError> {
+    crate::offload::offload(move || {
+        let limit = limit.unwrap_or(24).clamp(1, 100);
+        let url = format!(
+            "https://skills.sh/api/search?q={}&limit={limit}",
+            encode_query(query.trim())
+        );
+        let body = fetch_https(&url).map_err(|err| AppError::network(err.to_string()))?;
+        let skills =
+            marketplace::parse_search(&body).map_err(|err| AppError::network(err.to_string()))?;
+        Ok(skills
+            .into_iter()
+            .map(|skill| MarketDto {
+                owner: skill.owner,
+                name: skill.name,
+                installs: skill.installs,
+                source: skill.source,
+            })
+            .collect())
+    })
+    .await
 }
 
 fn install_market_work(
@@ -1597,36 +1813,44 @@ fn set_market_status(value: &str) {
 }
 
 #[tauri::command]
-pub fn install_from_skillssh(
+pub async fn install_from_skillssh(
     source: String,
     name: String,
     subpath: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<InstalledDto, AppError> {
-    let key = format!("market:{source}");
-    register_install(&key);
-    if install_is_cancelled(&key) {
-        return Err(AppError::invalid_input("marketplace install cancelled"));
-    }
-    install_market_work(&source, &name, subpath.as_deref(), store.inner())
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let key = format!("market:{source}");
+        register_install(&key);
+        if install_is_cancelled(&key) {
+            return Err(AppError::invalid_input("marketplace install cancelled"));
+        }
+        install_market_work(&source, &name, subpath.as_deref(), store.as_ref())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn begin_market_install(
+pub async fn begin_market_install(
     source: String,
     name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<bool, AppError> {
-    set_market_status("running");
-    let store = Arc::clone(store.inner());
-    std::thread::spawn(move || {
-        let status = match install_market_work(&source, &name, None, &store) {
-            Ok(installed) => format!("installed:{}:{}", installed.id, installed.name),
-            Err(err) => format!("error:{err}"),
-        };
-        set_market_status(&status);
-    });
-    Ok(true)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        set_market_status("running");
+        let store = store.clone();
+        std::thread::spawn(move || {
+            let status = match install_market_work(&source, &name, None, &store) {
+                Ok(installed) => format!("installed:{}:{}", installed.id, installed.name),
+                Err(err) => format!("error:{err}"),
+            };
+            set_market_status(&status);
+        });
+        Ok(true)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1718,8 +1942,7 @@ pub struct DeploymentArg {
     pub target: String,
 }
 
-#[tauri::command]
-pub fn cancel_market_install() -> Result<bool, AppError> {
+fn cancel_market_install_now() -> Result<bool, AppError> {
     MARKET_CANCEL.store(true, Ordering::SeqCst);
     if let Some(pid) = MARKET_PID.lock().ok().and_then(|mut slot| slot.take()) {
         kill_pid(pid);
@@ -1728,122 +1951,152 @@ pub fn cancel_market_install() -> Result<bool, AppError> {
 }
 
 #[tauri::command]
-pub fn save_skill_draft(id: String, files: Vec<DraftFileArg>) -> Result<String, AppError> {
-    let dir = authoring_root("skill", &id);
-    std::fs::create_dir_all(&dir)?;
-    for file in files {
-        write_skill_file(&dir, &file.path, &file.content)?;
-    }
-    let version = VersionStore::open(&dir)
-        .save_autosave()
-        .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(version.id)
+pub async fn cancel_market_install() -> Result<bool, AppError> {
+    crate::offload::offload(cancel_market_install_now).await
 }
 
 #[tauri::command]
-pub fn snapshot_skill_draft(id: String, label: String) -> Result<String, AppError> {
-    let dir = authoring_root("skill", &id);
-    std::fs::create_dir_all(&dir)?;
-    let version = VersionStore::open(&dir)
-        .snapshot(Some(label.trim()))
-        .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(version.id)
+pub async fn save_skill_draft(id: String, files: Vec<DraftFileArg>) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let dir = authoring_root("skill", &id);
+        std::fs::create_dir_all(&dir)?;
+        for file in files {
+            write_skill_file(&dir, &file.path, &file.content)?;
+        }
+        let version = VersionStore::open(&dir)
+            .save_autosave()
+            .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(version.id)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn restore_skill_draft(id: String, version_id: String) -> Result<String, AppError> {
-    let dir = authoring_root("skill", &id);
-    let version = VersionStore::open(&dir)
-        .restore(version_id.trim())
-        .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(version.id)
+pub async fn snapshot_skill_draft(id: String, label: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let dir = authoring_root("skill", &id);
+        std::fs::create_dir_all(&dir)?;
+        let version = VersionStore::open(&dir)
+            .snapshot(Some(label.trim()))
+            .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(version.id)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn publish_skill_draft(
+pub async fn restore_skill_draft(id: String, version_id: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let dir = authoring_root("skill", &id);
+        let version = VersionStore::open(&dir)
+            .restore(version_id.trim())
+            .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(version.id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn publish_skill_draft(
     id: String,
     confirmed: bool,
     deployments: Vec<DeploymentArg>,
 ) -> Result<String, AppError> {
-    let draft = authoring_root("skill", &id);
-    std::fs::create_dir_all(&draft)?;
-    let center = root().join(sanitize_skill_name(&id));
-    let mapped: Vec<Deployment> = deployments
-        .into_iter()
-        .map(|item| Deployment {
-            agent: item.agent,
-            mode: item.mode,
-            target: PathBuf::from(item.target),
-        })
-        .collect();
-    let report = publish_draft(&draft, &center, &mapped, confirmed)?;
-    if !report.wrote {
-        return Ok(format!("confirm:{}", report.confirm_agents.join(",")));
-    }
-    Ok(format!("published:{}", report.center_changed.join(",")))
+    crate::offload::offload(move || {
+        let draft = authoring_root("skill", &id);
+        std::fs::create_dir_all(&draft)?;
+        let center = root().join(sanitize_skill_name(&id));
+        let mapped: Vec<Deployment> = deployments
+            .into_iter()
+            .map(|item| Deployment {
+                agent: item.agent,
+                mode: item.mode,
+                target: PathBuf::from(item.target),
+            })
+            .collect();
+        let report = publish_draft(&draft, &center, &mapped, confirmed)?;
+        if !report.wrote {
+            return Ok(format!("confirm:{}", report.confirm_agents.join(",")));
+        }
+        Ok(format!("published:{}", report.center_changed.join(",")))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn fix_skill_draft(
+pub async fn fix_skill_draft(
     id: String,
     fix_id: String,
     path: Option<String>,
     message: Option<String>,
 ) -> Result<bool, AppError> {
-    let dir = authoring_root("skill", &id);
-    let finding = Finding {
-        rule_id: fix_id.clone(),
-        severity: Severity::Warning,
-        path: path.unwrap_or_else(|| "SKILL.md".into()),
-        line: None,
-        message: message.unwrap_or_default(),
-        fix_id: Some(fix_id),
-    };
-    apply_fix(&dir, &finding)
+    crate::offload::offload(move || {
+        let dir = authoring_root("skill", &id);
+        let finding = Finding {
+            rule_id: fix_id.clone(),
+            severity: Severity::Warning,
+            path: path.unwrap_or_else(|| "SKILL.md".into()),
+            line: None,
+            message: message.unwrap_or_default(),
+            fix_id: Some(fix_id),
+        };
+        apply_fix(&dir, &finding)
+    })
+    .await
 }
 
 fn apply_fix(dir: &Path, finding: &Finding) -> Result<bool, AppError> {
     hive_core::authoring::skill::apply_skill_fix(dir, finding)
 }
 
-#[tauri::command]
-pub fn save_agent_draft(id: String, text: String) -> Result<String, AppError> {
-    let dir = authoring_root("agent", &id);
+fn save_agent_draft_now(id: &str, text: &str) -> Result<String, AppError> {
+    let dir = authoring_root("agent", id);
     std::fs::create_dir_all(&dir)?;
-    write_skill_file(&dir, "AGENT.md", &text)?;
+    write_skill_file(&dir, "AGENT.md", text)?;
     Ok(dir.join("AGENT.md").to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub fn export_agent_draft(id: String, text: String) -> Result<String, AppError> {
-    let saved = save_agent_draft(id, text)?;
-    let source = PathBuf::from(&saved);
-    let dest = source
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join("export")
-        .join("AGENT.md");
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::copy(&source, &dest)?;
-    Ok(dest.to_string_lossy().to_string())
+pub async fn save_agent_draft(id: String, text: String) -> Result<String, AppError> {
+    crate::offload::offload(move || save_agent_draft_now(&id, &text)).await
 }
 
 #[tauri::command]
-pub fn interview_for_goal(goal: String) -> Result<String, AppError> {
-    let goal = goal.trim();
-    if goal.is_empty() {
-        return Err(AppError::invalid_input("A goal is required"));
-    }
-    let (provider, model, secret) = generation_provider()?;
-    let parsed = hive_core::testing::interview_goal(provider.as_ref(), &model, goal, &secret)
-        .map_err(AppError::io)?;
-    let questions = parsed
-        .get("questions")
-        .cloned()
-        .unwrap_or(serde_json::json!([]));
-    serde_json::to_string(&questions).map_err(AppError::io)
+pub async fn export_agent_draft(id: String, text: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let saved = save_agent_draft_now(&id, &text)?;
+        let source = PathBuf::from(&saved);
+        let dest = source
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join("export")
+            .join("AGENT.md");
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&source, &dest)?;
+        Ok(dest.to_string_lossy().to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn interview_for_goal(goal: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let goal = goal.trim();
+        if goal.is_empty() {
+            return Err(AppError::invalid_input("A goal is required"));
+        }
+        let (provider, model, secret) = generation_provider()?;
+        let parsed = hive_core::testing::interview_goal(provider.as_ref(), &model, goal, &secret)
+            .map_err(AppError::io)?;
+        let questions = parsed
+            .get("questions")
+            .cloned()
+            .unwrap_or(serde_json::json!([]));
+        serde_json::to_string(&questions).map_err(AppError::io)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1863,8 +2116,7 @@ pub fn endpoint_prices() -> Result<String, AppError> {
     serde_json::to_string(&rows).map_err(AppError::io)
 }
 
-#[tauri::command]
-pub fn save_generated_draft(goal: String) -> Result<String, AppError> {
+fn save_generated_draft_now(goal: &str) -> Result<String, AppError> {
     let goal = goal.trim();
     if goal.is_empty() {
         return Err(AppError::invalid_input("A goal is required"));
@@ -1897,6 +2149,11 @@ pub fn save_generated_draft(goal: String) -> Result<String, AppError> {
         return Err(AppError::io("generated draft did not keep the goal"));
     }
     Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn save_generated_draft(goal: String) -> Result<String, AppError> {
+    crate::offload::offload(move || save_generated_draft_now(&goal)).await
 }
 
 fn generation_provider(
@@ -1954,360 +2211,394 @@ fn generation_provider(
 }
 
 #[tauri::command]
-pub fn apply_optimized_description(description: String) -> Result<String, AppError> {
-    let dir = authoring_root("generate", "draft");
-    if !dir.join("SKILL.md").is_file() {
-        save_generated_draft(description.clone())?;
-    }
-    let text = description.trim();
-    let description = if text.is_empty() {
-        "Optimized description"
-    } else {
-        text
-    };
-    let optimization = dir.join("optimization.json");
-    if optimization.is_file() {
-        let saved: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&optimization).unwrap_or_default())
-                .unwrap_or(serde_json::Value::Null);
-        if saved.get("restored").and_then(|value| value.as_bool()) == Some(false) {
-            return Err(AppError::invalid_input(
-                "held-out score regressed, so the description stays unapplied",
-            ));
+pub async fn apply_optimized_description(description: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let dir = authoring_root("generate", "draft");
+        if !dir.join("SKILL.md").is_file() {
+            save_generated_draft_now(&description)?;
         }
-    }
-    apply_optimized(&dir, description).map_err(AppError::io)?;
-    let suite_dir = authoring_root("suite", "optimized");
-    std::fs::create_dir_all(&suite_dir)?;
-    save_suite(
-        &suite_dir,
-        &Suite {
-            skill_name: "optimized".into(),
-            evals: vec![SuiteCase {
-                id: 1,
-                prompt: description.to_string(),
-                expected_output: description.to_string(),
-                files: Vec::new(),
-                expectations: vec![description.to_string()],
-            }],
-            triggers: vec![TriggerRow {
-                query: description.to_string(),
-                should_trigger: true,
-                rationale: None,
-            }],
-            checks: vec![CheckSpec {
-                id: "description".into(),
-                expectation: description.to_string(),
-                kind: "text".into(),
-                path: "SKILL.md".into(),
-                pattern: None,
-            }],
-        },
-    )
-    .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(suite_dir
-        .join("evals")
-        .join("evals.json")
-        .to_string_lossy()
-        .to_string())
+        let text = description.trim();
+        let description = if text.is_empty() {
+            "Optimized description"
+        } else {
+            text
+        };
+        let optimization = dir.join("optimization.json");
+        if optimization.is_file() {
+            let saved: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&optimization).unwrap_or_default())
+                    .unwrap_or(serde_json::Value::Null);
+            if saved.get("restored").and_then(|value| value.as_bool()) == Some(false) {
+                return Err(AppError::invalid_input(
+                    "held-out score regressed, so the description stays unapplied",
+                ));
+            }
+        }
+        apply_optimized(&dir, description).map_err(AppError::io)?;
+        let suite_dir = authoring_root("suite", "optimized");
+        std::fs::create_dir_all(&suite_dir)?;
+        save_suite(
+            &suite_dir,
+            &Suite {
+                skill_name: "optimized".into(),
+                evals: vec![SuiteCase {
+                    id: 1,
+                    prompt: description.to_string(),
+                    expected_output: description.to_string(),
+                    files: Vec::new(),
+                    expectations: vec![description.to_string()],
+                }],
+                triggers: vec![TriggerRow {
+                    query: description.to_string(),
+                    should_trigger: true,
+                    rationale: None,
+                }],
+                checks: vec![CheckSpec {
+                    id: "description".into(),
+                    expectation: description.to_string(),
+                    kind: "text".into(),
+                    path: "SKILL.md".into(),
+                    pattern: None,
+                }],
+            },
+        )
+        .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(suite_dir
+            .join("evals")
+            .join("evals.json")
+            .to_string_lossy()
+            .to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn get_effectiveness_report() -> Result<String, AppError> {
-    let path = central_repo::base_dir()
-        .join("effectiveness")
-        .join("last.json");
-    if !path.is_file() {
-        return Ok(String::new());
-    }
-    std::fs::read_to_string(path).map_err(AppError::io)
+pub async fn get_effectiveness_report() -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let path = central_repo::base_dir()
+            .join("effectiveness")
+            .join("last.json");
+        if !path.is_file() {
+            return Ok(String::new());
+        }
+        std::fs::read_to_string(path).map_err(AppError::io)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn run_effectiveness_suite(
+pub async fn run_effectiveness_suite(
     skill_path: String,
     adapter: Option<String>,
     repetitions: Option<u32>,
 ) -> Result<String, AppError> {
-    let skill = PathBuf::from(skill_path.trim());
-    if !skill.join("SKILL.md").is_file() {
-        return Err(AppError::invalid_input(
-            "the skill directory has no SKILL.md",
-        ));
-    }
-    let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
-        .map_err(AppError::db)?;
-    let Some(row) = rows
-        .into_iter()
-        .find(|row| row.base_url.as_ref().is_some_and(|url| !url.is_empty()))
-    else {
-        return Err(AppError::invalid_input(
-            "add a provider with a base URL before measuring",
-        ));
-    };
-    let kind = match row.kind {
-        hive_core::providers::ProviderKind::OpenaiCompat => "openai",
-        hive_core::providers::ProviderKind::Anthropic => "anthropic",
-        hive_core::providers::ProviderKind::LocalCli => {
+    crate::offload::offload(move || {
+        crate::progress::reset_cancel();
+        let skill = PathBuf::from(skill_path.trim());
+        if !skill.join("SKILL.md").is_file() {
             return Err(AppError::invalid_input(
-                "measuring needs an Anthropic or OpenAI adapter",
+                "the skill directory has no SKILL.md",
             ));
         }
-    };
-    let api_key = std::env::var("SKILL_HIVE_API_KEY")
-        .ok()
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            hive_core::providers::load_provider_secret(
-                &row.id,
-                &central_repo::base_dir().join("provider-secrets"),
-            )
+        report("effectiveness", 0, 4, "Reading the provider")?;
+        let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
+            .map_err(AppError::db)?;
+        let Some(row) = rows
+            .into_iter()
+            .find(|row| row.base_url.as_ref().is_some_and(|url| !url.is_empty()))
+        else {
+            return Err(AppError::invalid_input(
+                "add a provider with a base URL before measuring",
+            ));
+        };
+        let kind = match row.kind {
+            hive_core::providers::ProviderKind::OpenaiCompat => "openai",
+            hive_core::providers::ProviderKind::Anthropic => "anthropic",
+            hive_core::providers::ProviderKind::LocalCli => {
+                return Err(AppError::invalid_input(
+                    "measuring needs an Anthropic or OpenAI adapter",
+                ));
+            }
+        };
+        let api_key = std::env::var("SKILL_HIVE_API_KEY")
             .ok()
-        });
-    let Some(api_key) = api_key else {
-        return Err(AppError::invalid_input(
-            "measuring needs SKILL_HIVE_API_KEY or a stored provider secret",
-        ));
-    };
-    if !skill.join("evals").join("evals.json").is_file() {
-        let name = skill
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("skill");
-        hive_core::testing::write_default_suite(
-            &skill,
-            name,
-            &format!("Complete this task: {name}"),
-        )
-        .map_err(AppError::io)?;
-    }
-    let model = row
-        .default_model
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "claude-sonnet-5-5".to_string());
-    let root = central_repo::base_dir().join("test-runs");
-    std::fs::create_dir_all(&root)?;
-    let report = hive_core::testing::run_measured(&hive_core::testing::MeasureRequest {
-        skill_dir: skill,
-        workspace: root.join("workspace"),
-        db_path: root.join("hive.db"),
-        base_url: row.base_url.unwrap_or_default(),
-        api_key,
-        kind: kind.to_string(),
-        flavor: None,
-        models: vec![hive_core::testing::ModelChoice {
-            id: model,
-            strong: true,
-        }],
-        adapter: adapter.unwrap_or_else(|| "emulated".to_string()),
-        repetitions: repetitions.unwrap_or(3),
-        threshold: 0.5,
-        pass_bar: 0.5,
-        distractors: Vec::new(),
-        seed: 7,
-        cli_program: None,
-        cli_prefix: Vec::new(),
-    })
-    .map_err(AppError::io)?;
-    let text = serde_json::to_string(&report).map_err(AppError::io)?;
-    let saved = central_repo::base_dir().join("effectiveness");
-    std::fs::create_dir_all(&saved)?;
-    std::fs::write(saved.join("last.json"), &text)?;
-    Ok(text)
-}
-
-#[tauri::command]
-pub fn optimize_skill_description(
-    skill_path: String,
-    rounds: Option<u32>,
-) -> Result<String, AppError> {
-    let skill = PathBuf::from(skill_path.trim());
-    if !skill.join("SKILL.md").is_file() {
-        return Err(AppError::invalid_input(
-            "the skill directory has no SKILL.md",
-        ));
-    }
-    let endpoint = measured_endpoint()?;
-    let model = endpoint.model;
-    let secret = endpoint.secret;
-    let url = endpoint.url;
-    let kind = endpoint.kind;
-    let root = central_repo::base_dir().join("test-runs");
-    std::fs::create_dir_all(&root)?;
-    let saved = hive_core::testing::optimize_descriptions(
-        &hive_core::testing::MeasureRequest {
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                hive_core::providers::load_provider_secret(
+                    &row.id,
+                    &central_repo::base_dir().join("provider-secrets"),
+                )
+                .ok()
+            });
+        let Some(api_key) = api_key else {
+            return Err(AppError::invalid_input(
+                "measuring needs SKILL_HIVE_API_KEY or a stored provider secret",
+            ));
+        };
+        if !skill.join("evals").join("evals.json").is_file() {
+            let name = skill
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("skill");
+            hive_core::testing::write_default_suite(
+                &skill,
+                name,
+                &format!("Complete this task: {name}"),
+            )
+            .map_err(AppError::io)?;
+        }
+        let model = row
+            .default_model
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "claude-sonnet-5-5".to_string());
+        let root = central_repo::base_dir().join("test-runs");
+        std::fs::create_dir_all(&root)?;
+        report("effectiveness", 1, 4, "Running the measured suite")?;
+        if crate::progress::cancelled() {
+            return Err(AppError::invalid_input("cancelled"));
+        }
+        let report = hive_core::testing::run_measured(&hive_core::testing::MeasureRequest {
             skill_dir: skill,
             workspace: root.join("workspace"),
             db_path: root.join("hive.db"),
-            base_url: url,
-            api_key: secret,
-            kind,
+            base_url: row.base_url.unwrap_or_default(),
+            api_key,
+            kind: kind.to_string(),
             flavor: None,
             models: vec![hive_core::testing::ModelChoice {
                 id: model,
                 strong: true,
             }],
-            adapter: "emulated".into(),
-            repetitions: 1,
+            adapter: adapter.unwrap_or_else(|| "emulated".to_string()),
+            repetitions: repetitions.unwrap_or(3),
             threshold: 0.5,
             pass_bar: 0.5,
             distractors: Vec::new(),
             seed: 7,
             cli_program: None,
             cli_prefix: Vec::new(),
-        },
-        rounds.unwrap_or(5),
-    )
-    .map_err(AppError::io)?;
-    Ok(saved.to_string())
+        })
+        .map_err(AppError::io)?;
+        let text = serde_json::to_string(&report).map_err(AppError::io)?;
+        let saved = central_repo::base_dir().join("effectiveness");
+        std::fs::create_dir_all(&saved)?;
+        std::fs::write(saved.join("last.json"), &text)?;
+        crate::progress::finish("effectiveness", "Measurement saved");
+        Ok(text)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn blind_compare_last(
+pub async fn optimize_skill_description(
+    skill_path: String,
+    rounds: Option<u32>,
+) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let skill = PathBuf::from(skill_path.trim());
+        if !skill.join("SKILL.md").is_file() {
+            return Err(AppError::invalid_input(
+                "the skill directory has no SKILL.md",
+            ));
+        }
+        let endpoint = measured_endpoint()?;
+        let model = endpoint.model;
+        let secret = endpoint.secret;
+        let url = endpoint.url;
+        let kind = endpoint.kind;
+        let root = central_repo::base_dir().join("test-runs");
+        std::fs::create_dir_all(&root)?;
+        let saved = hive_core::testing::optimize_descriptions(
+            &hive_core::testing::MeasureRequest {
+                skill_dir: skill,
+                workspace: root.join("workspace"),
+                db_path: root.join("hive.db"),
+                base_url: url,
+                api_key: secret,
+                kind,
+                flavor: None,
+                models: vec![hive_core::testing::ModelChoice {
+                    id: model,
+                    strong: true,
+                }],
+                adapter: "emulated".into(),
+                repetitions: 1,
+                threshold: 0.5,
+                pass_bar: 0.5,
+                distractors: Vec::new(),
+                seed: 7,
+                cli_program: None,
+                cli_prefix: Vec::new(),
+            },
+            rounds.unwrap_or(5),
+        )
+        .map_err(AppError::io)?;
+        Ok(saved.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn blind_compare_last(
     prompt: String,
     output_a: String,
     output_b: String,
 ) -> Result<String, AppError> {
-    let endpoint = measured_endpoint()?;
-    let provider = endpoint.provider;
-    let model = endpoint.model;
-    let secret = endpoint.secret;
-    let compared = hive_core::testing::blind_compare(&hive_core::testing::BlindRequest {
-        provider: provider.as_ref(),
-        model: &model,
-        prompt: &prompt,
-        output_a: &output_a,
-        output_b: &output_b,
-        sealed_a: "with_skill",
-        sealed_b: "without_skill",
-        secret: &secret,
+    crate::offload::offload(move || {
+        let endpoint = measured_endpoint()?;
+        let provider = endpoint.provider;
+        let model = endpoint.model;
+        let secret = endpoint.secret;
+        let compared = hive_core::testing::blind_compare(&hive_core::testing::BlindRequest {
+            provider: provider.as_ref(),
+            model: &model,
+            prompt: &prompt,
+            output_a: &output_a,
+            output_b: &output_b,
+            sealed_a: "with_skill",
+            sealed_b: "without_skill",
+            secret: &secret,
+        })
+        .map_err(AppError::io)?;
+        let root = central_repo::base_dir().join("test-runs");
+        std::fs::create_dir_all(&root)?;
+        std::fs::write(
+            root.join("blind.json"),
+            serde_json::to_string(&compared).unwrap_or_default(),
+        )?;
+        Ok(compared.to_string())
     })
-    .map_err(AppError::io)?;
-    let root = central_repo::base_dir().join("test-runs");
-    std::fs::create_dir_all(&root)?;
-    std::fs::write(
-        root.join("blind.json"),
-        serde_json::to_string(&compared).unwrap_or_default(),
-    )?;
-    Ok(compared.to_string())
+    .await
 }
 
 #[tauri::command]
-pub fn control_measured_run(action: String) -> Result<String, AppError> {
-    let action = match action.as_str() {
-        "continue" | "stop" | "cancel" => action,
-        _ => {
-            return Err(AppError::invalid_input(
-                "action must be continue, stop, or cancel",
-            ))
+pub async fn control_measured_run(action: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let action = match action.as_str() {
+            "continue" | "stop" | "cancel" => action,
+            _ => {
+                return Err(AppError::invalid_input(
+                    "action must be continue, stop, or cancel",
+                ))
+            }
+        };
+        let root = central_repo::base_dir().join("test-runs");
+        std::fs::create_dir_all(&root)?;
+        let path = root.join("control.json");
+        let body = serde_json::json!({"action": action}).to_string();
+        std::fs::write(&path, &body)?;
+        let workspace = root.join("workspace");
+        if workspace.is_dir() {
+            std::fs::write(workspace.join("control.json"), &body)?;
         }
-    };
-    let root = central_repo::base_dir().join("test-runs");
-    std::fs::create_dir_all(&root)?;
-    let path = root.join("control.json");
-    let body = serde_json::json!({"action": action}).to_string();
-    std::fs::write(&path, &body)?;
-    let workspace = root.join("workspace");
-    if workspace.is_dir() {
-        std::fs::write(workspace.join("control.json"), &body)?;
-    }
-    Ok(path.to_string_lossy().to_string())
+        Ok(path.to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn export_measured_run() -> Result<String, AppError> {
-    let workspace = central_repo::base_dir().join("test-runs").join("workspace");
-    let names = ["benchmark.json", "cells.csv", "junit.xml", "review.html"];
-    let present: Vec<&str> = names
-        .into_iter()
-        .filter(|name| workspace.join(name).is_file())
-        .collect();
-    if present.is_empty() {
-        return Err(AppError::invalid_input("export needs a measured run"));
-    }
-    Ok(serde_json::json!({"files": present}).to_string())
+pub async fn export_measured_run() -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let workspace = central_repo::base_dir().join("test-runs").join("workspace");
+        let names = ["benchmark.json", "cells.csv", "junit.xml", "review.html"];
+        let present: Vec<&str> = names
+            .into_iter()
+            .filter(|name| workspace.join(name).is_file())
+            .collect();
+        if present.is_empty() {
+            return Err(AppError::invalid_input("export needs a measured run"));
+        }
+        Ok(serde_json::json!({"files": present}).to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn save_suite_draft(
+pub async fn save_suite_draft(
     skill_path: String,
     prompt: String,
     query: String,
     check: String,
 ) -> Result<String, AppError> {
-    let skill = PathBuf::from(skill_path.trim());
-    std::fs::create_dir_all(&skill)?;
-    if !skill.join("SKILL.md").is_file() {
+    crate::offload::offload(move || {
+        let skill = PathBuf::from(skill_path.trim());
+        std::fs::create_dir_all(&skill)?;
+        if !skill.join("SKILL.md").is_file() {
+            let name = skill
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("skill");
+            std::fs::write(
+                skill.join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: {prompt}\n---\n"),
+            )?;
+        }
         let name = skill
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or("skill");
-        std::fs::write(
-            skill.join("SKILL.md"),
-            format!("---\nname: {name}\ndescription: {prompt}\n---\n"),
-        )?;
-    }
-    let name = skill
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("skill");
-    save_suite(
-        &skill,
-        &Suite {
-            skill_name: name.into(),
-            evals: vec![SuiteCase {
-                id: 1,
-                prompt: prompt.clone(),
-                expected_output: prompt.clone(),
-                files: Vec::new(),
-                expectations: vec![check.clone()],
-            }],
-            triggers: vec![TriggerRow {
-                query,
-                should_trigger: true,
-                rationale: None,
-            }],
-            checks: vec![CheckSpec {
-                id: "case".into(),
-                expectation: check.clone(),
-                kind: "text".into(),
-                path: "SKILL.md".into(),
-                pattern: None,
-            }],
-        },
-    )
-    .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(skill
-        .join("evals")
-        .join("evals.json")
-        .to_string_lossy()
-        .to_string())
+        save_suite(
+            &skill,
+            &Suite {
+                skill_name: name.into(),
+                evals: vec![SuiteCase {
+                    id: 1,
+                    prompt: prompt.clone(),
+                    expected_output: prompt.clone(),
+                    files: Vec::new(),
+                    expectations: vec![check.clone()],
+                }],
+                triggers: vec![TriggerRow {
+                    query,
+                    should_trigger: true,
+                    rationale: None,
+                }],
+                checks: vec![CheckSpec {
+                    id: "case".into(),
+                    expectation: check.clone(),
+                    kind: "text".into(),
+                    path: "SKILL.md".into(),
+                    pattern: None,
+                }],
+            },
+        )
+        .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(skill
+            .join("evals")
+            .join("evals.json")
+            .to_string_lossy()
+            .to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn probe_endpoint(id: String) -> Result<String, AppError> {
-    let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
-        .map_err(AppError::db)?;
-    let Some(config) = rows.into_iter().find(|row| row.id == id.trim()) else {
-        return Err(AppError::invalid_input("unknown provider"));
-    };
-    let secret = std::env::var("SKILL_HIVE_API_KEY")
-        .ok()
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            hive_core::providers::load_provider_secret(
-                &config.id,
-                &central_repo::base_dir().join("provider-secrets"),
-            )
+pub async fn probe_endpoint(id: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let rows = hive_core::providers::list_named_providers(&central_repo::db_path())
+            .map_err(AppError::db)?;
+        let Some(config) = rows.into_iter().find(|row| row.id == id.trim()) else {
+            return Err(AppError::invalid_input("unknown provider"));
+        };
+        let secret = std::env::var("SKILL_HIVE_API_KEY")
             .ok()
-        })
-        .ok_or_else(|| AppError::invalid_input("probe needs a stored provider secret"))?;
-    let report = hive_core::providers::probe_provider(
-        &config,
-        &hive_core::providers::SecretString::new(secret),
-        &hive_core::providers::CancellationToken::new(),
-    );
-    serde_json::to_string(&report).map_err(AppError::io)
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                hive_core::providers::load_provider_secret(
+                    &config.id,
+                    &central_repo::base_dir().join("provider-secrets"),
+                )
+                .ok()
+            })
+            .ok_or_else(|| AppError::invalid_input("probe needs a stored provider secret"))?;
+        let report = hive_core::providers::probe_provider(
+            &config,
+            &hive_core::providers::SecretString::new(secret),
+            &hive_core::providers::CancellationToken::new(),
+        );
+        serde_json::to_string(&report).map_err(AppError::io)
+    })
+    .await
 }
 
 struct MeasuredEndpoint {
@@ -2383,33 +2674,39 @@ fn measured_endpoint() -> Result<MeasuredEndpoint, AppError> {
 }
 
 #[tauri::command]
-pub fn record_compare_verdict(id: String, verdict: String) -> Result<String, AppError> {
-    store_verdict(&central_repo::db_path(), id.trim(), verdict.trim()).map_err(AppError::db)
+pub async fn record_compare_verdict(id: String, verdict: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        store_verdict(&central_repo::db_path(), id.trim(), verdict.trim()).map_err(AppError::db)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
-    let name = if skill_name.trim().is_empty() {
-        "baseline"
-    } else {
-        skill_name.trim()
-    };
-    let last = central_repo::base_dir()
-        .join("effectiveness")
-        .join("last.json");
-    let measured = std::fs::read_to_string(&last)
-        .ok()
-        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-        .filter(|value| value.get("run_id").and_then(|item| item.as_str()).is_some());
-    let Some(measured) = measured else {
-        return Err(AppError::invalid_input(
-            "baseline needs a measured run. A canned history chain is not written.",
-        ));
-    };
-    let path = authoring_root("history", name).join("history.json");
-    let entries = history_entries(&measured);
-    let value = write_history(&path, name, &entries).map_err(AppError::internal)?;
-    Ok(value.to_string())
+pub async fn write_history_baseline(skill_name: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let name = if skill_name.trim().is_empty() {
+            "baseline"
+        } else {
+            skill_name.trim()
+        };
+        let last = central_repo::base_dir()
+            .join("effectiveness")
+            .join("last.json");
+        let measured = std::fs::read_to_string(&last)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .filter(|value| value.get("run_id").and_then(|item| item.as_str()).is_some());
+        let Some(measured) = measured else {
+            return Err(AppError::invalid_input(
+                "baseline needs a measured run. A canned history chain is not written.",
+            ));
+        };
+        let path = authoring_root("history", name).join("history.json");
+        let entries = history_entries(&measured);
+        let value = write_history(&path, name, &entries).map_err(AppError::internal)?;
+        Ok(value.to_string())
+    })
+    .await
 }
 
 fn history_entries(measured: &serde_json::Value) -> Vec<HistoryEntry> {
@@ -2464,140 +2761,168 @@ fn history_entries(measured: &serde_json::Value) -> Vec<HistoryEntry> {
 }
 
 #[tauri::command]
-pub fn set_provider_secret(
+pub async fn set_provider_secret(
     id: String,
     secret: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let account = if id.trim().is_empty() {
-        "endpoint"
-    } else {
-        id.trim()
-    };
-    let kind = store_provider_secret(account, &secret, &secrets_dir())
-        .map_err(|err| AppError::io(err.to_string()))?;
-    let label = format!("{kind:?}").to_ascii_lowercase();
-    store
-        .inner()
-        .set_setting("endpoint_secret_backend", &label)
-        .map_err(db)?;
-    Ok(label)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let account = if id.trim().is_empty() {
+            "endpoint"
+        } else {
+            id.trim()
+        };
+        let kind = store_provider_secret(account, &secret, &secrets_dir())
+            .map_err(|err| AppError::io(err.to_string()))?;
+        let label = format!("{kind:?}").to_ascii_lowercase();
+        store
+            .set_setting("endpoint_secret_backend", &label)
+            .map_err(db)?;
+        Ok(label)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn clear_endpoint_secret(id: String) -> Result<bool, AppError> {
-    let account = if id.trim().is_empty() {
-        "endpoint"
-    } else {
-        id.trim()
-    };
-    clear_provider_secret(account, &secrets_dir()).map_err(|err| AppError::io(err.to_string()))?;
-    Ok(true)
+pub async fn clear_endpoint_secret(id: String) -> Result<bool, AppError> {
+    crate::offload::offload(move || {
+        let account = if id.trim().is_empty() {
+            "endpoint"
+        } else {
+            id.trim()
+        };
+        clear_provider_secret(account, &secrets_dir())
+            .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(true)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn store_backup_pat(
+pub async fn store_backup_pat(
     token: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let kind = store_git_token(token.trim(), &secrets_dir())
-        .map_err(|err| AppError::io(err.to_string()))?;
-    let label = format!("{kind:?}").to_ascii_lowercase();
-    store
-        .inner()
-        .set_setting("backup_pat_backend", &label)
-        .map_err(db)?;
-    Ok(label)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let kind = store_git_token(token.trim(), &secrets_dir())
+            .map_err(|err| AppError::io(err.to_string()))?;
+        let label = format!("{kind:?}").to_ascii_lowercase();
+        store
+            .set_setting("backup_pat_backend", &label)
+            .map_err(db)?;
+        Ok(label)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn revoke_backup_token(store: State<'_, Arc<SkillStore>>) -> Result<bool, AppError> {
-    clear_git_token(&secrets_dir()).map_err(|err| AppError::io(err.to_string()))?;
-    let gone = !has_git_token(&secrets_dir());
-    store
-        .inner()
-        .set_setting(
-            "backup_pat_backend",
-            if gone { "cleared" } else { "present" },
-        )
-        .map_err(db)?;
-    Ok(gone)
+pub async fn revoke_backup_token(store: State<'_, Arc<SkillStore>>) -> Result<bool, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        clear_git_token(&secrets_dir()).map_err(|err| AppError::io(err.to_string()))?;
+        let gone = !has_git_token(&secrets_dir());
+        store
+            .set_setting(
+                "backup_pat_backend",
+                if gone { "cleared" } else { "present" },
+            )
+            .map_err(db)?;
+        Ok(gone)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_aside_backup(
+pub async fn set_aside_backup(
     note: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let dest = central_repo::base_dir()
-        .join("aside")
-        .join(format!("aside-{}", now()));
-    copy_children(&root(), &dest.join("skills"))?;
-    std::fs::write(dest.join("note.txt"), note.trim()).map_err(AppError::io)?;
-    store
-        .inner()
-        .set_setting("backup_aside", &dest.to_string_lossy())
-        .map_err(db)?;
-    Ok(dest.to_string_lossy().to_string())
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let dest = central_repo::base_dir()
+            .join("aside")
+            .join(format!("aside-{}", now()));
+        copy_children(&root(), &dest.join("skills"))?;
+        std::fs::write(dest.join("note.txt"), note.trim()).map_err(AppError::io)?;
+        store
+            .set_setting("backup_aside", &dest.to_string_lossy())
+            .map_err(db)?;
+        Ok(dest.to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn pull_project_center(name: String, body: String) -> Result<String, AppError> {
-    let dir = root().join("projects").join(sanitize_skill_name(&name));
-    let document = format!("---\nname: {name}\n---\n{body}\n");
-    write_skill_file(&dir, "SKILL.md", &document)?;
-    Ok(dir.join("SKILL.md").to_string_lossy().to_string())
+pub async fn pull_project_center(name: String, body: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let dir = root().join("projects").join(sanitize_skill_name(&name));
+        let document = format!("---\nname: {name}\n---\n{body}\n");
+        write_skill_file(&dir, "SKILL.md", &document)?;
+        Ok(dir.join("SKILL.md").to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn export_diagnostics(path: String) -> Result<String, AppError> {
-    let dest = PathBuf::from(path.trim());
-    if dest.as_os_str().is_empty() {
-        return Err(AppError::invalid_input(
-            "Choose a path for the diagnostics zip",
-        ));
-    }
-    let mut text = String::from("canary ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 export\n");
-    if let Some(home) = home_dir() {
-        text.push_str(&home.to_string_lossy());
-        text.push('\n');
-    }
-    if let Ok(log_dir) = std::env::var("SKILL_HIVE_LOG_DIR") {
-        if let Ok(entries) = std::fs::read_dir(log_dir) {
-            for entry in entries.flatten().take(8) {
-                if let Ok(body) = std::fs::read_to_string(entry.path()) {
-                    text.push_str(&body);
-                    text.push('\n');
+pub async fn export_diagnostics(path: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let dest = PathBuf::from(path.trim());
+        if dest.as_os_str().is_empty() {
+            return Err(AppError::invalid_input(
+                "Choose a path for the diagnostics zip",
+            ));
+        }
+        let mut text = String::from("canary ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 export\n");
+        if let Some(home) = home_dir() {
+            text.push_str(&home.to_string_lossy());
+            text.push('\n');
+        }
+        if let Ok(log_dir) = std::env::var("SKILL_HIVE_LOG_DIR") {
+            if let Ok(entries) = std::fs::read_dir(log_dir) {
+                for entry in entries.flatten().take(8) {
+                    if let Ok(body) = std::fs::read_to_string(entry.path()) {
+                        text.push_str(&body);
+                        text.push('\n');
+                    }
                 }
             }
         }
-    }
-    hive_core::util::diagnostics::export_logs_zip(&text, &dest)
-        .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(dest.to_string_lossy().to_string())
+        hive_core::util::diagnostics::export_logs_zip(&text, &dest)
+            .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(dest.to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_restore_remote(url: String) -> Result<String, AppError> {
-    let url = url.trim();
-    if url.is_empty() {
-        return Err(AppError::invalid_input("Enter a remote to restore"));
-    }
-    let staging = std::env::temp_dir().join(format!("skill-hive-restore-{}", now()));
-    let _ = std::fs::remove_dir_all(&staging);
-    git_backup::clone_into(&staging, url).map_err(|err| AppError::git(err.to_string()))?;
-    copy_children(&staging, &root())?;
-    let _ = std::fs::remove_dir_all(&staging);
-    Ok(root().to_string_lossy().to_string())
+pub async fn git_backup_restore_remote(url: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let url = url.trim();
+        if url.is_empty() {
+            return Err(AppError::invalid_input("Enter a remote to restore"));
+        }
+        let staging = std::env::temp_dir().join(format!("skill-hive-restore-{}", now()));
+        let _ = std::fs::remove_dir_all(&staging);
+        git_backup::clone_into(&staging, url).map_err(|err| AppError::git(err.to_string()))?;
+        copy_children(&staging, &root())?;
+        let _ = std::fs::remove_dir_all(&staging);
+        Ok(root().to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn skip_first_run_restore(store: State<'_, Arc<SkillStore>>) -> Result<bool, AppError> {
-    store
-        .inner()
-        .set_setting("first_run_restore", "skipped")
-        .map_err(db)?;
-    Ok(true)
+pub async fn skip_first_run_restore(store: State<'_, Arc<SkillStore>>) -> Result<bool, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        store
+            .set_setting("first_run_restore", "skipped")
+            .map_err(db)?;
+        Ok(true)
+    })
+    .await
 }
 
 pub fn tray_preset_pairs(store: &SkillStore) -> Vec<(String, String)> {
@@ -3221,10 +3546,12 @@ mod tests {
         fs::write(source.join("notes.md"), "remote notes\n").unwrap();
         let listed = super::managed(&store).unwrap();
         let skill = listed.iter().find(|row| row.id == "notes").unwrap();
-        assert!(skill.files.iter().any(|file| file.path == "notes.md"));
+        assert!(skill.files.is_empty(), "the list payload stays metadata");
+        assert!(skill.body.is_empty());
+        let files = super::skill_tree_files(&central, Some(source.as_path()));
+        assert!(files.iter().any(|file| file.path == "notes.md"));
         assert_eq!(
-            skill
-                .files
+            files
                 .iter()
                 .find(|file| file.path == "notes.md")
                 .unwrap()
@@ -3286,7 +3613,7 @@ mod tests {
         assert_eq!(repo, "https://github.com/acme/widgets");
         assert_eq!(subpath.as_deref(), Some("helper"));
         super::register_install("market:acme/widgets");
-        assert!(super::cancel_install(Some("market:acme/widgets".into())).unwrap());
+        assert!(super::cancel_install_now(Some("market:acme/widgets".into())).unwrap());
         assert!(super::install_is_cancelled("market:acme/widgets"));
 
         store
@@ -3312,5 +3639,109 @@ mod tests {
         assert_eq!(preset.icon.as_deref(), Some("book"));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn profile_library_load() {
+        use hive_core::db::skill_store::{ProjectRecord, ScenarioRecord, SkillRecord};
+        use std::time::Instant;
+
+        let root = std::env::temp_dir().join(format!("skill-hive-profile-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let store = hive_core::db::skill_store::SkillStore::new(&root.join("hive.db")).unwrap();
+        let started = Instant::now();
+        for i in 0..200 {
+            let dir = root.join(format!("skills/skill-{i:03}"));
+            fs::create_dir_all(dir.join("refs")).unwrap();
+            fs::write(
+                dir.join("SKILL.md"),
+                format!("---\nname: skill-{i:03}\ndescription: A skill used in a crowded library.\n---\n# skill {i}\n{}", "line\n".repeat(40)),
+            )
+            .unwrap();
+            fs::write(dir.join("notes.md"), "n".repeat(4000)).unwrap();
+            fs::write(dir.join("refs/a.md"), "a".repeat(2000)).unwrap();
+            store
+                .insert_skill(&SkillRecord {
+                    id: format!("s{i}"),
+                    name: format!("skill-{i:03}"),
+                    description: Some(format!("description {i}")),
+                    source_type: "local".into(),
+                    source_ref: None,
+                    source_ref_resolved: None,
+                    source_subpath: None,
+                    source_branch: None,
+                    source_revision: None,
+                    remote_revision: None,
+                    central_path: dir.to_string_lossy().into(),
+                    content_hash: None,
+                    enabled: i % 5 != 0,
+                    created_at: 1,
+                    updated_at: 1,
+                    status: "active".into(),
+                    update_status: "current".into(),
+                    last_checked_at: None,
+                    last_check_error: None,
+                })
+                .unwrap();
+        }
+        let seed_ms = started.elapsed().as_secs_f64() * 1000.0;
+        for i in 0..4 {
+            store
+                .insert_project(&ProjectRecord {
+                    id: format!("p{i}"),
+                    name: format!("project-{i}"),
+                    path: root.join(format!("projects/{i}")).to_string_lossy().into(),
+                    workspace_type: "folder".into(),
+                    linked_agent_key: None,
+                    linked_agent_name: None,
+                    disabled_path: None,
+                    sort_order: i,
+                    created_at: 1,
+                    updated_at: 1,
+                })
+                .unwrap();
+            store
+                .insert_scenario(&ScenarioRecord {
+                    id: format!("preset-{i}"),
+                    name: format!("Preset {i}"),
+                    description: None,
+                    icon: None,
+                    sort_order: i,
+                    created_at: 1,
+                    updated_at: 1,
+                })
+                .unwrap();
+        }
+        let list_started = Instant::now();
+        let skills = super::managed(&store).unwrap();
+        let list_ms = list_started.elapsed().as_secs_f64() * 1000.0;
+        let project_started = Instant::now();
+        let projects = store.get_all_projects().unwrap();
+        let projects_ms = project_started.elapsed().as_secs_f64() * 1000.0;
+        let preset_started = Instant::now();
+        let presets = store.get_all_scenarios().unwrap();
+        let presets_ms = preset_started.elapsed().as_secs_f64() * 1000.0;
+        let bytes: usize = skills
+            .iter()
+            .map(|skill| {
+                skill.body.len()
+                    + skill.source_body.len()
+                    + skill
+                        .files
+                        .iter()
+                        .map(|file| file.local.len() + file.remote.len())
+                        .sum::<usize>()
+            })
+            .sum();
+        println!(
+            "PROFILE seed_ms={seed_ms:.1} list_ms={list_ms:.1} skills={} payload_bytes={bytes} projects_ms={projects_ms:.1} projects={} presets_ms={presets_ms:.1} presets={}",
+            skills.len(),
+            projects.len(),
+            presets.len()
+        );
+        assert_eq!(skills.len(), 200);
+        assert_eq!(projects.len(), 4);
+        let _ = fs::remove_dir_all(&root);
     }
 }

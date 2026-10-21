@@ -9,6 +9,8 @@ export interface IpcCommands {
   rebuild_tray_menu: { args: Record<string, never>; result: string[] };
   list_base_entries: { args: Record<string, never>; result: string[] };
   get_managed_skills: { args: Record<string, never>; result: import('@/features/library/model').SkillCard[] };
+  get_skill_files: { args: { skillId: string }; result: import('@/features/library/model').SkillFile[] };
+  cancel_job: { args: Record<string, never>; result: boolean };
   list_presets: { args: Record<string, never>; result: import('@/lib/ipc/catalog').PresetRow[] };
   get_tool_status: { args: Record<string, never>; result: import('@/lib/ipc/catalog').AgentRow[] };
   scan_local_skills: { args: Record<string, never>; result: import('@/lib/ipc/catalog').ScanRow[] };

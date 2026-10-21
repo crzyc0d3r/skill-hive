@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangleIcon, InboxIcon, LoaderCircleIcon, SearchIcon, WifiOffIcon } from "lucide-react";
+import { AlertTriangleIcon, InboxIcon, SearchIcon, WifiOffIcon } from "lucide-react";
 import { cn } from "cn";
+import { t } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -85,15 +86,15 @@ export function StatePanel({
   tone,
   title,
   action,
+  testId,
 }: {
   tone: "loading" | "empty" | "error" | "offline";
   title: string;
   action?: ReactNode;
+  testId?: string;
 }) {
   const icon =
-    tone === "loading" ? (
-      <LoaderCircleIcon className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
-    ) : tone === "error" ? (
+    tone === "loading" ? null : tone === "error" ? (
       <AlertTriangleIcon className="size-5 text-destructive" aria-hidden="true" />
     ) : tone === "offline" ? (
       <WifiOffIcon className="size-5 text-warning-text" aria-hidden="true" />
@@ -108,18 +109,13 @@ export function StatePanel({
         : "border-dashed border-border bg-muted/40";
   return (
     <div
-      role={tone === "error" ? "alert" : "status"}
+      role={tone === "error" ? "alert" : tone === "loading" ? "progressbar" : "status"}
+      aria-busy={tone === "loading" ? true : undefined}
+      data-testid={testId ?? (tone === "loading" ? "loading-state" : undefined)}
       className={cn("flex min-h-72 flex-1 flex-col justify-center gap-4 rounded-lg border px-5 py-8", surface)}
     >
       {icon}
-      <p className="max-w-prose text-sm text-foreground">{title}</p>
-      {tone === "loading" ? (
-        <div className="grid w-full max-w-3xl grid-cols-2 gap-3" aria-hidden="true">
-          <div className="h-24 animate-pulse rounded-lg bg-muted" />
-          <div className="h-24 animate-pulse rounded-lg bg-muted" />
-          <div className="col-span-2 h-32 animate-pulse rounded-lg bg-muted" />
-        </div>
-      ) : null}
+      <p className="max-w-prose text-sm text-foreground">{title || (tone === "offline" ? t("shell.offline") : t("shell.empty"))}</p>
       {action}
     </div>
   );

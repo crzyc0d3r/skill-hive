@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useDebounced } from "@/lib/use-debounced";
 import { t } from "@/lib/i18n";
 import {
   addSkillToAgents,
@@ -15,6 +16,9 @@ import { setProjectSkills } from "@/features/project/store";
 import { addProject, pullProjectCenter, setSkillsEnabled, silent, syncSkillToTool } from "@/lib/ipc/actions";
 import type { SkillCard } from "@/features/library/model";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { StatePanel } from "@/components/chrome";
+import { ProjectSkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -55,6 +59,8 @@ function fromManaged(skill: SkillCard): ProjectSkill {
 }
 
 export function ProjectView() {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const { id = "fixture" } = useParams();
   const [linked, setLinked] = useState(false);
   const [rows, setRows] = useState<ProjectSkill[]>([]);
@@ -113,8 +119,9 @@ export function ProjectView() {
     void silent("set_settings", { key: "project_last_agents", value: next.join(",") });
   }
 
+  const debouncedPicker = useDebounced(pickerQuery, 150);
   function togglePick(skillId: string, shift: boolean) {
-    const visible = library.filter((item) => item.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()));
+    const visible = library.filter((item) => item.name.toLowerCase().includes(debouncedPicker.trim().toLowerCase()));
     if (shift && anchor) {
       const start = visible.findIndex((item) => item.id === anchor);
       const end = visible.findIndex((item) => item.id === skillId);
@@ -132,6 +139,8 @@ export function ProjectView() {
   return (
     <section data-testid="project" className="flex w-full flex-col gap-4">
       <h1 className="font-mono text-[22px] font-semibold tracking-tight">{t("project.title")}</h1>
+      {phase === "loading" ? <ProjectSkeleton /> : null}
+      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
       <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 shadow-none">
         <p className="text-sm text-muted-foreground">{t("project.linked")}</p>
         <label className="block text-sm">
@@ -157,7 +166,7 @@ export function ProjectView() {
           </Button>
         </div>
       </Card>
-      {linked ? (
+      {phase === "ready" && linked ? (
         <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 text-sm shadow-none">
           {(rows.length ? rows : [skill]).map((item) => (
             <div key={item.id} className="space-y-2">
@@ -211,7 +220,7 @@ export function ProjectView() {
               <Input aria-label={t("workspace.picker.search")} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="mb-2 h-8" />
               <Button type="button" size="sm" variant="outline" onClick={() => setPicked(library.map((row) => row.id))}>{t("project.selectAll")}</Button>
               <ul>
-                {library.filter((row) => row.name.toLowerCase().includes(pickerQuery.trim().toLowerCase())).map((row) => (
+                {library.filter((row) => row.name.toLowerCase().includes(debouncedPicker.trim().toLowerCase())).map((row) => (
                   <li key={row.id}>
                     <label className="text-sm">
                       <input type="checkbox" aria-label={`${t("project.selectAll")} ${row.name}`} checked={picked.includes(row.id)} onClick={(event) => togglePick(row.id, event.shiftKey)} onChange={() => undefined} /> {row.name}

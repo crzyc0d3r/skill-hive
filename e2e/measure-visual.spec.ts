@@ -68,8 +68,13 @@ for (const theme of ["light", "dark"] as const) {
       for (const state of states) {
         for (const [name, path] of routes) {
           await page.goto(`${path}?state=${state}`);
-          const copy = state === "loading" ? /Loading/ : state === "error" ? /could not be read/ : state === "offline" ? /offline/i : /No measured|No comparison/;
-          await expect(page.getByText(copy).first()).toBeVisible();
+          if (state === "loading") {
+            await expect(page.getByTestId("loading-state")).toBeVisible();
+            await expect(page.getByRole("heading", { level: 1, name: "Loading" })).toHaveCount(0);
+          } else {
+            const copy = state === "error" ? /could not be read/ : state === "offline" ? /offline/i : /No measured|No comparison/;
+            await expect(page.getByText(copy).first()).toBeVisible();
+          }
           await shot(page, theme, `${name}-${state}${suffix}`);
         }
       }

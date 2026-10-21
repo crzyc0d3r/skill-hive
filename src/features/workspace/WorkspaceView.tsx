@@ -3,13 +3,17 @@ import { Button } from "@/components/ui/button";
 import { SearchIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
 import { deleteManagedSkills, silent, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
+import { useDebounced } from "@/lib/use-debounced";
 import { t } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { StatePanel } from "@/components/chrome";
+import { WorkspaceSkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 
 export interface WorkspaceCard {
   id: string;
@@ -38,6 +42,8 @@ export function WorkspaceView({
   onApply: (id: string) => void | Promise<void>;
   onCreate: (name: string) => void | Promise<void>;
 }) {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const [applied, setApplied] = useState<string | null>(null);
   const [name, setName] = useState("Research");
   const [rows, setRows] = useState(cards);
@@ -69,11 +75,13 @@ export function WorkspaceView({
   }, []);
   const shownPresets = loadedPresets ?? presets;
 
+  const debouncedQuery = useDebounced(query, 150);
+  const debouncedPicker = useDebounced(pickerQuery, 150);
   const tags = useMemo(() => [...new Set(rows.flatMap((row) => row.tags))], [rows]);
   const visible = rows.filter((row) => {
     if (tag && !row.tags.includes(tag)) return false;
-    if (!query.trim()) return true;
-    return row.name.toLowerCase().includes(query.trim().toLowerCase());
+    if (!debouncedQuery.trim()) return true;
+    return row.name.toLowerCase().includes(debouncedQuery.trim().toLowerCase());
   });
   const open = rows.find((row) => row.id === openId) ?? null;
 
@@ -130,6 +138,9 @@ export function WorkspaceView({
           <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8 w-56" />
           <Button type="submit" variant="outline" size="sm">{t("preset.new")}</Button>
         </form>
+        {phase === "loading" ? <WorkspaceSkeleton /> : null}
+        {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+        {phase === "ready" ? <>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="preset-bar">
           {shownPresets.map((preset) => {
             const members = coverageSkills.filter((skill) => preset.skillIds.includes(skill.id));
@@ -165,6 +176,7 @@ export function WorkspaceView({
             </li>
           ))}
         </ul>
+        </> : null}
       </section>
     );
   }
@@ -229,7 +241,7 @@ export function WorkspaceView({
         {adding ? (
           <div data-testid="add-sheet" className="mt-3 rounded-md border border-border p-3">
             <Input aria-label={t("workspace.picker.search")} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="mb-2 h-8" />
-            {library.filter((skill) => skill.name.toLowerCase().includes(pickerQuery.trim().toLowerCase())).map((skill) => (
+            {library.filter((skill) => skill.name.toLowerCase().includes(debouncedPicker.trim().toLowerCase())).map((skill) => (
               <button key={skill.id} type="button" className="mr-2 text-sm" onClick={() => { setRows((current) => current.some((row) => row.id === skill.id) ? current : [...current, { id: skill.id, name: skill.name, status: "in_sync", tags: skill.tags, body: skill.body, center: skill.sourceBody, managed: true }]); if (agentKey) void syncSkillToTool(skill.id, agentKey); setAdding(false); }}>
                 {skill.name}
               </button>

@@ -51,6 +51,9 @@ import { listBaseEntries } from "../../lib/ipc/settings";
 import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, setLocale, t } from "../../lib/i18n";
+import { demoEnabled } from "@/lib/demo";
+import { jobLabel } from "@/lib/job-label";
+import { DataPhaseContext, RetryContext } from "@/lib/view-state";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
 import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, setToolOrder, silent, switchPreset, updatePreset } from "@/lib/ipc/actions";
 import { writeSetting } from "@/lib/ipc/catalog";
@@ -279,6 +282,33 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const skills = useQuery({ queryKey: SKILLS_KEY, queryFn: listSkills });
   const presets = useQuery({ queryKey: ["presets"], queryFn: listPresets });
   const agents = useQuery({ queryKey: ["agents"], queryFn: listAgents });
+  const dataPhase = !demoEnabled() && skills.isPending && skills.data === undefined ? "loading" : skills.isError && skills.data === undefined ? "error" : "ready";
+  const retryData = () => {
+    void skills.refetch();
+    void presets.refetch();
+    void agents.refetch();
+  };
+  const [job, setJob] = useState<{ job: string; current: number; total: number; message: string; done: boolean } | null>(null);
+  useEffect(() => {
+    const preview = new URLSearchParams(location.search).get("job");
+    if (preview && import.meta.env.DEV) {
+      setJob({ job: preview, current: 2, total: 5, message: preview, done: false });
+    }
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<{ job: string; current: number; total: number; message: string; done: boolean }>("job-progress", (event) => {
+          setJob(event.payload.done ? null : event.payload);
+        }),
+      )
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch(() => undefined);
+    return () => {
+      unlisten?.();
+    };
+  }, [location.search]);
   const shownPresets = useMemo(() => presetRows ?? presets.data ?? [], [presetRows, presets.data]);
 
   const matches = useMemo(() => {
@@ -528,11 +558,18 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             className="min-h-0 flex-1 overflow-auto px-6 py-4"
             style={{ scrollPaddingTop: "44px" }}
           >
+            {job && !job.done ? (
+              <JobBanner job={job} onCancel={() => { void silent("cancel_job"); setJob(null); }} />
+            ) : null}
             <div className="mx-auto w-full max-w-[1280px]">
+              <DataPhaseContext.Provider value={dataPhase}>
+              <RetryContext.Provider value={retryData}>
               <Outlet
                 context={{
                   listing: listing.data ?? [],
                   skills: skills.data ?? [],
+                  dataPhase,
+                  retryData,
                   presets: shownPresets,
                   activePresetId,
                   setPresets: (next: PresetRow[]) => setPresetRows(next),
@@ -545,6 +582,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   },
                 }}
               />
+              </RetryContext.Provider>
+              </DataPhaseContext.Provider>
             </div>
           </main>
         </div>
@@ -705,6 +744,37 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   );
 }
 
+function JobBanner({
+  job,
+  onCancel,
+}: {
+  job: { job: string; current: number; total: number; message: string };
+  onCancel: () => void;
+}) {
+  const { text, percent } = jobLabel(job.job, job.message, job.current, job.total);
+  return (
+    <div data-testid="job-progress" className="mb-4 rounded-lg border border-border bg-popover px-4 py-3 text-popover-foreground shadow-md">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">{text}</p>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          {t("shell.cancel")}
+        </Button>
+      </div>
+      <div
+        className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-valuetext={text}
+        aria-label={text}
+      >
+        <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function runAction(href: string, navigate: (path: string) => void): void {
   if (href === "action:skill") openPicker("skill");
   else if (href === "action:agent") openPicker("agent");
@@ -716,6 +786,8 @@ function runAction(href: string, navigate: (path: string) => void): void {
 export interface ShellOutletContext {
   listing: string[];
   skills: import("@/features/library/model").SkillCard[];
+  dataPhase: "loading" | "ready" | "error";
+  retryData: () => void;
   presets: PresetRow[];
   activePresetId: string | null;
   setPresets: (next: PresetRow[]) => void;

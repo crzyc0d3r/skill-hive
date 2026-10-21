@@ -1,10 +1,10 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckIcon, GripVerticalIcon, LayoutGridIcon, ListIcon, MoreHorizontalIcon, PlusIcon, XIcon } from "lucide-react";
-import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard } from "@/features/library/model";
-import { windowRows } from "@/lib/perf";
+import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard, type SkillFile } from "@/features/library/model";
+import { useDebounced } from "@/lib/use-debounced";
 import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
 import { applyAvailableSkillUpdates, checkSkillUpdate, silent } from "@/lib/ipc/actions";
@@ -12,7 +12,9 @@ import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
 import { UpdateFlow } from "@/features/library/UpdateFlow";
-import { EmptyState, Screen, SearchField } from "@/components/chrome";
+import { EmptyState, Screen, SearchField, StatePanel } from "@/components/chrome";
+import { LibrarySkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,6 +22,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const menuItem = "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground";
+
+function sameCards(current: SkillCard[], next: SkillCard[]) {
+  return current.length === next.length && current.every((item, index) => item === next[index]);
+}
 
 function agentLabel(agent: string) {
   if (agent === "claude_code") return "Claude";
@@ -60,6 +66,8 @@ export function LibraryView({
   onBatchTag: (ids: string[], tag: string) => void | Promise<void>;
   onToggleAgent: (skillId: string, agent: string) => void | Promise<void>;
 }) {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<LibraryFilter>("all");
   const [source, setSource] = useState<string | null>(null);
@@ -96,12 +104,65 @@ export function LibraryView({
       setSourceRef(doc?.path ?? null);
     });
   }, [openId]);
+  const [detail, setDetail] = useState<{ id: string; body: string } | null>(null);
+  useEffect(() => {
+    if (!openId) return;
+    const card = skills.find((skill) => skill.id === openId);
+    if (!card || card.body) {
+      setDetail(null);
+      return;
+    }
+    let live = true;
+    setDetail(null);
+    void silent<{ body?: string }>("get_skill_document", { skillId: openId }).then((doc) => {
+      if (live) setDetail({ id: openId, body: doc?.body ?? "" });
+    });
+    return () => {
+      live = false;
+    };
+  }, [openId, skills]);
 
+  const [fileMap, setFileMap] = useState<Record<string, SkillFile[]>>({});
+  useEffect(() => {
+    if (!openId || tab !== "diff") return;
+    const card = skills.find((skill) => skill.id === openId);
+    if (!card || (card.files && card.files.length > 0) || fileMap[openId]) return;
+    let live = true;
+    void silent<SkillFile[]>("get_skill_files", { skillId: openId }).then((files) => {
+      if (live && Array.isArray(files)) setFileMap((current) => ({ ...current, [openId]: files }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [openId, tab, skills, fileMap]);
+
+  const debouncedQuery = useDebounced(query, 150);
   const sources = useMemo(() => [...new Set(skills.map((skill) => skill.source))], [skills]);
   const tags = useMemo(() => [...new Set(skills.flatMap((skill) => skill.tags))], [skills]);
-  const visible = filterSkills(skills, query, filter, source, tag);
+  const visible = filterSkills(skills, debouncedQuery, filter, source, tag);
   const open = skills.find((skill) => skill.id === openId) ?? null;
-  const rendered = windowRows(visible, 100);
+  const openBody = open && !open.body && detail?.id === open.id ? detail.body : (open?.body ?? "");
+  const listRef = useRef<HTMLDivElement>(null);
+  const [windowed, setWindowed] = useState(visible);
+  useEffect(() => {
+    const node = listRef.current;
+    if (!node || node.clientHeight < 40) {
+      setWindowed((current) => (sameCards(current, visible) ? current : visible));
+      return;
+    }
+    const row = layout === "grid" ? 196 : 92;
+    const paint = () => {
+      const start = Math.max(0, Math.floor(node.scrollTop / row) - 1);
+      const count = Math.ceil(node.clientHeight / row) + 3;
+      const perRow = layout === "grid" ? 3 : 1;
+      const next = visible.slice(start * perRow, (start + count) * perRow);
+      setWindowed((current) => (sameCards(current, next) ? current : next));
+    };
+    paint();
+    node.addEventListener("scroll", paint);
+    return () => node.removeEventListener("scroll", paint);
+  }, [visible, layout]);
+  const rendered = windowed;
   const members = memberIds.map((id) => skills.find((skill) => skill.id === id)?.name ?? id);
   const showChecks = selecting || selected.length > 0;
 
@@ -281,7 +342,10 @@ export function LibraryView({
           <Button type="submit" size="sm">{t("library.sync")}</Button>
         </form>
       ) : null}
-      {rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
+      {phase === "loading" ? <LibrarySkeleton /> : null}
+      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "ready" && rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
+      {phase === "ready" ? <div ref={listRef} className="max-h-[36rem] overflow-auto">
       <ul data-testid="library-cards" data-layout={layout} className={layout === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" : "space-y-2"}>
         {rendered.map((skill) => (
           <li key={skill.id}>
@@ -380,6 +444,7 @@ export function LibraryView({
           </li>
         ))}
       </ul>
+      </div> : null}
       {open ? (
         <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
           <div className="inline-flex rounded-lg bg-muted p-0.5">
@@ -397,7 +462,8 @@ export function LibraryView({
             ))}
           </div>
           {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
-          {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.body}</pre> : null}
+          {tab === "local" && open && !open.body && detail?.id !== open.id ? <div data-testid="detail-loading" className="mt-3 h-24 animate-pulse rounded-md bg-muted" /> : null}
+          {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{openBody}</pre> : null}
           {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.sourceBody}</pre> : null}
           {tab === "local" ? (
             <div className="mt-3" data-testid="origin-meta">
@@ -411,18 +477,19 @@ export function LibraryView({
           {tab === "diff" ? (
             <>
               <div data-testid="side-by-side" className="mt-2 grid gap-2 md:grid-cols-2">
-                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{open.body}</pre>
+                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{openBody}</pre>
                 <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{open.sourceBody}</pre>
               </div>
               <ul data-testid="diff-view" className="mt-2 font-mono text-sm">
-                {lcsDiff(open.body, open.sourceBody).map((row, index) => (
+                {lcsDiff(openBody, open.sourceBody).map((row, index) => (
                   <li key={`${row.kind}-${index}`} data-kind={row.kind}>
                     {row.kind === "add" ? "+" : row.kind === "del" ? "-" : " "} {row.text}
                   </li>
                 ))}
               </ul>
               <ul data-testid="file-diff" className="mt-2 font-mono text-sm">
-                {fileDiffs(open.files ?? []).map((file) => (
+                {!(open.files && open.files.length) && !fileMap[open.id] ? <li data-testid="detail-loading" className="h-16 animate-pulse rounded-md bg-muted" /> : null}
+                {fileDiffs((open.files && open.files.length ? open.files : fileMap[open.id]) ?? []).map((file) => (
                   <li key={file.path}>
                     <span>{file.path}</span>
                     {file.rows.map((row, index) => (

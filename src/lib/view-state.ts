@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 export type ViewPhase = "loading" | "empty" | "error" | "offline" | "ready";
 export type PreviewPhase = Exclude<ViewPhase, "ready">;
@@ -8,6 +8,18 @@ export function previewPhase(): PreviewPhase | null {
   const value = new URLSearchParams(window.location.search).get("state");
   if (value === "loading" || value === "empty" || value === "error" || value === "offline") return value;
   return null;
+}
+
+export const DataPhaseContext = createContext<"loading" | "ready" | "error">("ready");
+export const RetryContext = createContext<() => void>(() => undefined);
+
+export function useShellPhase(): "loading" | "error" | "ready" {
+  const forced = previewPhase();
+  const dataPhase = useContext(DataPhaseContext);
+  if (forced === "loading") return "loading";
+  if (forced === "error") return "error";
+  if (forced) return "ready";
+  return dataPhase;
 }
 
 export function useOnline(): boolean {

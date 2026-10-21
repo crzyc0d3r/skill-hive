@@ -1,0 +1,41 @@
+{
+  "inputs": {
+    "scope": ["docs/responsiveness.md", "automations/responsiveness/**"]
+  },
+  "nodes": [
+    {
+      "id": "n1_before",
+      "kind": "code",
+      "scope": "Record the library profile captured before the list stopped embedding file bodies: 200 skills, 4 projects, list_ms 7.0, payload_bytes 2612160.",
+      "reads": [],
+      "writes": "automations/responsiveness/out/before.json",
+      "run": "python3 automations/responsiveness/code/write_before.py",
+      "check": {"cmd": "python3 automations/responsiveness/code/check_before.py"},
+      "deps": []
+    },
+    {
+      "id": "n2_after",
+      "kind": "code",
+      "scope": "Read the fresh profile_library_load log and write the after timings. Fail if the log has no PROFILE line.",
+      "reads": [],
+      "writes": "automations/responsiveness/out/after.json",
+      "run": "python3 automations/responsiveness/code/write_after.py",
+      "check": {"cmd": "python3 automations/responsiveness/code/check_after.py"},
+      "deps": []
+    },
+    {
+      "id": "n3_doc",
+      "kind": "code",
+      "scope": "Write docs/responsiveness.md from the before and after profile files, including what moved off the UI thread and where the loading screenshots live.",
+      "reads": [
+        "automations/responsiveness/out/before.json",
+        "automations/responsiveness/out/after.json"
+      ],
+      "writes": "docs/responsiveness.md",
+      "run": "python3 automations/responsiveness/code/write_doc.py",
+      "check": {"cmd": "python3 automations/responsiveness/code/check_doc.py"},
+      "deps": ["n1_before", "n2_after"],
+      "risky": true
+    }
+  ]
+}

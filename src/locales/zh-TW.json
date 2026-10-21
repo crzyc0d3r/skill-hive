@@ -484,5 +484,19 @@
   "history.result": "結果",
   "suite.queued": "排隊",
   "suite.preparing": "準備中",
-  "suite.done": "完成"
+  "suite.done": "完成",
+  "shell.loading": "正在載入",
+  "shell.error": "出了問題",
+  "shell.offline": "目前離線",
+  "shell.empty": "這裡還沒有內容",
+  "shell.progress": "{job}",
+  "shell.cancel": "取消",
+  "job.sync": "正在同步技能…",
+  "job.library": "正在讀取技能庫…",
+  "job.scan": "正在掃描技能…",
+  "job.install": "正在安裝技能…",
+  "job.import": "正在匯入技能…",
+  "job.effectiveness": "正在執行效果測試…",
+  "job.working": "正在處理…",
+  "job.count": "{current}/{total}"
 }

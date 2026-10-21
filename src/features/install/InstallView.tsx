@@ -1,12 +1,14 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
 import { listScanRows, type GitPreview, type GitPreviewSkill } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
 import { t } from "@/lib/i18n";
-import { Screen } from "@/components/chrome";
+import { Screen, StatePanel } from "@/components/chrome";
+import { InstallSkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { Card } from "@/components/ui/card";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
@@ -33,6 +35,8 @@ export function InstallView({
   onInstallArchive: (path: string) => void | Promise<void>;
   marketplaceReachable?: boolean;
 }) {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "local";
   const [url, setUrl] = useState("");
@@ -77,8 +81,10 @@ export function InstallView({
           </Button>
         ))}
       </div>
-      {active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
-      {active === "local" ? (
+      {phase === "loading" ? <InstallSkeleton /> : null}
+      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "ready" && active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
+      {phase === "ready" && active === "local" ? (
         <form
           className="max-w-xl"
           onSubmit={(event) => {
@@ -106,7 +112,7 @@ export function InstallView({
                 </span>
               </label>
               <div className="flex gap-2">
-                <Button type="submit" disabled={busy} size="sm">{t("install.local.submit")}</Button>
+                <Button type="submit" disabled={busy} aria-busy={busy} size="sm">{busy ? t("shell.loading") : t("install.local.submit")}</Button>
                 <Button type="button" disabled={busy} variant="outline" size="sm" onClick={() => { const label = archive.split(/[/\\]/).filter(Boolean).pop() ?? archive; void act(async () => { await onInstallArchive(archive); }, () => setInstalled(label)); }}>
                   {t("install.local.archiveSubmit")}
                 </Button>
@@ -116,7 +122,7 @@ export function InstallView({
           </Card>
         </form>
       ) : null}
-      {active === "git" ? (
+      {phase === "ready" && active === "git" ? (
         <form
           className="max-w-xl space-y-3 rounded-lg border border-border bg-card p-4"
           onSubmit={(event) => {
@@ -135,7 +141,7 @@ export function InstallView({
           }}
         >
           <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/org/skills" className="h-8 max-w-xl" />
-          <Button type="submit" size="sm">{t("install.git.preview")}</Button>
+          <Button type="submit" size="sm" disabled={busy} aria-busy={busy}>{t("install.git.preview")}</Button>
           {cancelled ? <p role="status">{t("install.git.removed")}</p> : null}
           {preview && !cancelled ? (
             <div data-testid="git-preview" className="rounded-md border border-border p-3">
@@ -158,7 +164,7 @@ export function InstallView({
                 ))}
               </ul>
               <div className="mt-2 flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => { const label = rename || "skill"; const picked = chosen.length ? chosen : [relative]; void act(async () => { for (const item of picked) await onImportGit(url, rename, previewId, item); }, () => setImported(label)); }}>
+                <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={() => { const label = rename || "skill"; const picked = chosen.length ? chosen : [relative]; void act(async () => { for (const item of picked) await onImportGit(url, rename, previewId, item); }, () => setImported(label)); }}>
                   {t("install.git.import")}
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => { setCancelled(true); void onCancel(previewId); }}>
@@ -169,7 +175,7 @@ export function InstallView({
           ) : null}
         </form>
       ) : null}
-      {active === "scan" ? (
+      {phase === "ready" && active === "scan" ? (
         <div className="mt-4">
           <ul>
             {scanRows.map((row) => {
@@ -178,17 +184,17 @@ export function InstallView({
                 <li key={`${row.tool}-${row.name}`} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                   <span>{row.tool}</span>
                   <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} className="h-8" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
+                  <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
                     {t("install.scan.one")} {row.name}
                   </Button>
                 </li>
               );
             })}
           </ul>
-          <Button type="button" disabled={busy} variant="default" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>
+          <Button type="button" disabled={busy} aria-busy={busy} variant="default" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>
             {t("install.scan.all")}
           </Button>
-          <Button type="button" variant="outline" size="sm" className="mt-2 ml-2" onClick={() => void listScanRows().then((rows) => setRescanned(rows))}>
+          <Button type="button" variant="outline" size="sm" className="mt-2 ml-2" disabled={busy} aria-busy={busy} onClick={() => void act(async () => { setRescanned(await listScanRows()); })}>
             {t("install.scan.rescan")}
           </Button>
         </div>

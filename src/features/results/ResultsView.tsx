@@ -1,13 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "cn";
 import { t } from "../../lib/i18n";
 import { evidenceAnchor, FIXTURE_CELLS, FIXTURE_STEPS, moveCell, stepDuration, type HeatCell, type TimelineStep } from "@/features/results/model";
 import { demoEnabled } from "@/lib/demo";
 import { controlMeasuredRun, exportMeasuredRun } from "@/lib/ipc/actions";
 import { Panel, Screen, StatePanel } from "@/components/chrome";
+import { ResultsSkeleton } from "@/components/skeletons";
 import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
 
 function scrollToId(id: string) {
@@ -33,6 +34,8 @@ export function ResultsView() {
   const online = useOnline();
   const demo = demoEnabled() && !forced;
   const [cells, setCells] = useState<HeatCell[]>(() => (demo ? FIXTURE_CELLS : []));
+  const cellsRef = useRef(cells);
+  cellsRef.current = cells;
   const [steps, setSteps] = useState<TimelineStep[]>(() => (demo ? FIXTURE_STEPS : []));
   const [phase, setPhase] = useState<ViewPhase>(() => forced ?? (demo ? "ready" : "loading"));
   const [index, setIndex] = useState(0);
@@ -49,8 +52,10 @@ export function ResultsView() {
   useEffect(() => {
     if (forced) {
       setPhase(forced);
-      setCells([]);
-      setSteps([]);
+      if (forced === "loading" || forced === "empty" || forced === "error" || forced === "offline") {
+        setCells([]);
+        setSteps([]);
+      }
       return;
     }
     if (demoEnabled()) {
@@ -64,7 +69,7 @@ export function ResultsView() {
       return;
     }
     let cancel = false;
-    setPhase("loading");
+    if (cellsRef.current.length === 0) setPhase("loading");
     void (async () => {
       try {
         const raw = await invoke<string>("get_effectiveness_report");
@@ -105,18 +110,30 @@ export function ResultsView() {
 
   const selected = cells[index];
   const lede = paused ? t("results.pause") : phase === "ready" ? t("results.heatmap") : undefined;
+  if (phase === "loading" && cells.length === 0) {
+    return (
+      <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} actions={
+        <>
+          <Button type="button" size="sm" disabled>{t("results.budget")}</Button>
+          <Button type="button" variant="secondary" size="sm" disabled>{t("results.export")}</Button>
+        </>
+      }>
+        <ResultsSkeleton />
+      </Screen>
+    );
+  }
   return (
     <Screen testId="results" className="min-h-[calc(100dvh-8.5rem)]" title={t("results.title")} lede={lede} actions={
       <>
-        <Button type="button" size="sm" onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
+        <Button type="button" size="sm" aria-busy={phase === "loading" && cells.length > 0} disabled={phase === "loading" && cells.length > 0} onClick={() => setBudgetOpen(true)}>{t("results.budget")}</Button>
         <Button type="button" variant="secondary" size="sm" onClick={() => { void exportMeasuredRun().then((value) => { if (typeof value === "string") setExported(value); }); }}>{t("results.export")}</Button>
       </>
     }>
-      {phase === "loading" || phase === "error" || phase === "offline" ? (
+      {(phase === "error" || phase === "offline") && cells.length === 0 ? (
         <StatePanel
           tone={phase}
           title={phaseCopy(phase)}
-          action={phase === "loading" ? null : <Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button>}
+          action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button>}
         />
       ) : null}
       {phase === "empty" ? <StatePanel tone="empty" title={t("results.empty")} /> : null}

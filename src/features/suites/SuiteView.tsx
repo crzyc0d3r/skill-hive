@@ -6,7 +6,8 @@ import { t } from "../../lib/i18n";
 import { applyOptimized, optimizeDescription, useGenerate } from "@/features/generate/store";
 import { runEffectivenessSuite, saveSuiteDraft } from "@/lib/ipc/actions";
 import { Panel, Screen, StatePanel, TextField } from "@/components/chrome";
-import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
+import { SuiteSkeleton } from "@/components/skeletons";
+import { previewPhase, useOnline, useShellPhase, type ViewPhase } from "@/lib/view-state";
 
 const MODES = ["emulated", "claude-code", "sequential", "static"] as const;
 const CONDITIONS = ["with_skill", "without_skill"] as const;
@@ -20,6 +21,7 @@ function phaseCopy(phase: ViewPhase): string {
 
 export function SuiteView() {
   const forced = previewPhase();
+  const shell = useShellPhase();
   const online = useOnline();
   const { id = "skill" } = useParams();
   const { wizard } = useGenerate();
@@ -36,7 +38,7 @@ export function SuiteView() {
   const running = progress === "preparing";
   const finished = progress.length > 0 && !running;
 
-  if (forced) {
+  if (forced && forced !== "loading") {
     return (
       <Screen testId="suite" className="min-h-[calc(100dvh-8.5rem)]" title={t("suite.title")}>
         <StatePanel tone={forced} title={phaseCopy(forced)} />
@@ -81,6 +83,7 @@ export function SuiteView() {
           </div>
         </Panel>
         <Panel title={t("suite.matrix")} className="h-full">
+          {shell === "loading" ? <SuiteSkeleton /> : (
           <div data-testid="suite-matrix" className="flex h-full flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               {t("suite.matrix")}: with_skill, without_skill · {t("suite.repetitions")} {repetitions} · {mode}
@@ -102,6 +105,7 @@ export function SuiteView() {
             </div>
             <p className="font-mono text-sm tabular-nums">{t("suite.estimate")}: 2 × 1 × {repetitions}</p>
           </div>
+          )}
         </Panel>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -110,6 +114,8 @@ export function SuiteView() {
         <Button
           type="button"
           size="sm"
+          aria-busy={progress === "preparing"}
+          disabled={progress === "preparing"}
           onClick={() => {
             setFailed(false);
             setProgress("preparing");
@@ -135,7 +141,7 @@ export function SuiteView() {
             });
           }}
         >
-          {t("suite.run")}
+          {progress === "preparing" ? t("shell.loading") : t("suite.run")}
         </Button>
         <Link to="/effectiveness" data-testid="effectiveness-link" className={buttonVariants({ variant: "secondary", size: "sm" })}>
           {t("suite.effectiveness")}

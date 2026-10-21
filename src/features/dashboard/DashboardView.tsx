@@ -1,16 +1,20 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { Link } from "react-router-dom";
 import { ActivityIcon, AlertTriangleIcon, BotIcon, FlaskConicalIcon, LibraryIcon, SparklesIcon } from "lucide-react";
 import type { SkillCard } from "@/features/library/model";
 import { t } from "@/lib/i18n";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { useGenerate } from "@/features/generate/store";
 import { installManageSkills } from "@/lib/ipc/actions";
 import { Panel, PrimaryLink, QuietLink, Screen, Stat } from "@/components/chrome";
+import { DashboardSkeleton, RegionError } from "@/components/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
 export function DashboardView({ skills }: { skills: SkillCard[] }) {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const { seed } = useGenerate();
   const [setupNote, setSetupNote] = useState<string | null>(null);
   const synced = skills.filter((skill) => skill.agents.length > 0).length;
@@ -23,7 +27,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
       testId="dashboard"
       className="min-h-[calc(100dvh-8.5rem)]"
       title={t("dashboard.greeting")}
-      lede={skills.length === 0 ? t("dashboard.empty") : `${skills.length} skills`}
+      lede={phase === "ready" ? (skills.length === 0 ? t("dashboard.empty") : `${skills.length} skills`) : undefined}
       actions={
         <>
           <PrimaryLink to="/install?tab=local">{t("dashboard.quick.install")}</PrimaryLink>
@@ -33,6 +37,9 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
         </>
       }
     >
+      {phase === "loading" ? <DashboardSkeleton /> : null}
+      {phase === "error" ? <RegionError onRetry={retry} /> : null}
+      {phase === "ready" ? <>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat label={t("dashboard.stat.skills")} value={skills.length} icon={<LibraryIcon className="size-4" aria-hidden="true" />} />
         <Stat label={t("dashboard.stat.coverage")} value={`${coverage}%`} icon={<ActivityIcon className="size-4" aria-hidden="true" />} />
@@ -113,6 +120,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
           </Panel>
         </div>
       </div>
+      </> : null}
     </Screen>
   );
 }

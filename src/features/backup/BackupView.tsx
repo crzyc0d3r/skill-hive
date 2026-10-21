@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
   backupSetDeviceName,
   gitBackupFetch,
@@ -22,7 +22,9 @@ import { restoreBackupRemote, revokeBackupToken, setAsideBackup, storeBackupPat,
 import { demoEnabled } from "@/lib/demo";
 import { backupNow, restoreSnapshot } from "@/features/backup/model";
 import { t } from "@/lib/i18n";
-import { Screen } from "@/components/chrome";
+import { Screen, StatePanel } from "@/components/chrome";
+import { BackupSkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { toast } from "sonner";
 
 interface ConflictRow {
@@ -37,6 +39,8 @@ function repoNameFrom(url: string): string {
 }
 
 export function BackupView() {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const [body, setBody] = useState("library v1");
   const [history, setHistory] = useState<SnapshotRow[]>([]);
   const [safety, setSafety] = useState<string | null>(null);
@@ -124,6 +128,19 @@ export function BackupView() {
     }
   }
 
+  if (phase === "loading" || phase === "error") {
+    return (
+      <Screen testId="backup" title={t("backup.title")}>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" data-testid="backup-now" size="sm" disabled={phase === "loading"} aria-busy={phase === "loading"}>
+            {t("backup.now")}
+          </Button>
+        </div>
+        {phase === "loading" ? <BackupSkeleton /> : <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} />}
+      </Screen>
+    );
+  }
+
   return (
     <Screen testId="backup" title={t("backup.title")}>
       <p className="mt-2 text-sm" role="status">{body}</p>
@@ -134,7 +151,7 @@ export function BackupView() {
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        <Button type="button" data-testid="backup-now" disabled={busy} size="sm" onClick={() =>
+        <Button type="button" data-testid="backup-now" disabled={busy} aria-busy={busy} size="sm" onClick={() =>
             void run(async () => {
               if (demoEnabled()) {
                 const snap = backupNow(body, [])[0];

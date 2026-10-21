@@ -484,5 +484,19 @@
   "history.result": "Result",
   "suite.queued": "Queued",
   "suite.preparing": "Preparing",
-  "suite.done": "Done"
+  "suite.done": "Done",
+  "shell.loading": "Loading",
+  "shell.error": "Something went wrong",
+  "shell.offline": "You are offline",
+  "shell.empty": "Nothing here yet",
+  "shell.progress": "{job}",
+  "shell.cancel": "Cancel",
+  "job.sync": "Syncing skills…",
+  "job.library": "Reading the library…",
+  "job.scan": "Scanning for skills…",
+  "job.install": "Installing skills…",
+  "job.import": "Importing skills…",
+  "job.effectiveness": "Running the effectiveness test…",
+  "job.working": "Working…",
+  "job.count": "{current} of {total}"
 }

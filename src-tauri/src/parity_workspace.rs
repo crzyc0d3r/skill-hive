@@ -85,77 +85,97 @@ fn document_at(path: &Path) -> Result<SkillDocumentDto, AppError> {
 }
 
 #[tauri::command]
-pub fn get_global_local_skills(
+pub async fn get_global_local_skills(
     tool: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<WorkspaceSkill>, AppError> {
-    let dir = agent_dir(store.inner(), tool.trim())?;
-    workspace::list_agent_skills(store.inner(), tool.trim(), &dir)
-        .map_err(|err| AppError::io(err.to_string()))
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let dir = agent_dir(store.as_ref(), tool.trim())?;
+        workspace::list_agent_skills(store.as_ref(), tool.trim(), &dir)
+            .map_err(|err| AppError::io(err.to_string()))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn get_global_local_skill_document(
+pub async fn get_global_local_skill_document(
     tool: String,
     name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<SkillDocumentDto, AppError> {
-    let path = agent_dir(store.inner(), tool.trim())?.join(name.trim());
-    document_at(&path)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = agent_dir(store.as_ref(), tool.trim())?.join(name.trim());
+        document_at(&path)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn import_global_local_skill_to_center(
+pub async fn import_global_local_skill_to_center(
     tool: String,
     name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let source = agent_dir(store.inner(), tool.trim())?.join(name.trim());
-    if !source.join("SKILL.md").is_file() {
-        return Err(AppError::not_found("skill folder has no SKILL.md"));
-    }
-    let installed = installer::install_from_local(&source, None)
-        .map_err(|err| AppError::io(err.to_string()))?;
-    persist(store.inner(), &installed, &source)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let source = agent_dir(store.as_ref(), tool.trim())?.join(name.trim());
+        if !source.join("SKILL.md").is_file() {
+            return Err(AppError::not_found("skill folder has no SKILL.md"));
+        }
+        let installed = installer::install_from_local(&source, None)
+            .map_err(|err| AppError::io(err.to_string()))?;
+        persist(store.as_ref(), &installed, &source)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn update_global_local_skill_from_center(
+pub async fn update_global_local_skill_from_center(
     tool: String,
     skill_id: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let store = store.inner();
-    let skill = store
-        .get_skill_by_id(skill_id.trim())
-        .map_err(db)?
-        .ok_or_else(|| AppError::not_found("Skill not found"))?;
-    let agent = agent_dir(store, tool.trim())?;
-    let target = agent.join(&skill.name);
-    let source = PathBuf::from(&skill.central_path);
-    sync_engine::sync_skill(
-        &source,
-        &target,
-        SyncMode::Copy,
-        ReplacePolicy::UserConfirmed,
-    )
-    .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(target.to_string_lossy().to_string())
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        let skill = store
+            .get_skill_by_id(skill_id.trim())
+            .map_err(db)?
+            .ok_or_else(|| AppError::not_found("Skill not found"))?;
+        let agent = agent_dir(store, tool.trim())?;
+        let target = agent.join(&skill.name);
+        let source = PathBuf::from(&skill.central_path);
+        sync_engine::sync_skill(
+            &source,
+            &target,
+            SyncMode::Copy,
+            ReplacePolicy::UserConfirmed,
+        )
+        .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(target.to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn delete_global_local_skill(
+pub async fn delete_global_local_skill(
     tool: String,
     name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    let path = agent_dir(store.inner(), tool.trim())?.join(name.trim());
-    if path.exists() {
-        if path.is_dir() {
-            std::fs::remove_dir_all(&path).map_err(AppError::io)?;
-        } else {
-            std::fs::remove_file(&path).map_err(AppError::io)?;
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = agent_dir(store.as_ref(), tool.trim())?.join(name.trim());
+        if path.exists() {
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).map_err(AppError::io)?;
+            } else {
+                std::fs::remove_file(&path).map_err(AppError::io)?;
+            }
         }
-    }
-    Ok(())
+        Ok(())
+    })
+    .await
 }
