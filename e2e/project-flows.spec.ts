@@ -13,7 +13,7 @@ test("project export flow changes the sidebar dot", async ({ page }) => {
   await page.getByRole("button", { name: "Link project" }).click();
   await expect(page.getByTestId("sidebar-project-dot")).toHaveAttribute("data-color", "red");
   await page.getByRole("button", { name: "Add to agents" }).click();
-  await expect(page.getByTestId("project")).toContainText("claude_code, codex");
+  await expect(page.getByTestId("project")).toContainText("Claude Code, Codex");
   await page.getByRole("button", { name: "Toggle skill" }).click();
   await expect(page.getByTestId("sidebar-project-dot")).toHaveAttribute("data-color", "grey");
   await page.getByRole("button", { name: "Toggle skill" }).click();
