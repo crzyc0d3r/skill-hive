@@ -52,6 +52,8 @@ import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, setLocale, t } from "../../lib/i18n";
 import { demoEnabled } from "@/lib/demo";
+import { jobLabel } from "@/lib/job-label";
+import { DataPhaseContext, RetryContext } from "@/lib/view-state";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
 import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, setToolOrder, silent, switchPreset, updatePreset } from "@/lib/ipc/actions";
 import { writeSetting } from "@/lib/ipc/catalog";
@@ -280,7 +282,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const skills = useQuery({ queryKey: SKILLS_KEY, queryFn: listSkills });
   const presets = useQuery({ queryKey: ["presets"], queryFn: listPresets });
   const agents = useQuery({ queryKey: ["agents"], queryFn: listAgents });
-  const dataPhase = !demoEnabled() && skills.isPending && skills.data === undefined ? "loading" : skills.isError ? "error" : "ready";
+  const dataPhase = !demoEnabled() && skills.isPending && skills.data === undefined ? "loading" : skills.isError && skills.data === undefined ? "error" : "ready";
   const retryData = () => {
     void skills.refetch();
     void presets.refetch();
@@ -557,25 +559,11 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             style={{ scrollPaddingTop: "44px" }}
           >
             {job && !job.done ? (
-              <div data-testid="job-progress" className="mb-3 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2" role="progressbar" aria-valuemin={0} aria-valuemax={job.total || 1} aria-valuenow={job.current} aria-label={job.message}>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div className="h-2 bg-chart-1" style={{ width: `${job.total === 0 ? 0 : Math.round((job.current / job.total) * 100)}%` }} />
-                </div>
-                <span className="text-xs text-muted-foreground">{t("shell.progress", { job: job.message })}</span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    void silent("cancel_job");
-                    setJob(null);
-                  }}
-                >
-                  {t("shell.cancel")}
-                </Button>
-              </div>
+              <JobBanner job={job} onCancel={() => { void silent("cancel_job"); setJob(null); }} />
             ) : null}
             <div className="mx-auto w-full max-w-[1280px]">
+              <DataPhaseContext.Provider value={dataPhase}>
+              <RetryContext.Provider value={retryData}>
               <Outlet
                 context={{
                   listing: listing.data ?? [],
@@ -594,6 +582,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   },
                 }}
               />
+              </RetryContext.Provider>
+              </DataPhaseContext.Provider>
             </div>
           </main>
         </div>
@@ -750,6 +740,37 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         />
       ) : null}
       <Toaster position="top-right" closeButton />
+    </div>
+  );
+}
+
+function JobBanner({
+  job,
+  onCancel,
+}: {
+  job: { job: string; current: number; total: number; message: string };
+  onCancel: () => void;
+}) {
+  const { text, percent } = jobLabel(job.job, job.message, job.current, job.total);
+  return (
+    <div data-testid="job-progress" className="mb-4 rounded-lg border border-border bg-popover px-4 py-3 text-popover-foreground shadow-md">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">{text}</p>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          {t("shell.cancel")}
+        </Button>
+      </div>
+      <div
+        className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-valuetext={text}
+        aria-label={text}
+      >
+        <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+      </div>
     </div>
   );
 }

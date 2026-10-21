@@ -4,7 +4,8 @@ import { t } from "../../lib/i18n";
 import { recordVerdict, useGenerate } from "@/features/generate/store";
 import { demoEnabled } from "@/lib/demo";
 import { Panel, Screen, StatePanel } from "@/components/chrome";
-import { previewPhase, useOnline } from "@/lib/view-state";
+import { CompareSkeleton } from "@/components/skeletons";
+import { previewPhase, useOnline, useShellPhase } from "@/lib/view-state";
 
 function Bars() {
   return (
@@ -20,11 +21,12 @@ function Bars() {
 export function CompareView() {
   const { wizard } = useGenerate();
   const forced = previewPhase();
+  const shell = useShellPhase();
   const online = useOnline();
   const demo = demoEnabled() && !forced;
   const revealed = wizard.verdict.length > 0;
-  if (forced) {
-    const title = forced === "loading" ? t("compare.loading") : forced === "error" ? t("compare.error") : forced === "offline" ? t("compare.offline") : t("compare.empty");
+  if (forced && forced !== "loading") {
+    const title = forced === "error" ? t("compare.error") : forced === "offline" ? t("compare.offline") : t("compare.empty");
     return (
       <Screen testId="compare" className="min-h-[calc(100dvh-8.5rem)]" title={t("compare.title")}>
         <StatePanel tone={forced} title={title} />
@@ -40,7 +42,8 @@ export function CompareView() {
       actions={<Button type="button" size="sm" onClick={() => recordVerdict("Output A")}>{t("compare.verdict")}</Button>}
     >
       {!online ? <StatePanel tone="offline" title={t("compare.offline")} /> : null}
-      {demo ? (
+      {shell === "loading" ? <CompareSkeleton /> : null}
+      {shell !== "loading" && demo ? (
         <div className="grid flex-1 gap-3 md:grid-cols-2">
           <Panel className="min-h-64">
             <div className="flex items-center gap-2">
@@ -59,12 +62,12 @@ export function CompareView() {
             {revealed ? <p className="mt-4 text-sm">{t("compare.verdict")}</p> : <Bars />}
           </Panel>
         </div>
-      ) : wizard.compareText ? (
+      ) : shell !== "loading" && wizard.compareText ? (
         <Panel>
           <p data-testid="compare-live">{wizard.compareText}</p>
         </Panel>
       ) : (
-        <StatePanel tone="empty" title={t("compare.empty")} />
+        shell === "loading" ? null : <StatePanel tone="empty" title={t("compare.empty")} />
       )}
       {revealed && demo ? (
         <p data-testid="compare-unblind" className="rounded-md border border-success/40 bg-success-subtle px-3 py-2 text-sm text-success-text">

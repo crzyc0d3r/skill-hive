@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangleIcon, InboxIcon, LoaderCircleIcon, SearchIcon, WifiOffIcon } from "lucide-react";
+import { AlertTriangleIcon, InboxIcon, SearchIcon, WifiOffIcon } from "lucide-react";
 import { cn } from "cn";
 import { t } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -94,9 +94,7 @@ export function StatePanel({
   testId?: string;
 }) {
   const icon =
-    tone === "loading" ? (
-      <LoaderCircleIcon className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
-    ) : tone === "error" ? (
+    tone === "loading" ? null : tone === "error" ? (
       <AlertTriangleIcon className="size-5 text-destructive" aria-hidden="true" />
     ) : tone === "offline" ? (
       <WifiOffIcon className="size-5 text-warning-text" aria-hidden="true" />
@@ -117,44 +115,9 @@ export function StatePanel({
       className={cn("flex min-h-72 flex-1 flex-col justify-center gap-4 rounded-lg border px-5 py-8", surface)}
     >
       {icon}
-      <p className="max-w-prose text-sm text-foreground">{title}</p>
-      {tone === "loading" ? (
-        <div className="grid w-full max-w-3xl grid-cols-2 gap-3" aria-hidden="true">
-          <div className="h-24 animate-pulse rounded-lg bg-muted" />
-          <div className="h-24 animate-pulse rounded-lg bg-muted" />
-          <div className="col-span-2 h-32 animate-pulse rounded-lg bg-muted" />
-        </div>
-      ) : null}
+      <p className="max-w-prose text-sm text-foreground">{title || (tone === "offline" ? t("shell.offline") : t("shell.empty"))}</p>
       {action}
     </div>
-  );
-}
-
-export function LoadingFrame({
-  testId,
-  phase = "loading",
-  onRetry,
-}: {
-  testId: string;
-  phase?: "loading" | "error" | "empty" | "offline";
-  onRetry?: () => void;
-}) {
-  const title =
-    phase === "error" ? t("shell.error") : phase === "offline" ? t("shell.offline") : phase === "empty" ? t("shell.empty") : t("shell.loading");
-  return (
-    <Screen testId={testId} title={title}>
-      <StatePanel
-        tone={phase}
-        title={title}
-        action={
-          phase === "error" || phase === "offline" ? (
-            <Button type="button" size="sm" onClick={onRetry}>
-              {t("banner.retry")}
-            </Button>
-          ) : null
-        }
-      />
-    </Screen>
   );
 }
 

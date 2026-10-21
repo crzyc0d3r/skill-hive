@@ -1,0 +1,173 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-21T20:17:57+00:00",
+  "finished": "2026-10-21T20:18:13+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n1_critique": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "589cc8b565f8593b6d63868505f02dc25416db639ec3aefc16248510c7f1fcf8",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/loading-chrome/code/check_critique.py` → exit 0: critique ok 8 shots"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: /workspace/automations/loading-chrome/out/critique.md"
+          ]
+        ],
+        "at": "2026-10-21T20:18:13+00:00",
+        "output_hash": "589cc8b565f8593b6d63868505f02dc25416db639ec3aefc16248510c7f1fcf8",
+        "log": "automations/loading-chrome/runs/r1/gates/n1_critique.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/loading-chrome/code/check_critique.py` → exit 0: critique ok 8 shots"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: /workspace/automations/loading-chrome/out/critique.md"
+            ]
+          ],
+          "at": "2026-10-21T20:18:13+00:00",
+          "output_hash": "589cc8b565f8593b6d63868505f02dc25416db639ec3aefc16248510c7f1fcf8",
+          "log": "automations/loading-chrome/runs/r1/gates/n1_critique.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_critique",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-21T20:18:13+00:00",
+      "finished": "2026-10-21T20:18:13+00:00",
+      "verdict": "pass",
+      "output": "automations/loading-chrome/out/critique.md",
+      "evidence": "exit 0: /workspace/automations/loading-chrome/out/critique.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/loading-chrome/code/check_critique.py` → exit 0: critique ok 8 shots",
+      "at": "2026-10-21T20:18:13+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-21T20:18:12+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash a6bed52b43d47b84)"
+    },
+    {
+      "at": "2026-10-21T20:18:12+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-21T20:18:13+00:00",
+      "type": "baseline",
+      "msg": "0/3 pass before the run"
+    },
+    {
+      "at": "2026-10-21T20:18:13+00:00",
+      "type": "gate",
+      "msg": "n1_critique attempt 1: pass"
+    },
+    {
+      "at": "2026-10-21T20:18:13+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-21T20:18:13+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash a6bed52b43d47b84"
+      ],
+      [
+        "n1_critique: output exists and can be opened",
+        "pass",
+        "automations/loading-chrome/out/critique.md (1599 bytes)"
+      ],
+      [
+        "n1_critique: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-21T20:18:13+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 1 of 1 declared nodes"
+      ],
+      [
+        "acceptance 0: critique names the shaped skeletons and the job label",
+        "pass",
+        "`python3 automations/loading-chrome/code/check_critique.py` → exit 0: critique ok 8 shots"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "automations/loading-chrome/out/critique.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/3 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-21T20:18:13+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "automations/loading-chrome/out/critique.md absent"
+      ],
+      [
+        "acceptance 0: critique names the shaped skeletons and the job label",
+        "fail",
+        "`python3 automations/loading-chrome/code/check_critique.py` → exit 1: [stderr]\nTraceback (most recent call last):\n  File \"/workspace/automations/loading-chrome/code/check_critique.py\", line 7, in <module>\n    text = (root / \"automations/loading-chrome/out/critique.md\").read_text(encoding=\"utf-8\")\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/pathlib.py\", line 1029, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/pathlib.py\", line 1015, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/workspace/automations/loading-chrome/out/critique.md'"
+      ],
+      [
+        "note",
+        "noted",
+        "shaped skeletons not yet recorded in the critique file"
+      ]
+    ]
+  }
+}

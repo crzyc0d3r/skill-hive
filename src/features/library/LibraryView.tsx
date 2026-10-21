@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckIcon, GripVerticalIcon, LayoutGridIcon, ListIcon, MoreHorizontalIcon, PlusIcon, XIcon } from "lucide-react";
 import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard, type SkillFile } from "@/features/library/model";
@@ -12,7 +12,9 @@ import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
 import { UpdateFlow } from "@/features/library/UpdateFlow";
-import { EmptyState, Screen, SearchField } from "@/components/chrome";
+import { EmptyState, Screen, SearchField, StatePanel } from "@/components/chrome";
+import { LibrarySkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -64,6 +66,8 @@ export function LibraryView({
   onBatchTag: (ids: string[], tag: string) => void | Promise<void>;
   onToggleAgent: (skillId: string, agent: string) => void | Promise<void>;
 }) {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<LibraryFilter>("all");
   const [source, setSource] = useState<string | null>(null);
@@ -338,8 +342,10 @@ export function LibraryView({
           <Button type="submit" size="sm">{t("library.sync")}</Button>
         </form>
       ) : null}
-      {rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
-      <div ref={listRef} className="max-h-[36rem] overflow-auto">
+      {phase === "loading" ? <LibrarySkeleton /> : null}
+      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "ready" && rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
+      {phase === "ready" ? <div ref={listRef} className="max-h-[36rem] overflow-auto">
       <ul data-testid="library-cards" data-layout={layout} className={layout === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" : "space-y-2"}>
         {rendered.map((skill) => (
           <li key={skill.id}>
@@ -438,7 +444,7 @@ export function LibraryView({
           </li>
         ))}
       </ul>
-      </div>
+      </div> : null}
       {open ? (
         <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
           <div className="inline-flex rounded-lg bg-muted p-0.5">

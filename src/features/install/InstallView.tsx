@@ -1,12 +1,14 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
 import { listScanRows, type GitPreview, type GitPreviewSkill } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
 import { t } from "@/lib/i18n";
-import { Screen } from "@/components/chrome";
+import { Screen, StatePanel } from "@/components/chrome";
+import { InstallSkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { Card } from "@/components/ui/card";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
@@ -33,6 +35,8 @@ export function InstallView({
   onInstallArchive: (path: string) => void | Promise<void>;
   marketplaceReachable?: boolean;
 }) {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "local";
   const [url, setUrl] = useState("");
@@ -77,8 +81,10 @@ export function InstallView({
           </Button>
         ))}
       </div>
-      {active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
-      {active === "local" ? (
+      {phase === "loading" ? <InstallSkeleton /> : null}
+      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "ready" && active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
+      {phase === "ready" && active === "local" ? (
         <form
           className="max-w-xl"
           onSubmit={(event) => {
@@ -116,7 +122,7 @@ export function InstallView({
           </Card>
         </form>
       ) : null}
-      {active === "git" ? (
+      {phase === "ready" && active === "git" ? (
         <form
           className="max-w-xl space-y-3 rounded-lg border border-border bg-card p-4"
           onSubmit={(event) => {
@@ -169,7 +175,7 @@ export function InstallView({
           ) : null}
         </form>
       ) : null}
-      {active === "scan" ? (
+      {phase === "ready" && active === "scan" ? (
         <div className="mt-4">
           <ul>
             {scanRows.map((row) => {

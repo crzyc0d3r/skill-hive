@@ -2,14 +2,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { EmptyState, Screen } from "@/components/chrome";
-import { useEffect, useState } from "react";
+import { EmptyState, Screen, StatePanel } from "@/components/chrome";
+import { AgentListSkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { useContext, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { t } from "@/lib/i18n";
 import { demoEnabled } from "@/lib/demo";
 import { agentBudget, ensureAgent, importAgent, useAuthoring } from "@/lib/authoring/store";
 
 export function AgentsView() {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const authoring = useAuthoring();
   const [importName, setImportName] = useState("reviewer");
   const [collision, setCollision] = useState(false);
@@ -44,8 +48,10 @@ export function AgentsView() {
         <Input aria-label={t("agents.import")} value={importName} onChange={(event) => setImportName(event.target.value)} className="h-8 w-56" />
         <Button type="submit" size="sm">{t("agents.import")}</Button>
       </form>
-      {agents.length === 0 ? <EmptyState title={t("agents.title")} /> : null}
-      <ul className="grid gap-2 sm:grid-cols-2">
+      {phase === "loading" ? <AgentListSkeleton /> : null}
+      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "ready" && agents.length === 0 ? <EmptyState title={t("agents.title")} /> : null}
+      {phase === "ready" ? <ul className="grid gap-2 sm:grid-cols-2">
         {agents.map((agent) => (
           <li key={agent.id}>
             <Card className="flex-row items-center justify-between rounded-lg border-border px-3 py-3 shadow-none">
@@ -54,7 +60,7 @@ export function AgentsView() {
             </Card>
           </li>
         ))}
-      </ul>
+      </ul> : null}
       {collision ? (
         <div role="dialog" aria-label={t("agents.collision")} className="mt-3 rounded-md border border-border p-3">
           <p>{t("agents.collision")}</p>

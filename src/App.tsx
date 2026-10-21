@@ -2,8 +2,6 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tan
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { LoadingFrame } from "@/components/chrome";
-import { previewPhase } from "@/lib/view-state";
 import { APP_ROUTES } from "./app/routes";
 import { AppShell, type ShellOutletContext } from "./components/shell/AppShell";
 import { bindFileWatcher } from "./lib/events/files";
@@ -219,34 +217,6 @@ function SettingsPage() {
   );
 }
 
-function testIdFor(path: string): string {
-  if (path === "/") return "dashboard";
-  if (path === "/settings") return "settings";
-  if (path === "/my-skills") return "library";
-  if (path === "/install") return "install";
-  if (path.startsWith("/global-workspace") || path.startsWith("/lobster")) return "global-workspace";
-  if (path === "/backup") return "backup";
-  if (path === "/project/:id") return "project";
-  if (path === "/agents") return "agents";
-  if (path.includes("/edit")) return path.includes("agent") ? "agent-editor" : "skill-editor";
-  if (path.includes("endpoints") || path === "/providers") return "endpoints";
-  if (path.includes("tests") || path.startsWith("/testing")) return "suite";
-  if (path.includes("runs")) return "results";
-  if (path.startsWith("/generate")) return "generate";
-  if (path.startsWith("/compare")) return "compare";
-  if (path === "/effectiveness") return "effectiveness";
-  if (path.includes("history")) return "history";
-  return "screen";
-}
-
-function Gated({ testId, children }: { testId: string; children: ReactNode }) {
-  const { dataPhase, retryData } = useOutletContext<ShellOutletContext>();
-  const forced = previewPhase();
-  if (forced === "loading" || dataPhase === "loading") return <LoadingFrame testId={testId} onRetry={retryData} />;
-  if (dataPhase === "error") return <LoadingFrame testId={testId} phase="error" onRetry={retryData} />;
-  return children;
-}
-
 function screenFor(path: string) {
   let page: ReactNode = <PlaceholderView />;
   if (path === "/") page = <DashboardPage />;
@@ -268,7 +238,7 @@ function screenFor(path: string) {
   else if (path === "/effectiveness") page = <EffectivenessView />;
   else if (path === "/skills/:id/history" || path === "/agents/:id/history") page = <HistoryView />;
   else if (path === "/dev/tokens") page = <TokensView />;
-  return <Gated testId={testIdFor(path)}>{page}</Gated>;
+  return page;
 }
 
 function LobsterPage() {

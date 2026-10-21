@@ -27,6 +27,7 @@ async function prepare(page: Page, theme: "light" | "dark", width: number) {
 
 async function shoot(page: Page, theme: "light" | "dark", name: string, width: number) {
   await expect(page.getByTestId("loading-state")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Loading" })).toHaveCount(0);
   await expect(page.getByTestId("status-bar")).toContainText("Skill Hive");
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
   const overflow = await page.evaluate(
@@ -58,7 +59,12 @@ for (const theme of ["light", "dark"] as const) {
     await prepare(page, theme, 1100);
     await page.goto("/?job=sync");
     await expect(page.getByTestId("dashboard")).toBeVisible();
-    await expect(page.getByTestId("job-progress")).toBeVisible();
+    const job = page.getByTestId("job-progress");
+    await expect(job).toBeVisible();
+    await expect(job).toContainText("Syncing skills…");
+    await expect(job).toContainText("40%");
+    await expect(job).toContainText("2 of 5");
+    await expect(job.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "40");
     await expect(page.getByRole("button", { name: "Cancel" })).toBeEnabled();
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Panel, Screen, Stat, StatePanel } from "@/components/chrome";
+import { EffectivenessSkeleton } from "@/components/skeletons";
 import { t } from "@/lib/i18n";
 import { demoEnabled } from "@/lib/demo";
 import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
@@ -45,51 +46,61 @@ export function EffectivenessView() {
   const forced = previewPhase();
   const online = useOnline();
   const [report, setReport] = useState<EffectivenessReport | null>(() => (demoEnabled() && !previewPhase() ? SAMPLE_REPORT : null));
+  const reportRef = useRef(report);
+  reportRef.current = report;
   const [phase, setPhase] = useState<ViewPhase>(() => previewPhase() ?? (demoEnabled() ? "ready" : "loading"));
+  const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (forced) {
       setPhase(forced);
+      setRefreshing(false);
       setReport(null);
       return;
     }
     if (demoEnabled()) {
       setReport(SAMPLE_REPORT);
       setPhase("ready");
+      setRefreshing(false);
       return;
     }
     if (!online) {
-      setReport(null);
       setPhase("offline");
+      setRefreshing(false);
       return;
     }
     let cancel = false;
-    setPhase("loading");
+    if (reportRef.current) setRefreshing(true);
+    else setPhase("loading");
     void invoke<string>("get_effectiveness_report")
       .then((raw) => {
         if (cancel) return;
+        setRefreshing(false);
         if (!raw) {
-          setReport(null);
-          setPhase("empty");
+          if (!reportRef.current) setReport(null);
+          setPhase(reportRef.current ? "ready" : "empty");
           return;
         }
         try {
           const parsed = JSON.parse(raw) as EffectivenessReport;
           if (!parsed.grade) {
-            setReport(null);
-            setPhase("empty");
+            if (!reportRef.current) setReport(null);
+            setPhase(reportRef.current ? "ready" : "empty");
             return;
           }
           setReport(parsed);
           setPhase("ready");
         } catch {
-          setPhase("error");
+          if (!reportRef.current) setPhase("error");
+          else setPhase("ready");
         }
       })
       .catch(() => {
-        if (!cancel) setPhase("error");
+        if (cancel) return;
+        setRefreshing(false);
+        if (!reportRef.current) setPhase("error");
       });
     return () => {
       cancel = true;
@@ -103,10 +114,15 @@ export function EffectivenessView() {
       </Button>
     ) : null;
 
-  if (phase !== "ready" || !report) {
+  if (!report) {
     return (
-      <Screen testId="effectiveness" className="min-h-[calc(100dvh-8.5rem)]" title={t("effect.title")}>
-        <StatePanel tone={phase === "ready" ? "empty" : phase} title={phaseCopy(phase === "ready" ? "empty" : phase)} action={retry} />
+      <Screen
+        testId="effectiveness"
+        className="min-h-[calc(100dvh-8.5rem)]"
+        title={t("effect.title")}
+        actions={<Button type="button" size="sm" disabled={phase === "loading"} aria-busy={phase === "loading"}>{t("effect.show")}</Button>}
+      >
+        {phase === "loading" ? <EffectivenessSkeleton /> : <StatePanel tone={phase === "ready" ? "empty" : phase} title={phaseCopy(phase === "ready" ? "empty" : phase)} action={retry} />}
       </Screen>
     );
   }
@@ -119,7 +135,7 @@ export function EffectivenessView() {
       title={t("effect.title")}
       lede={open ? undefined : verdictText(code)}
       actions={
-        <Button type="button" size="sm" onClick={() => setOpen((value) => !value)}>
+        <Button type="button" size="sm" aria-busy={refreshing} disabled={refreshing} onClick={() => { if (!refreshing) setOpen((value) => !value); }}>
           {open ? t("effect.hide") : t("effect.show")}
         </Button>
       }

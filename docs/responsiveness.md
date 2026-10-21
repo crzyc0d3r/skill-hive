@@ -36,7 +36,7 @@ Long jobs emit `job-progress` (library load, scan, install, import, backup sync,
 
 ## Loading states
 
-Every routed screen renders a loading frame with skeleton blocks when `?state=loading` is set, or when the live skill query is still pending outside demo mode. Query failures render the same frame with Retry. Action buttons set `aria-busy` and show a spinner while they are disabled.
+Each data screen keeps its real title and the chrome that does not depend on the query (search, filters, tabs, toolbars). Only the data region is a skeleton shaped like that screen: skill cards on Library, stat cards and activity rows on Dashboard, table rows on History, a chart outline on Effectiveness and Results. The bones use a shimmer that stops under `prefers-reduced-motion` and when the appearance setting turns motion off. A refresh that already has data keeps that data and spins the action button. The job banner reads as a sentence with the percent and the item count, for example `Syncing skills… 40% · 2 of 5`, and the bar is an accessible progressbar.
 
 Screenshots, light and dark, at 1100×640 and 1440×860:
 

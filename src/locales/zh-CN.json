@@ -490,5 +490,13 @@
   "shell.offline": "当前离线",
   "shell.empty": "这里还没有内容",
   "shell.progress": "{job}",
-  "shell.cancel": "取消"
+  "shell.cancel": "取消",
+  "job.sync": "正在同步技能…",
+  "job.library": "正在读取技能库…",
+  "job.scan": "正在扫描技能…",
+  "job.install": "正在安装技能…",
+  "job.import": "正在导入技能…",
+  "job.effectiveness": "正在运行效果测试…",
+  "job.working": "正在处理…",
+  "job.count": "{current}/{total}"
 }

@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    {
+      "id": "n1_critique",
+      "kind": "code",
+      "scope": "Write the side-by-side critique of the shaped loading skeletons and the job banner.",
+      "reads": ["docs/responsiveness.md", "src/components/skeletons.tsx"],
+      "run": "python3 automations/loading-chrome/code/write_critique.py",
+      "writes": "automations/loading-chrome/out/critique.md",
+      "check": {"cmd": "python3 automations/loading-chrome/code/check_critique.py"},
+      "deps": [],
+      "risky": false
+    }
+  ]
+}

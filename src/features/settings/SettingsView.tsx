@@ -1,8 +1,10 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Screen } from "@/components/chrome";
+import { Screen, StatePanel } from "@/components/chrome";
+import { SettingsSkeleton } from "@/components/skeletons";
+import { RetryContext, useShellPhase } from "@/lib/view-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { AgentRow } from "@/lib/ipc/catalog";
 import { applyTextSize, setLocale, t, type TextSize } from "@/lib/i18n";
@@ -44,6 +46,8 @@ export function SettingsView({
   onAgents: (agents: AgentRow[]) => void | Promise<void>;
   onResetPath: (key: string) => Promise<string> | string;
 }) {
+  const phase = useShellPhase();
+  const retry = useContext(RetryContext);
   const [params, setParams] = useSearchParams();
   const tab = TABS.includes((params.get("tab") ?? "appearance") as (typeof TABS)[number])
     ? ((params.get("tab") ?? "appearance") as (typeof TABS)[number])
@@ -56,6 +60,7 @@ export function SettingsView({
   const [updateNote, setUpdateNote] = useState<string | null>(null);
   const [updateAction, setUpdateAction] = useState<"install" | "download" | null>(null);
   const [refreshed, setRefreshed] = useState(false);
+  const [agentRefresh, setAgentRefresh] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [motion, setMotion] = useState(false);
   const [proxy, setProxy] = useState("");
@@ -111,7 +116,9 @@ export function SettingsView({
           </Button>
         ))}
       </div>
-      {tab === "keyboard" ? (
+      {phase === "loading" ? <SettingsSkeleton /> : null}
+      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "ready" && tab === "keyboard" ? (
         <div className="mt-4">
           <h2 className="text-sm font-medium">{t("shortcuts.editor")}</h2>
           <Table className="mt-2">
@@ -132,7 +139,7 @@ export function SettingsView({
           </Table>
         </div>
       ) : null}
-      {tab === "appearance" ? (
+      {phase === "ready" && tab === "appearance" ? (
         <div className="mt-4">
           <h2 className="text-sm font-medium">{t("settings.appearance")}</h2>
           <div role="group" aria-label="Theme" className="mt-2 flex gap-2">
@@ -160,7 +167,7 @@ export function SettingsView({
           </div>
         </div>
       ) : null}
-      {tab === "general" ? (
+      {phase === "ready" && tab === "general" ? (
         <form
           className="mt-4 space-y-2"
           onSubmit={(event) => {
@@ -215,12 +222,12 @@ export function SettingsView({
           </div>
         </form>
       ) : null}
-      {tab === "agents" ? (
+      {phase === "ready" && tab === "agents" ? (
         <div className="mt-4">
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: true }))); void setAllToolsEnabled(true); }}>{t("settings.agents.enableAll")}</Button>
             <Button type="button" variant="outline" size="sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: false }))); void setAllToolsEnabled(false); }}>{t("settings.agents.disableAll")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => { setRefreshed(true); void silent<string[]>("get_tool_order_cmd"); }}>{t("settings.agents.refresh")}</Button>
+            <Button type="button" variant="outline" size="sm" disabled={agentRefresh} aria-busy={agentRefresh} onClick={() => { setAgentRefresh(true); setRefreshed(true); void silent<string[]>("get_tool_order_cmd").finally(() => setAgentRefresh(false)); }}>{t("settings.agents.refresh")}</Button>
           </div>
           {refreshed ? <p role="status">{t("settings.agents.refreshed")}</p> : null}
           <form
@@ -276,7 +283,7 @@ export function SettingsView({
           </ul>
         </div>
       ) : null}
-      {tab === "backup" ? (
+      {phase === "ready" && tab === "backup" ? (
         <div className="mt-4 space-y-2 text-sm">
           <p>{t("backup.advanced")}</p>
           <label className="block">
@@ -298,7 +305,7 @@ export function SettingsView({
           <p className="text-muted-foreground">{t("settings.engine.note")}</p>
         </div>
       ) : null}
-      {tab === "about" ? (
+      {phase === "ready" && tab === "about" ? (
         <div className="mt-4 text-sm">
           <p>{t("settings.about.version")} {versionLine}</p>
           {diagnostics ? <p>{diagnostics}</p> : null}
