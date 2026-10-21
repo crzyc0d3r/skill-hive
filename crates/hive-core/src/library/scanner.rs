@@ -64,7 +64,19 @@ pub fn scan_roots_with_central(
         }
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(found)
+    let mut grouped = Vec::new();
+    for skill in found {
+        if let Some(existing) = grouped.iter_mut().find(|row: &&mut ScannedSkill| {
+            row.name.eq_ignore_ascii_case(&skill.name)
+        }) {
+            if skill.already_managed {
+                existing.already_managed = true;
+            }
+            continue;
+        }
+        grouped.push(skill);
+    }
+    Ok(grouped)
 }
 
 pub fn collect_flat(root: &Path) -> Vec<PathBuf> {
@@ -154,7 +166,11 @@ pub fn import_all(
     scanned: &[ScannedSkill],
 ) -> Result<Vec<String>> {
     let mut names = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for skill in scanned.iter().filter(|s| !s.already_managed) {
+        if !seen.insert(skill.name.to_ascii_lowercase()) {
+            continue;
+        }
         names.push(import_scanned(store, skills_root, skill, None)?);
     }
     Ok(names)

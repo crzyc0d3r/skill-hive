@@ -61,6 +61,7 @@ export function SettingsView({
   const [updateAction, setUpdateAction] = useState<"install" | "download" | null>(null);
   const [refreshed, setRefreshed] = useState(false);
   const [agentRefresh, setAgentRefresh] = useState(false);
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [motion, setMotion] = useState(false);
   const [proxy, setProxy] = useState("");
@@ -242,8 +243,10 @@ export function SettingsView({
             <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</Button>
             <Button type="submit" size="sm">{t("settings.agents.new")}</Button>
           </form>
+          <Button type="button" variant="outline" size="sm" className="mt-3" aria-pressed={showAllAgents} onClick={() => setShowAllAgents((current) => !current)}>{t("settings.agents.showAll")}</Button>
+          <p className="mt-2 text-sm text-muted-foreground">{showAllAgents ? t("settings.agents.showingAll") : t("settings.agents.detected")}</p>
           <ul data-testid="agent-order" className="mt-3 space-y-2">
-            {agents.map((agent) => (
+            {(showAllAgents ? agents : agents.filter((agent) => agent.installed)).map((agent) => (
               <li
                 key={agent.key}
                 draggable

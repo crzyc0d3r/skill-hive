@@ -1,4 +1,4 @@
-import { fileDiffs, filterSkills, lcsDiff, moveById, presetFill, presetLabel, type SkillCard } from "./model";
+import { fileDiffs, filterSkills, groupSkillCards, lcsDiff, moveById, presetFill, presetLabel, type SkillCard } from "./model";
 
 const skills: SkillCard[] = [
   {
@@ -45,6 +45,18 @@ describe("library filter and diff", () => {
       { kind: "del", text: "left" },
       { kind: "add", text: "right" },
     ]);
+  });
+
+  it("collapses the same skill name into one card", () => {
+    const copies: SkillCard[] = [
+      { ...skills[0], id: "one", name: "Autopilot", agents: ["claude_code"], locations: ["/a"] },
+      { ...skills[0], id: "two", name: "autopilot", agents: ["codex"], locations: ["/b"] },
+      { ...skills[1], id: "three", name: "Other", agents: [], locations: [] },
+    ];
+    const grouped = groupSkillCards(copies);
+    expect(grouped.map((skill) => skill.id)).toEqual(["one", "three"]);
+    expect(grouped[0].agents).toEqual(["claude_code", "codex"]);
+    expect(grouped[0].locations).toEqual(["/a", "/b"]);
   });
 
   it("labels preset fill", () => {

@@ -19,6 +19,22 @@ export interface SkillCard {
   draft?: boolean;
   updatedAt?: number;
   updateStatus?: string;
+  locations?: string[];
+}
+
+export function groupSkillCards(skills: SkillCard[]): SkillCard[] {
+  const grouped: SkillCard[] = [];
+  for (const skill of skills) {
+    const key = skill.name.trim().toLowerCase();
+    const existing = grouped.find((row) => row.name.trim().toLowerCase() === key);
+    if (!existing) {
+      grouped.push({ ...skill, agents: [...skill.agents], locations: [...(skill.locations ?? [])], tags: [...skill.tags] });
+      continue;
+    }
+    existing.agents = [...new Set([...existing.agents, ...skill.agents])];
+    existing.locations = [...new Set([...(existing.locations ?? []), ...(skill.locations ?? [])])];
+  }
+  return grouped;
 }
 
 export type LibraryFilter = "all" | "enabled" | "available";

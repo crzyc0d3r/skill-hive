@@ -1,13 +1,16 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckIcon, GripVerticalIcon, LayoutGridIcon, ListIcon, MoreHorizontalIcon, PlusIcon, XIcon } from "lucide-react";
-import { fileDiffs, lcsDiff, filterSkills, moveById, type LibraryFilter, type SkillCard, type SkillFile } from "@/features/library/model";
+import { fileDiffs, lcsDiff, filterSkills, groupSkillCards, moveById, type LibraryFilter, type SkillCard, type SkillFile } from "@/features/library/model";
 import { useDebounced } from "@/lib/use-debounced";
 import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
 import { applyAvailableSkillUpdates, checkSkillUpdate, silent } from "@/lib/ipc/actions";
+import { listAgents, type AgentRow } from "@/lib/ipc/catalog";
+import { agentDisplayName, agentIcon, detectedAgents } from "@/lib/agents";
+import { useVirtualGrid } from "@/lib/virtual-grid";
 import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
@@ -23,14 +26,91 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 const menuItem = "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground";
 
-function sameCards(current: SkillCard[], next: SkillCard[]) {
-  return current.length === next.length && current.every((item, index) => item === next[index]);
-}
-
-function agentLabel(agent: string) {
-  if (agent === "claude_code") return "Claude";
-  if (agent === "codex") return "Codex";
-  return agent;
+function AgentPlacement({
+  skill,
+  agents,
+  showAll,
+  query,
+  onQuery,
+  onShowAll,
+  onToggle,
+}: {
+  skill: SkillCard;
+  agents: AgentRow[];
+  showAll: boolean;
+  query: string;
+  onQuery: (value: string) => void;
+  onShowAll: () => void;
+  onToggle: (agent: string) => void;
+}) {
+  const installedKeys = new Set(skill.agents);
+  const installed = [
+    ...agents.filter((agent) => installedKeys.has(agent.key)),
+    ...skill.agents.filter((key) => !agents.some((agent) => agent.key === key)).map((key) => ({ key, name: agentDisplayName(key, agents) })),
+  ];
+  const needle = query.trim().toLowerCase();
+  const choices = (showAll ? agents : detectedAgents(agents)).filter((agent) => {
+    if (installedKeys.has(agent.key)) return false;
+    if (!needle) return true;
+    return agent.name.toLowerCase().includes(needle);
+  });
+  return (
+    <div className="mt-3 space-y-3" data-testid="agent-placement">
+      <div>
+        <h2 className="text-sm font-medium">{t("library.installedIn")}</h2>
+        {installed.length === 0 ? <p className="mt-1 text-sm text-muted-foreground">{t("library.installedNone")}</p> : null}
+        <ul className="mt-2 space-y-2">
+          {installed.map((agent) => {
+            const Icon = agentIcon(agent.key);
+            return (
+              <li key={agent.key} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm">
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                <span className="font-medium">{agent.name}</span>
+                <span className="text-muted-foreground">{t("install.installed")}</span>
+                <Button type="button" variant="ghost" size="sm" className="ml-auto" aria-label={`${t("library.removeAgent")} ${agent.name}`} onClick={() => onToggle(agent.key)}>
+                  {t("library.removeAgent")}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+        {(skill.locations?.length ?? 0) > 1 ? (
+          <details className="mt-2 text-sm">
+            <summary>{t("library.locations", { count: String(skill.locations?.length ?? 0) })}</summary>
+            <ul className="mt-1 space-y-1 font-mono text-xs text-muted-foreground">
+              {skill.locations?.map((path) => (
+                <li key={path}>{path}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" size="sm">{t("library.addAgent")}</Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-2" align="start">
+          <Input aria-label={t("library.addAgent.search")} value={query} onChange={(event) => onQuery(event.target.value)} className="h-8" />
+          <ul className="mt-2 max-h-56 space-y-1 overflow-auto">
+            {choices.map((agent) => {
+              const Icon = agentIcon(agent.key);
+              return (
+                <li key={agent.key}>
+                  <button type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => onToggle(agent.key)}>
+                    <Icon className="size-4" aria-hidden="true" />
+                    {agent.name}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <Button type="button" variant="ghost" size="sm" className="mt-1" aria-pressed={showAll} onClick={onShowAll}>
+            {t("library.showAllAgents")}
+          </Button>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
 }
 
 export function LibraryView({
@@ -90,12 +170,14 @@ export function LibraryView({
   const [dragId, setDragId] = useState<string | null>(null);
   const [batchTag, setBatchTag] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
-  const [catalogAgents, setCatalogAgents] = useState<string[]>([]);
+  const [catalogAgents, setCatalogAgents] = useState<AgentRow[]>([]);
+  const [showAllAgents, setShowAllAgents] = useState(false);
+  const [agentQuery, setAgentQuery] = useState("");
   const [sourceRef, setSourceRef] = useState<string | null>(null);
   const { seed } = useGenerate();
   useEffect(() => {
-    void silent<{ key: string }[]>("get_tool_status").then((rows) => {
-      if (Array.isArray(rows)) setCatalogAgents(rows.map((row) => row.key));
+    void listAgents().then((rows) => {
+      if (Array.isArray(rows)) setCatalogAgents(rows);
     });
   }, []);
   useEffect(() => {
@@ -137,32 +219,14 @@ export function LibraryView({
   }, [openId, tab, skills, fileMap]);
 
   const debouncedQuery = useDebounced(query, 150);
-  const sources = useMemo(() => [...new Set(skills.map((skill) => skill.source))], [skills]);
-  const tags = useMemo(() => [...new Set(skills.flatMap((skill) => skill.tags))], [skills]);
-  const visible = filterSkills(skills, debouncedQuery, filter, source, tag);
-  const open = skills.find((skill) => skill.id === openId) ?? null;
+  const grouped = useMemo(() => groupSkillCards(skills), [skills]);
+  const sources = useMemo(() => [...new Set(grouped.map((skill) => skill.source))], [grouped]);
+  const tags = useMemo(() => [...new Set(grouped.flatMap((skill) => skill.tags))], [grouped]);
+  const visible = useMemo(() => filterSkills(grouped, debouncedQuery, filter, source, tag), [grouped, debouncedQuery, filter, source, tag]);
+  const grid = useVirtualGrid(visible, layout);
+  const open = grouped.find((skill) => skill.id === openId) ?? null;
   const openBody = open && !open.body && detail?.id === open.id ? detail.body : (open?.body ?? "");
-  const listRef = useRef<HTMLDivElement>(null);
-  const [windowed, setWindowed] = useState(visible);
-  useEffect(() => {
-    const node = listRef.current;
-    if (!node || node.clientHeight < 40) {
-      setWindowed((current) => (sameCards(current, visible) ? current : visible));
-      return;
-    }
-    const row = layout === "grid" ? 196 : 92;
-    const paint = () => {
-      const start = Math.max(0, Math.floor(node.scrollTop / row) - 1);
-      const count = Math.ceil(node.clientHeight / row) + 3;
-      const perRow = layout === "grid" ? 3 : 1;
-      const next = visible.slice(start * perRow, (start + count) * perRow);
-      setWindowed((current) => (sameCards(current, next) ? current : next));
-    };
-    paint();
-    node.addEventListener("scroll", paint);
-    return () => node.removeEventListener("scroll", paint);
-  }, [visible, layout]);
-  const rendered = windowed;
+  const rendered = grid.rendered;
   const members = memberIds.map((id) => skills.find((skill) => skill.id === id)?.name ?? id);
   const showChecks = selecting || selected.length > 0;
 
@@ -332,23 +396,35 @@ export function LibraryView({
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
-            const agents = ["claude_code", "codex"].filter((agent) => data.get(agent) === "on");
-            onSync(selected, agents);
+            const chosen = (showAllAgents ? catalogAgents : detectedAgents(catalogAgents))
+              .filter((agent) => data.get(agent.key) === "on")
+              .map((agent) => agent.key);
+            onSync(selected, chosen);
             setSyncOpen(false);
           }}
         >
-          <label className="mr-3 text-sm"><input type="checkbox" name="claude_code" /> Claude Code</label>
-          <label className="mr-3 text-sm"><input type="checkbox" name="codex" /> Codex</label>
+          {(showAllAgents ? catalogAgents : detectedAgents(catalogAgents)).map((agent) => (
+            <label key={agent.key} className="mr-3 text-sm">
+              <input type="checkbox" name={agent.key} /> {agent.name}
+            </label>
+          ))}
+          <Button type="button" variant="ghost" size="sm" aria-pressed={showAllAgents} onClick={() => setShowAllAgents((current) => !current)}>{t("library.showAllAgents")}</Button>
           <Button type="submit" size="sm">{t("library.sync")}</Button>
         </form>
       ) : null}
       {phase === "loading" ? <LibrarySkeleton /> : null}
       {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
       {phase === "ready" && rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
-      {phase === "ready" ? <div ref={listRef} className="max-h-[36rem] overflow-auto">
-      <ul data-testid="library-cards" data-layout={layout} className={layout === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" : "space-y-2"}>
+      {phase === "ready" ? <div ref={grid.ref} className="max-h-[36rem] overflow-auto">
+      <ul
+        data-testid="library-cards"
+        data-layout={layout}
+        data-columns={grid.columns}
+        className={layout === "grid" ? "grid gap-3" : "space-y-2"}
+        style={layout === "grid" ? { gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))` } : undefined}
+      >
         {rendered.map((skill) => (
-          <li key={skill.id}>
+          <li key={skill.id} data-virtual-card="">
             <Card className={cn("group/card gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "flex-row")}>
               <div className="flex items-start gap-2.5 px-3 pt-3">
                 <input
@@ -429,12 +505,13 @@ export function LibraryView({
                   {memberIds.includes(skill.id) ? <span className="truncate text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
                 <div className="flex gap-1" data-testid={`sync-dots-${skill.id}`}>
-                  {[...new Set(["claude_code", "codex", ...catalogAgents, ...skill.agents])].map((agent) => {
-                    const filled = skill.agents.includes(agent);
+                  {detectedAgents(catalogAgents).map((agent) => {
+                    const filled = skill.agents.includes(agent.key);
+                    const Icon = agentIcon(agent.key);
                     return (
-                      <button key={agent} type="button" data-filled={filled ? "true" : "false"} title={agent} className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" onClick={() => onToggleAgent(skill.id, agent)}>
+                      <button key={agent.key} type="button" data-filled={filled ? "true" : "false"} title={agent.name} aria-label={agent.name} className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" onClick={() => onToggleAgent(skill.id, agent.key)}>
+                        <Icon className="size-3" aria-hidden="true" />
                         <span className={cn("size-1.5 rounded-full", filled ? "bg-primary" : "bg-muted-foreground/40")} aria-hidden="true" />
-                        {agentLabel(agent)}
                       </button>
                     );
                   })}
@@ -454,13 +531,15 @@ export function LibraryView({
               </Button>
             ))}
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {[...new Set(["claude_code", "codex", ...catalogAgents, ...open.agents])].map((agent) => (
-              <Button key={agent} type="button" aria-pressed={open.agents.includes(agent)} variant={open.agents.includes(agent) ? "secondary" : "outline"} size="sm" onClick={() => onToggleAgent(open.id, agent)}>
-                {agent}
-              </Button>
-            ))}
-          </div>
+          <AgentPlacement
+            skill={open}
+            agents={catalogAgents}
+            showAll={showAllAgents}
+            query={agentQuery}
+            onQuery={setAgentQuery}
+            onShowAll={() => setShowAllAgents((current) => !current)}
+            onToggle={(agent) => onToggleAgent(open.id, agent)}
+          />
           {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
           {tab === "local" && open && !open.body && detail?.id !== open.id ? <div data-testid="detail-loading" className="mt-3 h-24 animate-pulse rounded-md bg-muted" /> : null}
           {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{openBody}</pre> : null}

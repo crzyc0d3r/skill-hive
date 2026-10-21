@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
 import { listScanRows, type GitPreview, type GitPreviewSkill } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
+import { agentDisplayName } from "@/lib/agents";
 import { t } from "@/lib/i18n";
 import { Screen, StatePanel } from "@/components/chrome";
 import { InstallSkeleton } from "@/components/skeletons";
@@ -13,6 +14,25 @@ import { Card } from "@/components/ui/card";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
 const TABS = ["leaderboard", "local", "git", "scan"] as const;
+
+interface GroupedScan extends ScanRow {
+  tools: string[];
+  paths: string[];
+}
+
+function groupedScans(rows: ScanRow[]): GroupedScan[] {
+  const grouped: GroupedScan[] = [];
+  for (const row of rows) {
+    const existing = grouped.find((item) => item.name.trim().toLowerCase() === row.name.trim().toLowerCase());
+    if (!existing) {
+      grouped.push({ ...row, tools: [row.tool], paths: [row.path] });
+      continue;
+    }
+    if (!existing.tools.includes(row.tool)) existing.tools.push(row.tool);
+    if (!existing.paths.includes(row.path)) existing.paths.push(row.path);
+  }
+  return grouped;
+}
 
 export function InstallView({
   scanned,
@@ -178,15 +198,21 @@ export function InstallView({
       {phase === "ready" && active === "scan" ? (
         <div className="mt-4">
           <ul>
-            {scanRows.map((row) => {
+            {groupedScans(scanRows).map((row) => {
               const name = scanNames[row.name] ?? row.name;
               return (
-                <li key={`${row.tool}-${row.name}`} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <span>{row.tool}</span>
+                <li key={row.name} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                  <span>{row.tools.map((tool) => agentDisplayName(tool)).join(", ")}</span>
+                  {row.paths.length > 1 ? <span className="text-muted-foreground">{t("install.scan.locations", { count: String(row.paths.length) })}</span> : null}
                   <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} className="h-8" />
                   <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
                     {t("install.scan.one")} {row.name}
                   </Button>
+                  {row.paths.length > 1 ? (
+                    <ul className="w-full font-mono text-xs text-muted-foreground">
+                      {row.paths.map((path) => <li key={path}>{path}</li>)}
+                    </ul>
+                  ) : null}
                 </li>
               );
             })}

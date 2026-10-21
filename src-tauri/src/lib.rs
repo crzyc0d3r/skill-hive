@@ -18,6 +18,7 @@ mod parity_skills;
 mod parity_workspace;
 mod progress;
 mod tray;
+mod webview_watch;
 
 struct TauriNotifier(tauri::AppHandle);
 
@@ -88,6 +89,19 @@ fn log_startup_event(label: String, elapsed_ms: u64) {
         sanitized
     };
     log::info!("frontend startup: {display} {elapsed_ms} ms");
+}
+
+#[tauri::command]
+fn log_frontend_error(message: String, stack: String, route: String) {
+    let clean = |value: String, limit: usize| {
+        value.chars().filter(|c| !c.is_control() || *c == '\n').take(limit).collect::<String>()
+    };
+    log::error!(
+        "frontend error route={} message={} stack={}",
+        clean(route, 160),
+        clean(message, 500),
+        clean(stack, 2000)
+    );
 }
 
 #[tauri::command]
@@ -320,6 +334,9 @@ pub fn run() {
                 return Err(box_err(err));
             }
             driver_log("window built");
+            if let Some(main) = app.get_webview_window("main") {
+                webview_watch::watch_process_failures(&main);
+            }
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log::LevelFilter::Info)
@@ -379,6 +396,7 @@ pub fn run() {
             get_settings,
             set_settings,
             log_startup_event,
+            log_frontend_error,
             list_base_entries,
             check_app_update,
             update_install_blocker,

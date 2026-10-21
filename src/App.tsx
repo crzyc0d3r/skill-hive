@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
-import { Navigate, Route, Routes, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { APP_ROUTES } from "./app/routes";
 import { AppShell, type ShellOutletContext } from "./components/shell/AppShell";
@@ -27,10 +27,12 @@ import {
   setCentralRepoPath,
   setSkillTags,
   setSkillsEnabled,
+  silent,
   syncSkillToTool,
   unsyncSkillFromTool,
 } from "@/lib/ipc/actions";
-import type { SkillCard } from "@/features/library/model";
+import { groupSkillCards, type SkillCard } from "@/features/library/model";
+import { RouteErrorBoundary } from "@/components/RouteError";
 import type { WorkspaceCard } from "./features/workspace/WorkspaceView";
 import { PlaceholderView, TokensView } from "./views/Screens";
 import { DashboardView } from "./features/dashboard/DashboardView";
@@ -65,7 +67,7 @@ function LibraryPage() {
   const [params] = useSearchParams();
   const [rows, setRows] = useState(skills);
   useEffect(() => {
-    setRows(skills);
+    setRows(groupSkillCards(skills));
   }, [skills]);
   const preset = presets.find((item) => item.id === activePresetId) ?? presets.find((item) => item.id === "research") ?? presets[0];
   const memberIds = preset?.skillIds ?? [];
@@ -159,9 +161,9 @@ function InstallPage() {
 
 function workspaceCards(skills: SkillCard[], agentKey: string): WorkspaceCard[] {
   const changed = new Set(centerChangedNames());
-  const merged = [...skills];
+  const merged = groupSkillCards(skills);
   for (const draft of draftSkillCards()) {
-    if (!merged.some((skill) => skill.id === draft.id)) merged.push(draft);
+    if (!merged.some((skill) => skill.id === draft.id || skill.name.toLowerCase() === draft.name.toLowerCase())) merged.push(draft);
   }
   return merged.map((skill) => ({
     id: skill.id,
@@ -171,6 +173,7 @@ function workspaceCards(skills: SkillCard[], agentKey: string): WorkspaceCard[] 
     body: skill.body,
     center: skill.sourceBody,
     managed: skill.agents.includes(agentKey),
+    locations: skill.locations ?? [],
   }));
 }
 
@@ -260,6 +263,31 @@ function LobsterPage() {
   );
 }
 
+function FrontendErrorLog() {
+  const route = useLocation().pathname;
+  useEffect(() => {
+    const report = (message: string, stack: string) => {
+      void silent("log_frontend_error", { message, stack, route });
+    };
+    const onError = (event: ErrorEvent) => {
+      const stack = event.error instanceof Error ? event.error.stack ?? "" : "";
+      report(event.message || "error", stack);
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      if (reason instanceof Error) report(reason.message, reason.stack ?? "");
+      else report(String(reason), "");
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, [route]);
+  return null;
+}
+
 export function App({ client }: { client: QueryClient }) {
   const [platform, setPlatform] = useState("linux");
 
@@ -276,6 +304,8 @@ export function App({ client }: { client: QueryClient }) {
   return (
     <QueryClientProvider client={client}>
       <TooltipProvider>
+        <FrontendErrorLog />
+        <RouteErrorBoundary>
         <Routes>
           <Route element={<AppShell platform={platform} />}>
             {APP_ROUTES.map((route) => (
@@ -283,6 +313,7 @@ export function App({ client }: { client: QueryClient }) {
             ))}
           </Route>
         </Routes>
+        </RouteErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );

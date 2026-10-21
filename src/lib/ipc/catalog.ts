@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { DEMO, demoEnabled } from "../demo";
+import { previewAgents, previewAgentsEnabled } from "../agents";
+import { crowdEnabled, crowdSkills, previewLibrary } from "../crowd";
 import type { SkillCard } from "@/features/library/model";
 
 export interface PresetRow {
@@ -43,7 +45,8 @@ async function call<T>(command: string, args: Record<string, unknown>, fallback:
 }
 
 export function listSkills(): Promise<SkillCard[]> {
-  return call("get_managed_skills", {}, demoEnabled() ? DEMO.skills : []);
+  const demoSkills = crowdEnabled() ? crowdSkills() : previewAgentsEnabled() ? previewLibrary() : DEMO.skills;
+  return call("get_managed_skills", {}, demoEnabled() ? demoSkills : []);
 }
 
 export function listPresets(): Promise<PresetRow[]> {
@@ -55,14 +58,23 @@ export function listPresets(): Promise<PresetRow[]> {
 
 export function listAgents(): Promise<AgentRow[]> {
   const fallback = demoEnabled()
-    ? DEMO.agents.map((agent) => ({ ...agent, projectPath: ".agents/skills", custom: false }))
+    ? previewAgentsEnabled()
+      ? previewAgents()
+      : DEMO.agents.map((agent) => ({ ...agent, projectPath: ".agents/skills", custom: false }))
     : [];
   return call("get_tool_status", {}, fallback);
 }
 
 export function listScanned(): Promise<ScanRow[]> {
+  const previewScans = [
+    { name: "autopilot", tool: "claude_code", path: "~/.claude/skills/autopilot" },
+    { name: "autopilot", tool: "codex", path: "~/.codex/skills/autopilot" },
+    { name: "autopilot", tool: "cursor", path: "~/.cursor/skills/autopilot" },
+  ];
   const fallback = demoEnabled()
-    ? DEMO.scanned.map((row) => ({ ...row, path: `~/.${row.tool}/skills/${row.name}` }))
+    ? previewAgentsEnabled()
+      ? previewScans
+      : DEMO.scanned.map((row) => ({ ...row, path: `~/.${row.tool}/skills/${row.name}` }))
     : [];
   return call("scan_local_skills", {}, fallback);
 }

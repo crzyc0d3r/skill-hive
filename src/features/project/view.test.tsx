@@ -20,7 +20,7 @@ it("links a project, shares it, and changes the sidebar dot", async () => {
     await user.click(await screen.findByRole("button", { name: "Link project" }));
     expect(screen.getByTestId("sidebar-project-dot")).toHaveAttribute("data-color", "red");
     await user.click(screen.getByRole("button", { name: "Add to agents" }));
-    expect(screen.getByText(/claude_code, codex/)).toBeInTheDocument();
+    expect(screen.getByText(/Claude Code, Codex/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Toggle skill" }));
     expect(screen.getByTestId("sidebar-project-dot")).toHaveAttribute("data-color", "grey");
     await user.click(screen.getByRole("button", { name: "Toggle skill" }));

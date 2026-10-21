@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { installIpc, renderAt } from "@/test/render-app";
+import { installIpc, renderAt, SKILLS } from "@/test/render-app";
 
 describe("library", () => {
   it("filters, renames a tag, syncs two cards, and opens the diff", async () => {
@@ -86,8 +86,10 @@ describe("library", () => {
     await user.click(screen.getAllByRole("button", { name: "Tags" })[1]);
     expect(screen.getByRole("button", { name: "Remove tag batch" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /research-notes/ }));
-    await user.click(screen.getByRole("button", { name: "claude_code" }));
-    expect(screen.getByRole("button", { name: "claude_code" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Add to agent" }));
+    const addChoices = screen.getAllByRole("button", { name: "Claude Code" });
+    await user.click(addChoices[addChoices.length - 1]);
+    expect(screen.getByRole("button", { name: "Remove Claude Code" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /review-diff/ }));
     await user.click(screen.getByRole("button", { name: "Diff" }));
     expect(screen.getByTestId("file-diff")).toHaveTextContent("SKILL.md");
@@ -95,5 +97,23 @@ describe("library", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select plain" }));
     await user.click(screen.getByRole("button", { name: "Delete selected" }));
     expect(screen.queryByText("plain")).not.toBeInTheDocument();
+  });
+
+  it("renders one card for a duplicated name and keeps a large library windowed", async () => {
+    const skills = Array.from({ length: 520 }, (_, index) => ({
+      ...SKILLS[0],
+      id: `skill-${index}`,
+      name: index < 4 ? "autopilot" : `skill-${index}`,
+      tags: [],
+      agents: index < 4 ? [["claude_code", "codex", "cursor", "windsurf"][index]] : [],
+      locations: index < 4 ? [`/tmp/${index}/autopilot`] : [],
+    }));
+    installIpc(skills);
+    renderAt("/my-skills");
+    expect(await screen.findByText("autopilot")).toBeInTheDocument();
+    expect(screen.getAllByText("autopilot")).toHaveLength(1);
+    const list = document.querySelector("[data-testid='library-cards']");
+    expect(list?.children.length ?? 0).toBeLessThanOrEqual(24);
+    expect(list?.children.length ?? 0).toBeGreaterThan(0);
   });
 });
