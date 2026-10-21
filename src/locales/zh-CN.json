@@ -557,6 +557,5 @@
   "agents.field.import": "导入名称",
   "results.withSkill": "有技能",
   "results.withoutSkill": "无技能",
-  "settings.agents.folders": "更改文件夹…",
   "workspace.preset.hint": "先给预设起名，再创建。"
 }

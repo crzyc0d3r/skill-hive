@@ -557,6 +557,5 @@
   "agents.field.import": "Import name",
   "results.withSkill": "With skill",
   "results.withoutSkill": "Without skill",
-  "settings.agents.folders": "Change folders…",
   "workspace.preset.hint": "Name the preset, then create it."
 }
