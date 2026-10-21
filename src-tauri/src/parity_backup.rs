@@ -158,202 +158,251 @@ fn connect_token(
 }
 
 #[tauri::command]
-pub fn git_backup_fetch(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
-    let path = ensure_repo(store.inner())?;
-    git_backup::fetch_remote(&path).map_err(git)
+pub async fn git_backup_fetch(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = ensure_repo(store.as_ref())?;
+        git_backup::fetch_remote(&path).map_err(git)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_init(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
-    ensure_repo(store.inner()).map(|_| ())
+pub async fn git_backup_init(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || ensure_repo(store.as_ref()).map(|_| ())).await
 }
 
 #[tauri::command]
-pub fn github_backup_connect(
+pub async fn github_backup_connect(
     token: String,
     repo_name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<GithubBackupConnectResult, AppError> {
-    connect_token(store.inner(), token.trim(), repo_name.trim(), "pat")
-}
-
-#[tauri::command]
-pub fn github_device_flow_start() -> Result<DeviceFlowStart, AppError> {
-    let codes = begin_device_flow(&CurlHttp, GITHUB_CLIENT_ID)
-        .map_err(|err| AppError::network(err.to_string()))?;
-    Ok(DeviceFlowStart {
-        device_code: codes.device_code,
-        user_code: codes.user_code,
-        verification_uri: codes.verification_uri,
-        interval: codes.interval,
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        connect_token(store.as_ref(), token.trim(), repo_name.trim(), "pat")
     })
+    .await
 }
 
 #[tauri::command]
-pub fn github_device_flow_poll(
+pub async fn github_device_flow_start() -> Result<DeviceFlowStart, AppError> {
+    crate::offload::offload(move || {
+        let codes = begin_device_flow(&CurlHttp, GITHUB_CLIENT_ID)
+            .map_err(|err| AppError::network(err.to_string()))?;
+        Ok(DeviceFlowStart {
+            device_code: codes.device_code,
+            user_code: codes.user_code,
+            verification_uri: codes.verification_uri,
+            interval: codes.interval,
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn github_device_flow_poll(
     device_code: String,
     repo_name: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<DeviceFlowPoll, AppError> {
-    match poll_device_flow(&CurlHttp, GITHUB_CLIENT_ID, device_code.trim())
-        .map_err(|err| AppError::network(err.to_string()))?
-    {
-        DevicePoll::Pending => Ok(DeviceFlowPoll {
-            status: "pending".into(),
-            result: None,
-        }),
-        DevicePoll::Denied => Ok(DeviceFlowPoll {
-            status: "denied".into(),
-            result: None,
-        }),
-        DevicePoll::Approved { access_token } => Ok(DeviceFlowPoll {
-            status: "connected".into(),
-            result: Some(connect_token(
-                store.inner(),
-                &access_token,
-                repo_name.trim(),
-                "oauth",
-            )?),
-        }),
-    }
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        match poll_device_flow(&CurlHttp, GITHUB_CLIENT_ID, device_code.trim())
+            .map_err(|err| AppError::network(err.to_string()))?
+        {
+            DevicePoll::Pending => Ok(DeviceFlowPoll {
+                status: "pending".into(),
+                result: None,
+            }),
+            DevicePoll::Denied => Ok(DeviceFlowPoll {
+                status: "denied".into(),
+                result: None,
+            }),
+            DevicePoll::Approved { access_token } => Ok(DeviceFlowPoll {
+                status: "connected".into(),
+                result: Some(connect_token(
+                    store.as_ref(),
+                    &access_token,
+                    repo_name.trim(),
+                    "oauth",
+                )?),
+            }),
+        }
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_sanitize_remote_url(url: String) -> Result<String, AppError> {
-    Ok(git_credentials::split_credentials_from_url(url.trim())
-        .map(|(_, clean)| clean)
-        .unwrap_or_else(|| url.trim().to_string()))
+pub async fn git_backup_sanitize_remote_url(url: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        Ok(git_credentials::split_credentials_from_url(url.trim())
+            .map(|(_, clean)| clean)
+            .unwrap_or_else(|| url.trim().to_string()))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_commit(
+pub async fn git_backup_commit(
     message: Option<String>,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    let path = ensure_repo(store.inner())?;
-    let note = message.unwrap_or_else(|| "Backup".into());
-    git_backup::commit_all(&path, &note).map_err(git)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = ensure_repo(store.as_ref())?;
+        let note = message.unwrap_or_else(|| "Backup".into());
+        git_backup::commit_all(&path, &note).map_err(git)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_push(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
-    let path = ensure_repo(store.inner())?;
-    git_backup::push(&path).map_err(git)
+pub async fn git_backup_push(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = ensure_repo(store.as_ref())?;
+        git_backup::push(&path).map_err(git)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_pull(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
-    let path = ensure_repo(store.inner())?;
-    git_backup::pull(&path).map_err(git)
+pub async fn git_backup_pull(store: State<'_, Arc<SkillStore>>) -> Result<(), AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = ensure_repo(store.as_ref())?;
+        git_backup::pull(&path).map_err(git)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_pending_conflicts(
+pub async fn git_backup_pending_conflicts(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<PendingConflictRow>, AppError> {
-    store.inner().list_pending_conflicts().map_err(db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || store.as_ref().list_pending_conflicts().map_err(db)).await
 }
 
 #[tauri::command]
-pub fn git_backup_resolve_conflict(
+pub async fn git_backup_resolve_conflict(
     skill_id: String,
     action: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let chosen = ResolveAction::parse(action.trim()).ok_or_else(|| {
-        AppError::invalid_input("action must be keep_local, use_remote, or keep_both")
-    })?;
-    let path = skills();
-    let _lock = RepoLock::acquire_foreground("resolve backup conflict").map_err(git)?;
-    resolve::resolve_conflict_unlocked(store.inner(), &path, skill_id.trim(), chosen).map_err(git)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let chosen = ResolveAction::parse(action.trim()).ok_or_else(|| {
+            AppError::invalid_input("action must be keep_local, use_remote, or keep_both")
+        })?;
+        let path = skills();
+        let _lock = RepoLock::acquire_foreground("resolve backup conflict").map_err(git)?;
+        resolve::resolve_conflict_unlocked(store.as_ref(), &path, skill_id.trim(), chosen)
+            .map_err(git)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_clone(
+pub async fn git_backup_clone(
     url: String,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<String, AppError> {
-    let path = skills();
-    std::fs::create_dir_all(&path)?;
-    git_backup::clone_into_strict(&path, url.trim()).map_err(git)?;
-    store
-        .inner()
-        .set_setting("git_backup_remote_url", url.trim())
-        .map_err(db)?;
-    Ok(path.to_string_lossy().to_string())
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = skills();
+        std::fs::create_dir_all(&path)?;
+        git_backup::clone_into_strict(&path, url.trim()).map_err(git)?;
+        store
+            .set_setting("git_backup_remote_url", url.trim())
+            .map_err(db)?;
+        Ok(path.to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_reclone(store: State<'_, Arc<SkillStore>>) -> Result<String, AppError> {
-    let path = skills();
-    let status = git_backup::get_status(&path).map_err(git)?;
-    let url = status
-        .remote_url
-        .or_else(|| {
-            store
-                .inner()
-                .get_setting("git_backup_remote_url")
-                .ok()
-                .flatten()
-        })
-        .filter(|url| !url.is_empty())
-        .ok_or_else(|| AppError::invalid_input("No backup remote is configured"))?;
-    let aside = path.with_extension(format!("aside-{}", std::process::id()));
-    if path.exists() {
-        let _ = std::fs::remove_dir_all(&aside);
-        std::fs::rename(&path, &aside).map_err(AppError::io)?;
-    }
-    match git_backup::clone_into(&path, &url) {
-        Ok(()) => {
+pub async fn git_backup_reclone(store: State<'_, Arc<SkillStore>>) -> Result<String, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = skills();
+        let status = git_backup::get_status(&path).map_err(git)?;
+        let url = status
+            .remote_url
+            .or_else(|| store.get_setting("git_backup_remote_url").ok().flatten())
+            .filter(|url| !url.is_empty())
+            .ok_or_else(|| AppError::invalid_input("No backup remote is configured"))?;
+        let aside = path.with_extension(format!("aside-{}", std::process::id()));
+        if path.exists() {
             let _ = std::fs::remove_dir_all(&aside);
-            Ok(path.to_string_lossy().to_string())
+            std::fs::rename(&path, &aside).map_err(AppError::io)?;
         }
-        Err(err) => {
-            let _ = std::fs::remove_dir_all(&path);
-            if aside.exists() {
-                let _ = std::fs::rename(&aside, &path);
+        match git_backup::clone_into(&path, &url) {
+            Ok(()) => {
+                let _ = std::fs::remove_dir_all(&aside);
+                Ok(path.to_string_lossy().to_string())
             }
-            Err(git(err))
+            Err(err) => {
+                let _ = std::fs::remove_dir_all(&path);
+                if aside.exists() {
+                    let _ = std::fs::rename(&aside, &path);
+                }
+                Err(git(err))
+            }
         }
-    }
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn git_backup_create_snapshot(store: State<'_, Arc<SkillStore>>) -> Result<String, AppError> {
-    let path = ensure_repo(store.inner())?;
-    git_backup::create_snapshot_tag(&path).map_err(git)
+pub async fn git_backup_create_snapshot(
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<String, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let path = ensure_repo(store.as_ref())?;
+        git_backup::create_snapshot_tag(&path).map_err(git)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn backup_device_name(store: State<'_, Arc<SkillStore>>) -> Result<String, AppError> {
-    Ok(device_name(store.inner()))
+pub async fn backup_device_name(store: State<'_, Arc<SkillStore>>) -> Result<String, AppError> {
+    let store = store.inner().clone();
+    crate::offload::offload(move || Ok(device_name(store.as_ref()))).await
 }
 
 #[tauri::command]
-pub fn git_backup_size_report() -> Result<BackupSizeReport, AppError> {
-    git_backup::size_report(&skills()).map_err(git)
+pub async fn git_backup_size_report() -> Result<BackupSizeReport, AppError> {
+    crate::offload::offload(move || git_backup::size_report(&skills()).map_err(git)).await
 }
 
 #[tauri::command]
-pub fn git_backup_migrate_credentials(
+pub async fn git_backup_migrate_credentials(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Option<String>, AppError> {
-    let store = store.inner();
-    let url = store
-        .get_setting("git_backup_remote_url")
-        .map_err(db)?
-        .unwrap_or_default();
-    let Some((cred, clean)) = git_credentials::split_credentials_from_url(&url) else {
-        return Ok(None);
-    };
-    let host = git_credentials::https_host(&clean).unwrap_or_else(|| "github.com".into());
-    git_credentials::store_credential(&host, &cred)
-        .map_err(|err| AppError::internal(err.to_string()))?;
-    store
-        .set_setting("git_backup_remote_url", &clean)
-        .map_err(db)?;
-    if skills().join(".git").exists() {
-        git_backup::set_remote(&skills(), &clean).map_err(git)?;
-    }
-    Ok(Some(clean))
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        let store = store.as_ref();
+        let url = store
+            .get_setting("git_backup_remote_url")
+            .map_err(db)?
+            .unwrap_or_default();
+        let Some((cred, clean)) = git_credentials::split_credentials_from_url(&url) else {
+            return Ok(None);
+        };
+        let host = git_credentials::https_host(&clean).unwrap_or_else(|| "github.com".into());
+        git_credentials::store_credential(&host, &cred)
+            .map_err(|err| AppError::internal(err.to_string()))?;
+        store
+            .set_setting("git_backup_remote_url", &clean)
+            .map_err(db)?;
+        if skills().join(".git").exists() {
+            git_backup::set_remote(&skills(), &clean).map_err(git)?;
+        }
+        Ok(Some(clean))
+    })
+    .await
 }

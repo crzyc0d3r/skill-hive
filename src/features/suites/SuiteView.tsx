@@ -110,6 +110,8 @@ export function SuiteView() {
         <Button
           type="button"
           size="sm"
+          aria-busy={progress === "preparing"}
+          disabled={progress === "preparing"}
           onClick={() => {
             setFailed(false);
             setProgress("preparing");
@@ -135,7 +137,7 @@ export function SuiteView() {
             });
           }}
         >
-          {t("suite.run")}
+          {progress === "preparing" ? t("shell.loading") : t("suite.run")}
         </Button>
         <Link to="/effectiveness" data-testid="effectiveness-link" className={buttonVariants({ variant: "secondary", size: "sm" })}>
           {t("suite.effectiveness")}

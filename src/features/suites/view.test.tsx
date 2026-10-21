@@ -14,8 +14,8 @@ describe("suites", () => {
 it("confirms a budget pause and shows the run chip", async () => {
     const user = userEvent.setup();
     renderAt("/skills/skill-research/tests");
-    expect(await screen.findByTestId("suite")).toBeInTheDocument();
-    expect(screen.getByTestId("run-chip")).toHaveAttribute("href", "/runs/run-fixture");
+    expect(await screen.findByTestId("run-chip")).toHaveAttribute("href", "/runs/run-fixture");
+    expect(screen.getByTestId("suite")).toBeInTheDocument();
     expect(screen.getByTestId("suite-matrix")).toHaveTextContent("3");
     await user.click(screen.getByRole("button", { name: "Run suite" }));
     expect(await screen.findByTestId("suite-progress")).toBeInTheDocument();

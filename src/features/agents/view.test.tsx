@@ -48,7 +48,7 @@ it("lists New agent in the palette and keeps Run tests disabled", async () => {
     await screen.findByLabelText("System prompt");
     cleanup();
     renderAt("/agents");
-    await user.click(screen.getByRole("button", { name: "Import agents" }));
+    await user.click(await screen.findByRole("button", { name: "Import agents" }));
     expect(screen.getByRole("dialog", { name: "An agent with this name already exists" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Import as copy" }));
     expect(screen.getByRole("link", { name: "reviewer-copy" })).toBeInTheDocument();

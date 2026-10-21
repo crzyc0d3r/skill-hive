@@ -51,6 +51,7 @@ import { listBaseEntries } from "../../lib/ipc/settings";
 import { applyTheme, isThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { getSettings, setSettings } from "../../lib/ipc/settings";
 import { applyTextSize, isTextSize, setLocale, t } from "../../lib/i18n";
+import { demoEnabled } from "@/lib/demo";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
 import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, setToolOrder, silent, switchPreset, updatePreset } from "@/lib/ipc/actions";
 import { writeSetting } from "@/lib/ipc/catalog";
@@ -279,6 +280,33 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
   const skills = useQuery({ queryKey: SKILLS_KEY, queryFn: listSkills });
   const presets = useQuery({ queryKey: ["presets"], queryFn: listPresets });
   const agents = useQuery({ queryKey: ["agents"], queryFn: listAgents });
+  const dataPhase = !demoEnabled() && skills.isPending && skills.data === undefined ? "loading" : skills.isError ? "error" : "ready";
+  const retryData = () => {
+    void skills.refetch();
+    void presets.refetch();
+    void agents.refetch();
+  };
+  const [job, setJob] = useState<{ job: string; current: number; total: number; message: string; done: boolean } | null>(null);
+  useEffect(() => {
+    const preview = new URLSearchParams(location.search).get("job");
+    if (preview && import.meta.env.DEV) {
+      setJob({ job: preview, current: 2, total: 5, message: preview, done: false });
+    }
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<{ job: string; current: number; total: number; message: string; done: boolean }>("job-progress", (event) => {
+          setJob(event.payload.done ? null : event.payload);
+        }),
+      )
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch(() => undefined);
+    return () => {
+      unlisten?.();
+    };
+  }, [location.search]);
   const shownPresets = useMemo(() => presetRows ?? presets.data ?? [], [presetRows, presets.data]);
 
   const matches = useMemo(() => {
@@ -528,11 +556,32 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             className="min-h-0 flex-1 overflow-auto px-6 py-4"
             style={{ scrollPaddingTop: "44px" }}
           >
+            {job && !job.done ? (
+              <div data-testid="job-progress" className="mb-3 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2" role="progressbar" aria-valuemin={0} aria-valuemax={job.total || 1} aria-valuenow={job.current} aria-label={job.message}>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div className="h-2 bg-chart-1" style={{ width: `${job.total === 0 ? 0 : Math.round((job.current / job.total) * 100)}%` }} />
+                </div>
+                <span className="text-xs text-muted-foreground">{t("shell.progress", { job: job.message })}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void silent("cancel_job");
+                    setJob(null);
+                  }}
+                >
+                  {t("shell.cancel")}
+                </Button>
+              </div>
+            ) : null}
             <div className="mx-auto w-full max-w-[1280px]">
               <Outlet
                 context={{
                   listing: listing.data ?? [],
                   skills: skills.data ?? [],
+                  dataPhase,
+                  retryData,
                   presets: shownPresets,
                   activePresetId,
                   setPresets: (next: PresetRow[]) => setPresetRows(next),
@@ -716,6 +765,8 @@ function runAction(href: string, navigate: (path: string) => void): void {
 export interface ShellOutletContext {
   listing: string[];
   skills: import("@/features/library/model").SkillCard[];
+  dataPhase: "loading" | "ready" | "error";
+  retryData: () => void;
   presets: PresetRow[];
   activePresetId: string | null;
   setPresets: (next: PresetRow[]) => void;

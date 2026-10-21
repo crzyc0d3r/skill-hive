@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LoadingFrame } from "@/components/chrome";
+import { previewPhase } from "@/lib/view-state";
 import { APP_ROUTES } from "./app/routes";
 import { AppShell, type ShellOutletContext } from "./components/shell/AppShell";
 import { bindFileWatcher } from "./lib/events/files";
@@ -217,27 +219,56 @@ function SettingsPage() {
   );
 }
 
+function testIdFor(path: string): string {
+  if (path === "/") return "dashboard";
+  if (path === "/settings") return "settings";
+  if (path === "/my-skills") return "library";
+  if (path === "/install") return "install";
+  if (path.startsWith("/global-workspace") || path.startsWith("/lobster")) return "global-workspace";
+  if (path === "/backup") return "backup";
+  if (path === "/project/:id") return "project";
+  if (path === "/agents") return "agents";
+  if (path.includes("/edit")) return path.includes("agent") ? "agent-editor" : "skill-editor";
+  if (path.includes("endpoints") || path === "/providers") return "endpoints";
+  if (path.includes("tests") || path.startsWith("/testing")) return "suite";
+  if (path.includes("runs")) return "results";
+  if (path.startsWith("/generate")) return "generate";
+  if (path.startsWith("/compare")) return "compare";
+  if (path === "/effectiveness") return "effectiveness";
+  if (path.includes("history")) return "history";
+  return "screen";
+}
+
+function Gated({ testId, children }: { testId: string; children: ReactNode }) {
+  const { dataPhase, retryData } = useOutletContext<ShellOutletContext>();
+  const forced = previewPhase();
+  if (forced === "loading" || dataPhase === "loading") return <LoadingFrame testId={testId} onRetry={retryData} />;
+  if (dataPhase === "error") return <LoadingFrame testId={testId} phase="error" onRetry={retryData} />;
+  return children;
+}
+
 function screenFor(path: string) {
-  if (path === "/") return <DashboardPage />;
-  if (path === "/settings") return <SettingsPage />;
-  if (path === "/my-skills") return <LibraryPage />;
-  if (path === "/install") return <InstallPage />;
-  if (path === "/global-workspace" || path === "/global-workspace/:agentKey") return <WorkspacePage />;
-  if (path === "/backup") return <BackupView />;
-  if (path === "/project/:id") return <ProjectView />;
-  if (path === "/lobster-workspace" || path === "/lobster-workspace/:agentKey") return <LobsterPage />;
-  if (path === "/agents") return <AgentsView />;
-  if (path === "/agents/:id/edit") return <AgentEditor />;
-  if (path === "/skills/:id/edit") return <SkillEditor />;
-  if (path === "/settings/endpoints" || path === "/providers") return <EndpointsView />;
-  if (path === "/skills/:id/tests" || path === "/testing" || path === "/testing/suites/:id") return <SuiteView />;
-  if (path === "/runs/:runId" || path === "/testing/runs/:id") return <ResultsView />;
-  if (path === "/generate/:sessionId") return <GenerateWizard />;
-  if (path === "/compare/:comparisonId") return <CompareView />;
-  if (path === "/effectiveness") return <EffectivenessView />;
-  if (path === "/skills/:id/history" || path === "/agents/:id/history") return <HistoryView />;
-  if (path === "/dev/tokens") return <TokensView />;
-  return <PlaceholderView />;
+  let page: ReactNode = <PlaceholderView />;
+  if (path === "/") page = <DashboardPage />;
+  else if (path === "/settings") page = <SettingsPage />;
+  else if (path === "/my-skills") page = <LibraryPage />;
+  else if (path === "/install") page = <InstallPage />;
+  else if (path === "/global-workspace" || path === "/global-workspace/:agentKey") page = <WorkspacePage />;
+  else if (path === "/backup") page = <BackupView />;
+  else if (path === "/project/:id") page = <ProjectView />;
+  else if (path === "/lobster-workspace" || path === "/lobster-workspace/:agentKey") page = <LobsterPage />;
+  else if (path === "/agents") page = <AgentsView />;
+  else if (path === "/agents/:id/edit") page = <AgentEditor />;
+  else if (path === "/skills/:id/edit") page = <SkillEditor />;
+  else if (path === "/settings/endpoints" || path === "/providers") page = <EndpointsView />;
+  else if (path === "/skills/:id/tests" || path === "/testing" || path === "/testing/suites/:id") page = <SuiteView />;
+  else if (path === "/runs/:runId" || path === "/testing/runs/:id") page = <ResultsView />;
+  else if (path === "/generate/:sessionId") page = <GenerateWizard />;
+  else if (path === "/compare/:comparisonId") page = <CompareView />;
+  else if (path === "/effectiveness") page = <EffectivenessView />;
+  else if (path === "/skills/:id/history" || path === "/agents/:id/history") page = <HistoryView />;
+  else if (path === "/dev/tokens") page = <TokensView />;
+  return <Gated testId={testIdFor(path)}>{page}</Gated>;
 }
 
 function LobsterPage() {

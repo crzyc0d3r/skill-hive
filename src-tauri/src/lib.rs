@@ -9,12 +9,14 @@ use hive_core::util::notifier::Notifier;
 use tauri::{Emitter, Manager, WebviewWindowBuilder};
 
 mod commands;
+mod offload;
 mod parity_backup;
 mod parity_presets;
 mod parity_projects;
 mod parity_shell;
 mod parity_skills;
 mod parity_workspace;
+mod progress;
 mod tray;
 
 struct TauriNotifier(tauri::AppHandle);
@@ -28,21 +30,26 @@ impl Notifier for TauriNotifier {
 }
 
 #[tauri::command]
-fn get_settings(
+async fn get_settings(
     key: String,
     store: tauri::State<'_, Arc<SkillStore>>,
 ) -> Result<Option<String>, AppError> {
-    store.get_setting(&key).map_err(AppError::db)
+    let store = store.inner().clone();
+    crate::offload::offload(move || store.get_setting(&key).map_err(AppError::db)).await
 }
 
 #[tauri::command]
-fn set_settings(
+async fn set_settings(
     key: String,
     value: String,
     store: tauri::State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
-    store.set_setting(&key, &value).map_err(AppError::db)?;
-    mirror_setting(store.inner(), &key, &value)
+    let store = store.inner().clone();
+    crate::offload::offload(move || {
+        store.set_setting(&key, &value).map_err(AppError::db)?;
+        mirror_setting(store.as_ref(), &key, &value)
+    })
+    .await
 }
 
 fn mirror_setting(store: &SkillStore, key: &str, value: &str) -> Result<(), AppError> {
@@ -84,30 +91,37 @@ fn log_startup_event(label: String, elapsed_ms: u64) {
 }
 
 #[tauri::command]
-fn check_app_update() -> String {
-    let local = env!("CARGO_PKG_VERSION");
-    let from_env = std::env::var("SKILL_HIVE_RELEASE_TAG").ok();
-    let from_file = std::fs::read_to_string(central_repo::base_dir().join("app-release.txt")).ok();
-    let remote = from_env.or(from_file).or_else(|| {
-        if std::env::var_os("SKILL_HIVE_SKIP_RELEASE_CHECK").is_some() {
-            return None;
-        }
-        let url = std::env::var("SKILL_HIVE_RELEASES_URL").unwrap_or_else(|_| {
-            "https://api.github.com/repos/crzyc0d3r/skill-hive/releases/latest".into()
+async fn check_app_update() -> String {
+    crate::offload::offload(move || {
+        let local = env!("CARGO_PKG_VERSION");
+        let from_env = std::env::var("SKILL_HIVE_RELEASE_TAG").ok();
+        let from_file =
+            std::fs::read_to_string(central_repo::base_dir().join("app-release.txt")).ok();
+        let remote = from_env.or(from_file).or_else(|| {
+            if std::env::var_os("SKILL_HIVE_SKIP_RELEASE_CHECK").is_some() {
+                return None;
+            }
+            let url = std::env::var("SKILL_HIVE_RELEASES_URL").unwrap_or_else(|_| {
+                "https://api.github.com/repos/crzyc0d3r/skill-hive/releases/latest".into()
+            });
+            hive_core::updater::fetch_latest_release_tag(&url).ok()
         });
-        hive_core::updater::fetch_latest_release_tag(&url).ok()
-    });
-    hive_core::updater::classify_release(local, remote.as_deref())
+        hive_core::updater::classify_release(local, remote.as_deref())
+    })
+    .await
 }
 
 #[tauri::command]
-fn update_install_blocker(active_runs: u32) -> Option<String> {
-    hive_core::updater::update_install_blocker(active_runs).map(str::to_string)
+async fn update_install_blocker(active_runs: u32) -> Option<String> {
+    crate::offload::offload(move || {
+        hive_core::updater::update_install_blocker(active_runs).map(str::to_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn updater_proxy(url: String) -> Option<String> {
-    hive_core::updater::updater_proxy(&url)
+async fn updater_proxy(url: String) -> Option<String> {
+    crate::offload::offload(move || hive_core::updater::updater_proxy(&url)).await
 }
 
 #[tauri::command]
@@ -139,19 +153,22 @@ fn rebuild_tray_menu(app: tauri::AppHandle) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-fn list_base_entries() -> Result<Vec<String>, AppError> {
-    let dir = central_repo::skills_dir();
-    let mut names = Vec::new();
-    let entries = std::fs::read_dir(&dir).map_err(AppError::db)?;
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
+async fn list_base_entries() -> Result<Vec<String>, AppError> {
+    crate::offload::offload(move || {
+        let dir = central_repo::skills_dir();
+        let mut names = Vec::new();
+        let entries = std::fs::read_dir(&dir).map_err(AppError::db)?;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            names.push(name);
         }
-        names.push(name);
-    }
-    names.sort();
-    Ok(names)
+        names.sort();
+        Ok(names)
+    })
+    .await
 }
 
 fn box_err(err: impl std::fmt::Display) -> Box<dyn std::error::Error> {
@@ -331,16 +348,23 @@ pub fn run() {
                     (now.max(0) as u64) / 1000,
                 );
             });
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|elapsed| elapsed.as_millis() as i64)
-                .unwrap_or(0);
-            let _ = commands::maybe_run_auto_update(&store, now);
-            let _ = hive_core::backup::auto_backup::maybe_run_auto_backup(
-                &store,
-                &central_repo::skills_dir(),
-                (now.max(0) as u64) / 1000,
-            );
+            progress::bind(app.handle().clone());
+            let startup = store.clone();
+            tauri::async_runtime::spawn(async move {
+                offload::offload(move || {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|elapsed| elapsed.as_millis() as i64)
+                        .unwrap_or(0);
+                    let _ = commands::maybe_run_auto_update(&startup, now);
+                    let _ = hive_core::backup::auto_backup::maybe_run_auto_backup(
+                        &startup,
+                        &central_repo::skills_dir(),
+                        (now.max(0) as u64) / 1000,
+                    );
+                })
+                .await;
+            });
             start_file_watcher(Arc::new(TauriNotifier(app.handle().clone())), store);
             if let Ok(dir) = app.path().app_log_dir() {
                 hive_core::util::panic_log::install_panic_hook(dir);
@@ -360,6 +384,8 @@ pub fn run() {
             update_install_blocker,
             updater_proxy,
             commands::get_managed_skills,
+            commands::get_skill_files,
+            commands::cancel_job,
             commands::list_presets,
             commands::get_tool_status,
             commands::scan_local_skills,

@@ -19,6 +19,7 @@
     "check:headers": "node scripts/check-headers.mjs",
     "check:palette": "node scripts/check-palette.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "check:async": "node scripts/check-async-commands.mjs",
     "test:visual": "playwright test",
     "gen:ipc": "node scripts/gen-ipc-types.mjs"
   },

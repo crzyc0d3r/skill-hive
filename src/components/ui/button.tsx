@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
+import { LoaderCircleIcon } from "lucide-react"
 import { cn } from "cn"
 import { Slot } from "radix-ui"
 
@@ -43,21 +44,38 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
   }) {
-  const Comp = asChild ? Slot.Root : "button"
+  const busy = props["aria-busy"] === true || props["aria-busy"] === "true"
+  const shared = {
+    "data-slot": "button",
+    "data-variant": variant,
+    "data-size": size,
+    className: cn(buttonVariants({ variant, size, className })),
+  }
+
+  if (asChild) {
+    return (
+      <Slot.Root {...shared} {...props}>
+        {children}
+      </Slot.Root>
+    )
+  }
 
   return (
-    <Comp
-      data-slot="button"
-      data-variant={variant}
-      data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+    <button
+      {...shared}
       {...props}
-    />
+      aria-busy={busy ? true : props["aria-busy"]}
+      disabled={props.disabled || busy}
+    >
+      {busy ? <LoaderCircleIcon className="size-3.5 animate-spin" aria-hidden="true" /> : null}
+      {children}
+    </button>
   )
 }
 

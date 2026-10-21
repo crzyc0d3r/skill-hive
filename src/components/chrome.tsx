@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangleIcon, InboxIcon, LoaderCircleIcon, SearchIcon, WifiOffIcon } from "lucide-react";
 import { cn } from "cn";
+import { t } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -85,10 +86,12 @@ export function StatePanel({
   tone,
   title,
   action,
+  testId,
 }: {
   tone: "loading" | "empty" | "error" | "offline";
   title: string;
   action?: ReactNode;
+  testId?: string;
 }) {
   const icon =
     tone === "loading" ? (
@@ -108,7 +111,9 @@ export function StatePanel({
         : "border-dashed border-border bg-muted/40";
   return (
     <div
-      role={tone === "error" ? "alert" : "status"}
+      role={tone === "error" ? "alert" : tone === "loading" ? "progressbar" : "status"}
+      aria-busy={tone === "loading" ? true : undefined}
+      data-testid={testId ?? (tone === "loading" ? "loading-state" : undefined)}
       className={cn("flex min-h-72 flex-1 flex-col justify-center gap-4 rounded-lg border px-5 py-8", surface)}
     >
       {icon}
@@ -122,6 +127,34 @@ export function StatePanel({
       ) : null}
       {action}
     </div>
+  );
+}
+
+export function LoadingFrame({
+  testId,
+  phase = "loading",
+  onRetry,
+}: {
+  testId: string;
+  phase?: "loading" | "error" | "empty" | "offline";
+  onRetry?: () => void;
+}) {
+  const title =
+    phase === "error" ? t("shell.error") : phase === "offline" ? t("shell.offline") : phase === "empty" ? t("shell.empty") : t("shell.loading");
+  return (
+    <Screen testId={testId} title={title}>
+      <StatePanel
+        tone={phase}
+        title={title}
+        action={
+          phase === "error" || phase === "offline" ? (
+            <Button type="button" size="sm" onClick={onRetry}>
+              {t("banner.retry")}
+            </Button>
+          ) : null
+        }
+      />
+    </Screen>
   );
 }
 

@@ -285,7 +285,7 @@ describe("ui parity invokes", () => {
     const user = userEvent.setup();
     renderAt("/compare/live");
     expect(screen.queryByText("Findings list the seeded vulnerability.")).not.toBeInTheDocument();
-    expect(screen.getByText("No comparison yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No comparison yet.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Record verdict" }));
     expect(await screen.findByTestId("compare-live")).toHaveTextContent("alpha beats beta");
     expect(calls("record_compare_verdict").some((entry) => entry.args.verdict === "Output A")).toBe(true);
@@ -307,7 +307,7 @@ describe("ui parity invokes", () => {
     installIpc();
     setOptimizePayload("/tmp/suite/evals/evals.json");
     renderAt("/skills/skill-research/tests");
-    await user.click(screen.getByRole("button", { name: "Optimize description" }));
+    await user.click(await screen.findByRole("button", { name: "Optimize description" }));
     await user.click(screen.getByRole("button", { name: "Apply" }));
     expect(await screen.findByTestId("optimize-preview")).toHaveTextContent("/tmp/suite/evals/evals.json");
     expect(calls("apply_optimized_description").some((entry) => entry.args.description === "Extract invoices" || typeof entry.args.description === "string")).toBe(true);

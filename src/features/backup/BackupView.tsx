@@ -134,7 +134,7 @@ export function BackupView() {
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        <Button type="button" data-testid="backup-now" disabled={busy} size="sm" onClick={() =>
+        <Button type="button" data-testid="backup-now" disabled={busy} aria-busy={busy} size="sm" onClick={() =>
             void run(async () => {
               if (demoEnabled()) {
                 const snap = backupNow(body, [])[0];

@@ -25,14 +25,21 @@ export interface ScanRow {
   path: string;
 }
 
+const inflight = new Map<string, Promise<unknown>>();
+
 async function call<T>(command: string, args: Record<string, unknown>, fallback: T): Promise<T> {
   if (demoEnabled()) return fallback;
-  try {
-    const value = await invoke<T | null>(command, args);
-    return value ?? fallback;
-  } catch {
-    return fallback;
-  }
+  const key = `${command}:${JSON.stringify(args)}`;
+  const pending = inflight.get(key);
+  if (pending) return pending as Promise<T>;
+  const request = invoke<T | null>(command, args)
+    .then((value) => value ?? fallback)
+    .catch(() => fallback)
+    .finally(() => {
+      if (inflight.get(key) === request) inflight.delete(key);
+    });
+  inflight.set(key, request);
+  return request;
 }
 
 export function listSkills(): Promise<SkillCard[]> {

@@ -484,5 +484,11 @@
   "history.result": "Result",
   "suite.queued": "Queued",
   "suite.preparing": "Preparing",
-  "suite.done": "Done"
+  "suite.done": "Done",
+  "shell.loading": "Loading",
+  "shell.error": "Something went wrong",
+  "shell.offline": "You are offline",
+  "shell.empty": "Nothing here yet",
+  "shell.progress": "{job}",
+  "shell.cancel": "Cancel"
 }

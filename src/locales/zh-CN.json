@@ -484,5 +484,11 @@
   "history.result": "结果",
   "suite.queued": "排队",
   "suite.preparing": "准备中",
-  "suite.done": "完成"
+  "suite.done": "完成",
+  "shell.loading": "正在加载",
+  "shell.error": "出了问题",
+  "shell.offline": "当前离线",
+  "shell.empty": "这里还没有内容",
+  "shell.progress": "{job}",
+  "shell.cancel": "取消"
 }

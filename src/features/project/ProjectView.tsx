@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useDebounced } from "@/lib/use-debounced";
 import { t } from "@/lib/i18n";
 import {
   addSkillToAgents,
@@ -113,8 +114,9 @@ export function ProjectView() {
     void silent("set_settings", { key: "project_last_agents", value: next.join(",") });
   }
 
+  const debouncedPicker = useDebounced(pickerQuery, 150);
   function togglePick(skillId: string, shift: boolean) {
-    const visible = library.filter((item) => item.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()));
+    const visible = library.filter((item) => item.name.toLowerCase().includes(debouncedPicker.trim().toLowerCase()));
     if (shift && anchor) {
       const start = visible.findIndex((item) => item.id === anchor);
       const end = visible.findIndex((item) => item.id === skillId);
@@ -211,7 +213,7 @@ export function ProjectView() {
               <Input aria-label={t("workspace.picker.search")} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="mb-2 h-8" />
               <Button type="button" size="sm" variant="outline" onClick={() => setPicked(library.map((row) => row.id))}>{t("project.selectAll")}</Button>
               <ul>
-                {library.filter((row) => row.name.toLowerCase().includes(pickerQuery.trim().toLowerCase())).map((row) => (
+                {library.filter((row) => row.name.toLowerCase().includes(debouncedPicker.trim().toLowerCase())).map((row) => (
                   <li key={row.id}>
                     <label className="text-sm">
                       <input type="checkbox" aria-label={`${t("project.selectAll")} ${row.name}`} checked={picked.includes(row.id)} onClick={(event) => togglePick(row.id, event.shiftKey)} onChange={() => undefined} /> {row.name}

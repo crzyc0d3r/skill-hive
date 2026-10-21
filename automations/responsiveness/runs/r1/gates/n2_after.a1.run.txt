@@ -1,0 +1,13 @@
+$ python3 automations/responsiveness/code/write_after.py
+(exit 0)
+{
+  "seed_ms": 67.0,
+  "list_ms": 0.7,
+  "skills": 200,
+  "payload_bytes": 0,
+  "projects_ms": 0.0,
+  "projects": 4,
+  "presets_ms": 0.0,
+  "presets": 4,
+  "line": "PROFILE seed_ms=67.0 list_ms=0.7 skills=200 payload_bytes=0 projects_ms=0.0 projects=4 presets_ms=0.0 presets=4"
+}

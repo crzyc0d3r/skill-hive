@@ -1,0 +1,416 @@
+{
+  "run_id": "r1",
+  "started": "2026-10-21T19:15:22+00:00",
+  "finished": "2026-10-21T19:40:10+00:00",
+  "project_root": "/workspace",
+  "dispatches": 0,
+  "nodes": {
+    "n1_before": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "802163c35733a1a726b82caad8019bdfe2286a47a48f20b6f67690d43cd3e8a2",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/responsiveness/code/check_before.py` → exit 0: before.json matches the measured baseline"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: "
+          ]
+        ],
+        "at": "2026-10-21T19:22:34+00:00",
+        "output_hash": "802163c35733a1a726b82caad8019bdfe2286a47a48f20b6f67690d43cd3e8a2",
+        "log": "automations/responsiveness/runs/r1/gates/n1_before.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/responsiveness/code/check_before.py` → exit 0: before.json matches the measured baseline"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-21T19:22:34+00:00",
+          "output_hash": "802163c35733a1a726b82caad8019bdfe2286a47a48f20b6f67690d43cd3e8a2",
+          "log": "automations/responsiveness/runs/r1/gates/n1_before.a1.md"
+        },
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/responsiveness/code/check_before.py` → exit 0: before.json matches the measured baseline"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: "
+            ]
+          ],
+          "at": "2026-10-21T19:22:34+00:00",
+          "output_hash": "802163c35733a1a726b82caad8019bdfe2286a47a48f20b6f67690d43cd3e8a2",
+          "log": "automations/responsiveness/runs/r1/gates/n1_before.a1.md"
+        }
+      ]
+    },
+    "n2_after": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "e41e59edb272b6d26f4321998d68bfb82876b210a87d94688480e1b313ac57e5",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/responsiveness/code/check_after.py` → exit 0: after payload_bytes=0 list_ms=0.7"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: {\n  \"seed_ms\": 67.0,\n  \"list_ms\": 0.7,\n  \"skills\": 200,\n  \"payload_bytes\": 0,\n  \"projects_ms\": 0.0,\n  \"projects\": 4,\n  \"presets_ms\": 0.0,\n  \"presets\": 4,\n  \"line\": \"PROFILE seed_ms=67.0 list_ms=0.7 skills=200 payload_bytes=0 projects_ms=0.0 projects=4 presets_ms=0.0 presets=4\"\n}"
+          ]
+        ],
+        "at": "2026-10-21T19:22:34+00:00",
+        "output_hash": "e41e59edb272b6d26f4321998d68bfb82876b210a87d94688480e1b313ac57e5",
+        "log": "automations/responsiveness/runs/r1/gates/n2_after.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/responsiveness/code/check_after.py` → exit 0: after payload_bytes=0 list_ms=0.7"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: {\n  \"seed_ms\": 67.0,\n  \"list_ms\": 0.7,\n  \"skills\": 200,\n  \"payload_bytes\": 0,\n  \"projects_ms\": 0.0,\n  \"projects\": 4,\n  \"presets_ms\": 0.0,\n  \"presets\": 4,\n  \"line\": \"PROFILE seed_ms=67.0 list_ms=0.7 skills=200 payload_bytes=0 projects_ms=0.0 projects=4 presets_ms=0.0 presets=4\"\n}"
+            ]
+          ],
+          "at": "2026-10-21T19:22:34+00:00",
+          "output_hash": "e41e59edb272b6d26f4321998d68bfb82876b210a87d94688480e1b313ac57e5",
+          "log": "automations/responsiveness/runs/r1/gates/n2_after.a1.md"
+        },
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/responsiveness/code/check_after.py` → exit 0: after payload_bytes=0 list_ms=0.7"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: {\n  \"seed_ms\": 67.0,\n  \"list_ms\": 0.7,\n  \"skills\": 200,\n  \"payload_bytes\": 0,\n  \"projects_ms\": 0.0,\n  \"projects\": 4,\n  \"presets_ms\": 0.0,\n  \"presets\": 4,\n  \"line\": \"PROFILE seed_ms=67.0 list_ms=0.7 skills=200 payload_bytes=0 projects_ms=0.0 projects=4 presets_ms=0.0 presets=4\"\n}"
+            ]
+          ],
+          "at": "2026-10-21T19:22:34+00:00",
+          "output_hash": "e41e59edb272b6d26f4321998d68bfb82876b210a87d94688480e1b313ac57e5",
+          "log": "automations/responsiveness/runs/r1/gates/n2_after.a1.md"
+        }
+      ]
+    },
+    "n3_doc": {
+      "status": "passed",
+      "attempts": 1,
+      "last_verdict": "gate:pass",
+      "output_hash": "1dd2d6a7c4ce06ba3b14258dda6a413a25192fd8abb2ee06d99c33e13f26e206",
+      "gate": {
+        "attempt": 1,
+        "verdict": "pass",
+        "rows": [
+          [
+            "check.cmd",
+            "pass",
+            "`python3 automations/responsiveness/code/check_doc.py` → exit 0: responsiveness.md has before and after timings"
+          ],
+          [
+            "node.report",
+            "pass",
+            "exit 0: wrote docs/responsiveness.md"
+          ]
+        ],
+        "at": "2026-10-21T19:22:35+00:00",
+        "output_hash": "1dd2d6a7c4ce06ba3b14258dda6a413a25192fd8abb2ee06d99c33e13f26e206",
+        "log": "automations/responsiveness/runs/r1/gates/n3_doc.a1.md"
+      },
+      "tokens": 0,
+      "gates": [
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/responsiveness/code/check_doc.py` → exit 0: responsiveness.md has before and after timings"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote docs/responsiveness.md"
+            ]
+          ],
+          "at": "2026-10-21T19:22:34+00:00",
+          "output_hash": "1dd2d6a7c4ce06ba3b14258dda6a413a25192fd8abb2ee06d99c33e13f26e206",
+          "log": "automations/responsiveness/runs/r1/gates/n3_doc.a1.md"
+        },
+        {
+          "attempt": 1,
+          "verdict": "pass",
+          "rows": [
+            [
+              "check.cmd",
+              "pass",
+              "`python3 automations/responsiveness/code/check_doc.py` → exit 0: responsiveness.md has before and after timings"
+            ],
+            [
+              "node.report",
+              "pass",
+              "exit 0: wrote docs/responsiveness.md"
+            ]
+          ],
+          "at": "2026-10-21T19:22:35+00:00",
+          "output_hash": "1dd2d6a7c4ce06ba3b14258dda6a413a25192fd8abb2ee06d99c33e13f26e206",
+          "log": "automations/responsiveness/runs/r1/gates/n3_doc.a1.md"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "node": "n1_before",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-21T19:22:34+00:00",
+      "finished": "2026-10-21T19:22:34+00:00",
+      "verdict": "pass",
+      "output": "automations/responsiveness/out/before.json",
+      "evidence": "exit 0: ",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n2_after",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-21T19:22:34+00:00",
+      "finished": "2026-10-21T19:22:34+00:00",
+      "verdict": "pass",
+      "output": "automations/responsiveness/out/after.json",
+      "evidence": "exit 0: {\n  \"seed_ms\": 67.0,\n  \"list_ms\": 0.7,\n  \"skills\": 200,\n  \"payload_bytes\": 0,\n  \"projects_ms\": 0.0,\n  \"projects\": 4,\n  \"presets_ms\": 0.0,\n  \"presets\": 4,\n  \"line\": \"PROFILE seed_ms=67.0 list_ms=0.7 skills=200 payload_bytes=0 projects_ms=0.0 projects=4 presets_ms=0.0 presets=4\"\n}",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "n/a (node is not risky)"
+    },
+    {
+      "node": "n3_doc",
+      "attempt": 1,
+      "role": "code",
+      "started": "2026-10-21T19:22:34+00:00",
+      "finished": "2026-10-21T19:22:34+00:00",
+      "verdict": "pass",
+      "output": "docs/responsiveness.md",
+      "evidence": "exit 0: wrote docs/responsiveness.md",
+      "tokens": null,
+      "reason": null,
+      "snapshot": "skipped: docs/responsiveness.md did not exist yet"
+    }
+  ],
+  "acceptance": [
+    {
+      "index": 0,
+      "verdict": "pass",
+      "evidence": "`python3 automations/responsiveness/code/check_doc.py` → exit 0: responsiveness.md has before and after timings",
+      "at": "2026-10-21T19:40:10+00:00"
+    },
+    {
+      "index": 1,
+      "verdict": "pass",
+      "evidence": "`test -s src/features/loading-states.test.tsx` → exit 0: (no output)",
+      "at": "2026-10-21T19:40:10+00:00"
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-21T19:22:29+00:00",
+      "type": "approve",
+      "msg": "spec approved (nodes hash 6a4fd01f49d2602c)"
+    },
+    {
+      "at": "2026-10-21T19:22:29+00:00",
+      "type": "decision",
+      "msg": "auto-approved by --auto"
+    },
+    {
+      "at": "2026-10-21T19:22:29+00:00",
+      "type": "baseline",
+      "msg": "1/4 pass before the run"
+    },
+    {
+      "at": "2026-10-21T19:22:34+00:00",
+      "type": "gate",
+      "msg": "n1_before attempt 1: pass"
+    },
+    {
+      "at": "2026-10-21T19:22:34+00:00",
+      "type": "gate",
+      "msg": "n1_before attempt 1: pass"
+    },
+    {
+      "at": "2026-10-21T19:22:34+00:00",
+      "type": "gate",
+      "msg": "n2_after attempt 1: pass"
+    },
+    {
+      "at": "2026-10-21T19:22:34+00:00",
+      "type": "gate",
+      "msg": "n2_after attempt 1: pass"
+    },
+    {
+      "at": "2026-10-21T19:22:34+00:00",
+      "type": "snapshot",
+      "msg": "n3_doc: skipped: docs/responsiveness.md did not exist yet"
+    },
+    {
+      "at": "2026-10-21T19:22:34+00:00",
+      "type": "gate",
+      "msg": "n3_doc attempt 1: pass"
+    },
+    {
+      "at": "2026-10-21T19:22:35+00:00",
+      "type": "gate",
+      "msg": "n3_doc attempt 1: pass"
+    },
+    {
+      "at": "2026-10-21T19:40:10+00:00",
+      "type": "complete",
+      "msg": "COMPLETE"
+    }
+  ],
+  "completion": {
+    "at": "2026-10-21T19:40:10+00:00",
+    "status": "COMPLETE",
+    "rows": [
+      [
+        "graph.md is a valid spec",
+        "pass",
+        "validate ok"
+      ],
+      [
+        "spec approved before execution",
+        "pass",
+        "hash 6a4fd01f49d2602c"
+      ],
+      [
+        "n1_before: output exists and can be opened",
+        "pass",
+        "automations/responsiveness/out/before.json (349 bytes)"
+      ],
+      [
+        "n1_before: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-21T19:22:34+00:00"
+      ],
+      [
+        "n2_after: output exists and can be opened",
+        "pass",
+        "automations/responsiveness/out/after.json (280 bytes)"
+      ],
+      [
+        "n2_after: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-21T19:22:34+00:00"
+      ],
+      [
+        "n3_doc: output exists and can be opened",
+        "pass",
+        "docs/responsiveness.md (4822 bytes)"
+      ],
+      [
+        "n3_doc: gate ran against the saved version",
+        "pass",
+        "gate pass at 2026-10-21T19:22:35+00:00"
+      ],
+      [
+        "graph.md matches the nodes that actually ran",
+        "pass",
+        "ran 3 of 3 declared nodes"
+      ],
+      [
+        "acceptance 0: docs/responsiveness.md records before and after library timings",
+        "pass",
+        "`python3 automations/responsiveness/code/check_doc.py` → exit 0: responsiveness.md has before and after timings"
+      ],
+      [
+        "acceptance 1: every data screen renders a loading state",
+        "pass",
+        "`test -s src/features/loading-states.test.tsx` → exit 0: (no output)"
+      ],
+      [
+        "deliverable exists",
+        "pass",
+        "docs/responsiveness.md"
+      ],
+      [
+        "run limit respected",
+        "pass",
+        "0/6 model dispatches"
+      ]
+    ],
+    "nodes_left": []
+  },
+  "baseline": {
+    "at": "2026-10-21T19:22:29+00:00",
+    "rows": [
+      [
+        "deliverable exists before the run",
+        "fail",
+        "docs/responsiveness.md absent"
+      ],
+      [
+        "acceptance 0: docs/responsiveness.md records before and after library timings",
+        "fail",
+        "`python3 automations/responsiveness/code/check_doc.py` → exit 1: missing payload_bytes=2612160, list_ms=7.0, skills=200, projects=4, After"
+      ],
+      [
+        "acceptance 1: every data screen renders a loading state",
+        "pass",
+        "`test -s src/features/loading-states.test.tsx` → exit 0: (no output)"
+      ],
+      [
+        "note",
+        "noted",
+        "before profile payload_bytes=2612160 list_ms=7.0; after not written yet"
+      ]
+    ]
+  }
+}

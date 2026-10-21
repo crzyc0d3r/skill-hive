@@ -48,36 +48,49 @@ fn open_path(path: &std::path::Path) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn get_central_repo_path_override() -> Option<String> {
-    central_repo::configured_base_dir().map(|path| path.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-pub fn get_central_repo_pending_path() -> Option<String> {
-    central_repo::pending_base_dir().map(|path| path.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-pub fn get_central_repo_warnings() -> Vec<String> {
-    central_repo::startup_warnings()
-}
-
-#[tauri::command]
-pub fn open_central_repo_folder() -> Result<(), AppError> {
-    let path = central_repo::base_dir();
-    std::fs::create_dir_all(&path).map_err(AppError::io)?;
-    open_path(&path)
-}
-
-#[tauri::command]
-pub fn get_diagnostic_info(app: AppHandle) -> Result<DiagnosticInfo, AppError> {
-    Ok(DiagnosticInfo {
-        version: app.package_info().version.to_string(),
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        library_path: central_repo::base_dir().to_string_lossy().to_string(),
-        skills_path: central_repo::skills_dir().to_string_lossy().to_string(),
+pub async fn get_central_repo_path_override() -> Option<String> {
+    crate::offload::offload(move || {
+        central_repo::configured_base_dir().map(|path| path.to_string_lossy().to_string())
     })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_central_repo_pending_path() -> Option<String> {
+    crate::offload::offload(move || {
+        central_repo::pending_base_dir().map(|path| path.to_string_lossy().to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_central_repo_warnings() -> Vec<String> {
+    crate::offload::offload(central_repo::startup_warnings).await
+}
+
+#[tauri::command]
+pub async fn open_central_repo_folder() -> Result<(), AppError> {
+    crate::offload::offload(move || {
+        let path = central_repo::base_dir();
+        std::fs::create_dir_all(&path).map_err(AppError::io)?;
+        open_path(&path)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_diagnostic_info(app: AppHandle) -> Result<DiagnosticInfo, AppError> {
+    let app = app.clone();
+    crate::offload::offload(move || {
+        Ok(DiagnosticInfo {
+            version: app.package_info().version.to_string(),
+            os: std::env::consts::OS.to_string(),
+            arch: std::env::consts::ARCH.to_string(),
+            library_path: central_repo::base_dir().to_string_lossy().to_string(),
+            skills_path: central_repo::skills_dir().to_string_lossy().to_string(),
+        })
+    })
+    .await
 }
 
 fn panic_file() -> PathBuf {
@@ -86,30 +99,35 @@ fn panic_file() -> PathBuf {
 }
 
 #[tauri::command]
-pub fn check_last_panic() -> Result<Option<PanicInfo>, AppError> {
-    let path = panic_file();
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let text = std::fs::read_to_string(&path).map_err(AppError::io)?;
-    let excerpt: String = text.chars().take(4000).collect();
-    Ok(Some(PanicInfo {
-        path: path.to_string_lossy().to_string(),
-        excerpt,
-    }))
+pub async fn check_last_panic() -> Result<Option<PanicInfo>, AppError> {
+    crate::offload::offload(move || {
+        let path = panic_file();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let text = std::fs::read_to_string(&path).map_err(AppError::io)?;
+        let excerpt: String = text.chars().take(4000).collect();
+        Ok(Some(PanicInfo {
+            path: path.to_string_lossy().to_string(),
+            excerpt,
+        }))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn clear_last_panic() -> Result<(), AppError> {
-    let path = panic_file();
-    if path.is_file() {
-        std::fs::remove_file(&path).map_err(AppError::io)?;
-    }
-    Ok(())
+pub async fn clear_last_panic() -> Result<(), AppError> {
+    crate::offload::offload(move || {
+        let path = panic_file();
+        if path.is_file() {
+            std::fs::remove_file(&path).map_err(AppError::io)?;
+        }
+        Ok(())
+    })
+    .await
 }
 
-#[tauri::command]
-pub fn get_recent_log_excerpt() -> Result<LogExcerpt, AppError> {
+fn recent_log_excerpt() -> Result<LogExcerpt, AppError> {
     let dir = central_repo::logs_dir();
     let mut newest: Option<PathBuf> = None;
     if dir.is_dir() {
@@ -135,15 +153,23 @@ pub fn get_recent_log_excerpt() -> Result<LogExcerpt, AppError> {
 }
 
 #[tauri::command]
-pub fn export_logs_zip(path: String) -> Result<String, AppError> {
-    let dest = PathBuf::from(path.trim());
-    if dest.as_os_str().is_empty() {
-        return Err(AppError::invalid_input("Choose a path for the log archive"));
-    }
-    let excerpt = get_recent_log_excerpt()?;
-    hive_core::util::diagnostics::export_logs_zip(&excerpt.text, &dest)
-        .map_err(|err| AppError::io(err.to_string()))?;
-    Ok(dest.to_string_lossy().to_string())
+pub async fn get_recent_log_excerpt() -> Result<LogExcerpt, AppError> {
+    crate::offload::offload(recent_log_excerpt).await
+}
+
+#[tauri::command]
+pub async fn export_logs_zip(path: String) -> Result<String, AppError> {
+    crate::offload::offload(move || {
+        let dest = PathBuf::from(path.trim());
+        if dest.as_os_str().is_empty() {
+            return Err(AppError::invalid_input("Choose a path for the log archive"));
+        }
+        let excerpt = recent_log_excerpt()?;
+        hive_core::util::diagnostics::export_logs_zip(&excerpt.text, &dest)
+            .map_err(|err| AppError::io(err.to_string()))?;
+        Ok(dest.to_string_lossy().to_string())
+    })
+    .await
 }
 
 #[tauri::command]

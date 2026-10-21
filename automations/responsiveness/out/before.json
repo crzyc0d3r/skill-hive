@@ -1,0 +1,13 @@
+{
+  "host": "linux",
+  "disk": "warm, files just written",
+  "skills": 200,
+  "projects": 4,
+  "presets": 4,
+  "seed_ms": 66.4,
+  "list_ms": 7.0,
+  "payload_bytes": 2612160,
+  "projects_ms": 0.1,
+  "presets_ms": 0.0,
+  "line": "PROFILE seed_ms=66.4 list_ms=7.0 skills=200 payload_bytes=2612160 projects_ms=0.1 projects=4 presets_ms=0.0 presets=4"
+}
