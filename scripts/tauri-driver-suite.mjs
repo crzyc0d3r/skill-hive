@@ -536,6 +536,7 @@ try {
   await click("a[href='/my-skills']");
   await click('input[aria-label="Select seeded-git"]');
   await clickText("Sync to agents");
+  await clickText("Show all agents");
   await click('input[name="codex"]');
   await clickText("Sync to agents", true);
   const synced = path.join(home, ".codex", "skills", "seeded-git");
