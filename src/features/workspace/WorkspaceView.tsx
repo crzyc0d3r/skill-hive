@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
+import { useVirtualGrid } from "@/lib/virtual-grid";
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
 import { deleteManagedSkills, silent, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
 import { useDebounced } from "@/lib/use-debounced";
@@ -23,6 +24,7 @@ export interface WorkspaceCard {
   body: string;
   center: string;
   managed: boolean;
+  locations?: string[];
 }
 
 export function WorkspaceView({
@@ -83,6 +85,7 @@ export function WorkspaceView({
     if (!debouncedQuery.trim()) return true;
     return row.name.toLowerCase().includes(debouncedQuery.trim().toLowerCase());
   });
+  const grid = useVirtualGrid(visible, layout);
   const open = rows.find((row) => row.id === openId) ?? null;
 
   function applyPending() {
@@ -209,9 +212,16 @@ export function WorkspaceView({
           </div>
         ) : null}
         {notice ? <p role="status">{notice}</p> : null}
-        <ul data-layout={layout} className={layout === "grid" ? "mt-4 grid grid-cols-2 gap-3" : "mt-4 space-y-2"}>
-          {visible.map((card) => (
-            <li key={card.id}>
+        <div ref={grid.ref} className="max-h-[36rem] overflow-auto">
+        <ul
+          data-testid="workspace-cards"
+          data-layout={layout}
+          data-columns={grid.columns}
+          className={layout === "grid" ? "mt-4 grid gap-3" : "mt-4 space-y-2"}
+          style={layout === "grid" ? { gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))` } : undefined}
+        >
+          {grid.rendered.map((card) => (
+            <li key={card.id} data-virtual-card="">
               <Card className="group/card gap-2 rounded-lg border-border px-3 py-3 shadow-none">
                 <div className="flex items-center gap-2">
                   <input type="checkbox" className={`size-4 rounded border-input ${selected.length > 0 ? "opacity-100" : "opacity-0 group-hover/card:opacity-100"}`} aria-label={`Select ${card.name}`} checked={selected.includes(card.id)} onChange={() => setSelected((current) => current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id])} />
@@ -220,6 +230,14 @@ export function WorkspaceView({
                     {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
                   </Badge>
                 </div>
+                {(card.locations?.length ?? 0) > 1 ? (
+                  <details className="text-xs text-muted-foreground">
+                    <summary>{t("library.locations", { count: String(card.locations?.length ?? 0) })}</summary>
+                    <ul className="mt-1 space-y-1 font-mono">
+                      {card.locations?.map((path) => <li key={path}>{path}</li>)}
+                    </ul>
+                  </details>
+                ) : null}
                 <div className="flex flex-wrap gap-1">
                   <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "upload" })}>{t("workspace.upload")}</Button>
                   <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "pull" })}>{t("workspace.pull")}</Button>
@@ -230,6 +248,7 @@ export function WorkspaceView({
             </li>
           ))}
         </ul>
+        </div>
         {pending ? (
           <ConfirmDialog
             label={t("workspace.confirm")}

@@ -5,6 +5,7 @@
 pub mod central_repo;
 pub mod content_hash;
 pub mod git_fetcher;
+pub mod identity;
 pub mod index;
 pub mod installer;
 pub mod marketplace;

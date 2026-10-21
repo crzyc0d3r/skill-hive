@@ -32,3 +32,6 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 hive-core = { path = "../crates/hive-core" }
 anyhow = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"

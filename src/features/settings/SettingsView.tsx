@@ -61,6 +61,7 @@ export function SettingsView({
   const [updateAction, setUpdateAction] = useState<"install" | "download" | null>(null);
   const [refreshed, setRefreshed] = useState(false);
   const [agentRefresh, setAgentRefresh] = useState(false);
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [motion, setMotion] = useState(false);
   const [proxy, setProxy] = useState("");
@@ -231,19 +232,27 @@ export function SettingsView({
           </div>
           {refreshed ? <p role="status">{t("settings.agents.refreshed")}</p> : null}
           <form
-            className="mt-3 flex flex-wrap items-center gap-2"
+            className="mt-3 flex flex-wrap items-end gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               void onAddAgent(agentName, agentPath);
             }}
           >
-            <Input aria-label="Agent name" value={agentName} onChange={(event) => setAgentName(event.target.value)} className="h-8 w-56 shrink-0" />
-            <Input aria-label="Agent path" value={agentPath} onChange={(event) => setAgentPath(event.target.value)} className="h-8 w-56 shrink-0" />
+            <label className="block text-sm">
+              {t("settings.agents.name")}
+              <Input aria-label={t("settings.agents.name")} placeholder={t("settings.agents.namePlaceholder")} value={agentName} onChange={(event) => setAgentName(event.target.value)} className="mt-1 h-8 w-56" />
+            </label>
+            <label className="block text-sm">
+              {t("settings.agents.path")}
+              <Input aria-label={t("settings.agents.path")} placeholder={t("settings.agents.pathPlaceholder")} value={agentPath} onChange={(event) => setAgentPath(event.target.value)} className="mt-1 h-8 w-56" />
+            </label>
             <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</Button>
             <Button type="submit" size="sm">{t("settings.agents.new")}</Button>
           </form>
+          <Button type="button" variant="outline" size="sm" className="mt-3" aria-pressed={showAllAgents} onClick={() => setShowAllAgents((current) => !current)}>{t("settings.agents.showAll")}</Button>
+          <p className="mt-2 text-sm text-muted-foreground">{showAllAgents ? t("settings.agents.showingAll") : t("settings.agents.detected")}</p>
           <ul data-testid="agent-order" className="mt-3 space-y-2">
-            {agents.map((agent) => (
+            {(showAllAgents ? agents : agents.filter((agent) => agent.installed)).map((agent) => (
               <li
                 key={agent.key}
                 draggable
@@ -266,14 +275,16 @@ export function SettingsView({
                 </label>
                 <span className="ml-2 text-muted-foreground">{agent.enabled ? "Enabled" : "Disabled"}</span>
                 <span className="ml-2 text-muted-foreground">{agent.installed ? "Detected" : "Other supported"}</span>
-                <label className="mt-1 block">
-                  {t("settings.agents.reset")}
-                  <Input aria-label={`${t("settings.agents.reset")} ${agent.name}`} value={agent.path} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: pathValue } : item)); void setCustomToolPath(agent.key, pathValue); }} className="mt-1 h-8 max-w-xl" />
+                <div className="mt-2 grid gap-2">
+                <label className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
+                  <span>{t("settings.agents.global")}</span>
+                  <Input aria-label={`${t("settings.agents.global")} ${agent.name}`} value={agent.path} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: pathValue } : item)); void setCustomToolPath(agent.key, pathValue); }} className="h-8 w-full" />
                 </label>
-                <label className="mt-1 block">
-                  {t("settings.agents.project")}
-                  <Input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, projectPath: pathValue } : item)); void setCustomToolProjectPath(agent.key, pathValue); }} className="mt-1 h-8 max-w-xl" />
+                <label className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
+                  <span>{t("settings.agents.project")}</span>
+                  <Input aria-label={`${t("settings.agents.project")} ${agent.name}`} value={agent.projectPath} onChange={(event) => { const pathValue = event.target.value; void onAgents(agents.map((item) => item.key === agent.key ? { ...item, projectPath: pathValue } : item)); void setCustomToolProjectPath(agent.key, pathValue); }} className="h-8 w-full" />
                 </label>
+                </div>
                 <Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => { void silent("reset_custom_tool_project_path", { key: agent.key }); Promise.resolve(onResetPath(agent.key)).then((next) => { if (next) return onAgents(agents.map((item) => item.key === agent.key ? { ...item, path: next } : item)); }); }}>{t("settings.agents.reset")}</Button>
                 {agent.custom ? (
                   <Button type="button" variant="outline" size="sm" className="ml-2 mt-1" onClick={() => { void onAgents(agents.filter((item) => item.key !== agent.key)); void removeCustomTool(agent.key); }}>{t("settings.agents.remove")} {agent.name}</Button>

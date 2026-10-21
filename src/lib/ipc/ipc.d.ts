@@ -2,6 +2,7 @@ export interface IpcCommands {
   get_settings: { args: { key: string }; result: string | null };
   set_settings: { args: { key: string; value: string }; result: null };
   log_startup_event: { args: { label: string; elapsedMs: number }; result: null };
+  log_frontend_error: { args: { message: string; stack: string; route: string }; result: null };
   check_app_update: { args: Record<string, never>; result: string };
   update_install_blocker: { args: { activeRuns: number }; result: string | null };
   updater_proxy: { args: { url: string }; result: string | null };
@@ -94,7 +95,7 @@ export interface IpcCommands {
   export_diagnostics: { args: { path: string }; result: string };
   git_backup_restore_remote: { args: { url: string }; result: string };
   skip_first_run_restore: { args: Record<string, never>; result: boolean };
-  get_global_local_skills: { args: { tool: string }; result: { name: string; path: string; skillId: string | null; status: string }[] };
+  get_global_local_skills: { args: { tool: string }; result: { name: string; path: string; locations: string[]; skillId: string | null; status: string }[] };
   get_global_local_skill_document: { args: { tool: string; name: string }; result: { name: string; description: string; body: string; path: string } };
   import_global_local_skill_to_center: { args: { tool: string; name: string }; result: string };
   update_global_local_skill_from_center: { args: { tool: string; skillId: string }; result: string };

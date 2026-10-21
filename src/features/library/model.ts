@@ -19,6 +19,29 @@ export interface SkillCard {
   draft?: boolean;
   updatedAt?: number;
   updateStatus?: string;
+  locations?: string[];
+}
+
+function copyStamp(description: string): boolean {
+  return / copy \d+$/i.test(description.trim());
+}
+
+export function groupSkillCards(skills: SkillCard[]): SkillCard[] {
+  const grouped: SkillCard[] = [];
+  for (const skill of skills) {
+    const key = skill.name.trim().toLowerCase();
+    const existing = grouped.find((row) => row.name.trim().toLowerCase() === key);
+    if (!existing) {
+      grouped.push({ ...skill, agents: [...skill.agents], locations: [...(skill.locations ?? [])], tags: [...skill.tags] });
+      continue;
+    }
+    existing.agents = [...new Set([...existing.agents, ...skill.agents])];
+    existing.locations = [...new Set([...(existing.locations ?? []), ...(skill.locations ?? [])])];
+    if (skill.description && (!existing.description || (copyStamp(existing.description) && !copyStamp(skill.description)))) {
+      existing.description = skill.description;
+    }
+  }
+  return grouped;
 }
 
 export type LibraryFilter = "all" | "enabled" | "available";

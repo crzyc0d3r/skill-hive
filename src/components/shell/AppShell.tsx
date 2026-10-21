@@ -54,6 +54,7 @@ import { applyTextSize, isTextSize, setLocale, t } from "../../lib/i18n";
 import { demoEnabled } from "@/lib/demo";
 import { jobLabel } from "@/lib/job-label";
 import { DataPhaseContext, RetryContext } from "@/lib/view-state";
+import { DevCrash, RouteErrorBoundary } from "@/components/RouteError";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
 import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, setToolOrder, silent, switchPreset, updatePreset } from "@/lib/ipc/actions";
 import { writeSetting } from "@/lib/ipc/catalog";
@@ -564,6 +565,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             <div className="mx-auto w-full max-w-[1280px]">
               <DataPhaseContext.Provider value={dataPhase}>
               <RetryContext.Provider value={retryData}>
+              <RouteErrorBoundary route={location.pathname}>
+              <DevCrash level="route">
               <Outlet
                 context={{
                   listing: listing.data ?? [],
@@ -582,6 +585,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
                   },
                 }}
               />
+              </DevCrash>
+              </RouteErrorBoundary>
               </RetryContext.Provider>
               </DataPhaseContext.Provider>
             </div>

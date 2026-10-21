@@ -19,6 +19,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatePanel } from "@/components/chrome";
 import { ProjectSkeleton } from "@/components/skeletons";
 import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { agentDisplayName } from "@/lib/agents";
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -174,7 +175,7 @@ export function ProjectView() {
                 {item.name}
                 <span data-testid="project-dot" data-color={dotColor(item)} className="ml-2 inline-block h-2 w-2 rounded-full bg-current" />
               </p>
-              <p>{t("project.agents")}: {(item.agents ?? []).join(", ") || "—"}</p>
+              <p>{t("project.agents")}: {(item.agents ?? []).map((agent) => agentDisplayName(agent)).join(", ") || "—"}</p>
               <Button type="button" variant="outline" size="sm" onClick={() => { update(addSkillToAgents(item, ["claude_code", "codex"])); void syncSkillToTool(item.id, "claude_code"); void syncSkillToTool(item.id, "codex"); void silent("export_skill_to_project", { id, skillId: item.id, agent: "claude_code" }); void silent("export_skill_to_project", { id, skillId: item.id, agent: "codex" }); }}>
                 {t("project.add")}
               </Button>
@@ -211,7 +212,7 @@ export function ProjectView() {
           {tab === "diff" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.local}{"\n"}{skill.center}</pre> : null}
           <div className="flex flex-wrap gap-2">
             {["claude_code", "codex"].map((agent) => (
-              <Button key={agent} type="button" size="sm" aria-pressed={agents.includes(agent)} variant={agents.includes(agent) ? "secondary" : "outline"} onClick={() => rememberAgents(agents.includes(agent) ? agents.filter((item) => item !== agent) : [...agents, agent])}>{agent}</Button>
+              <Button key={agent} type="button" size="sm" aria-pressed={agents.includes(agent)} variant={agents.includes(agent) ? "secondary" : "outline"} onClick={() => rememberAgents(agents.includes(agent) ? agents.filter((item) => item !== agent) : [...agents, agent])}>{agentDisplayName(agent)}</Button>
             ))}
           </div>
           <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(true); void silent<SkillCard[]>("get_managed_skills").then((loaded) => setLibrary(loaded ?? [])); }}>{t("project.fromLibrary")}</Button>

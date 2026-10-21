@@ -7,6 +7,7 @@ import { bodyStats, parseFrontmatter, renderLoaded, skillMarkdown, validateSkill
 import { ensureSkill, fixSkill, publishSkill, restoreSkill, saveSkill, setValidationCounts, snapshotSkill, updateSkill, useAuthoring } from "@/lib/authoring/store";
 import { CodeEditor } from "@/features/editor/CodeEditor";
 import { Screen } from "@/components/chrome";
+import { agentDisplayName } from "@/lib/agents";
 
 const TABS = ["problems", "preview", "versions"] as const;
 
@@ -241,7 +242,7 @@ export function SkillEditor() {
       {confirm ? (
         <div role="dialog" aria-label={t("editor.confirm.title")} className="mt-3 rounded-md border border-border p-3">
           <h2 className="text-sm font-medium">{t("editor.confirm.title")}</h2>
-          <ul>{confirm.map((agent) => <li key={agent}>{agent}</li>)}</ul>
+          <ul>{confirm.map((agent) => <li key={agent}>{agentDisplayName(agent)}</li>)}</ul>
           <Button type="button" variant="default" size="sm" className="mt-2" onClick={() => publish(true)}>{t("editor.confirm.action")}</Button>
         </div>
       ) : null}

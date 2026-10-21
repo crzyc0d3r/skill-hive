@@ -86,6 +86,7 @@ pub struct ManagedSkill {
     pub files: Vec<SkillFile>,
     pub updated_at: i64,
     pub update_status: String,
+    pub locations: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -199,11 +200,38 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
             agents,
             updated_at: skill.updated_at,
             update_status: skill.update_status.clone(),
+            locations: vec![skill.central_path.clone()],
         });
     }
+    let mut skills = collapse_managed(skills);
     skills.sort_by(|left, right| left.name.cmp(&right.name));
     crate::progress::emit("library", 1, 1, "Library ready", true);
     Ok(skills)
+}
+
+fn collapse_managed(skills: Vec<ManagedSkill>) -> Vec<ManagedSkill> {
+    let mut grouped = Vec::new();
+    for skill in skills {
+        if let Some(existing) = grouped
+            .iter_mut()
+            .find(|row: &&mut ManagedSkill| row.name.eq_ignore_ascii_case(&skill.name))
+        {
+            for agent in skill.agents {
+                if !existing.agents.contains(&agent) {
+                    existing.agents.push(agent);
+                }
+            }
+            existing.agents.sort();
+            for path in skill.locations {
+                if !path.is_empty() && !existing.locations.contains(&path) {
+                    existing.locations.push(path);
+                }
+            }
+            continue;
+        }
+        grouped.push(skill);
+    }
+    grouped
 }
 
 fn skill_tree_files(central: &Path, source: Option<&Path>) -> Vec<SkillFile> {
@@ -341,6 +369,22 @@ fn persist_install(
     source_type: &str,
     source_ref: Option<String>,
 ) -> Result<InstalledDto, AppError> {
+    if let Some(existing) = store
+        .get_all_skills()
+        .map_err(db)?
+        .into_iter()
+        .find(|skill| {
+            skill.name.eq_ignore_ascii_case(&installed.name)
+                || skill.content_hash.as_deref() == Some(installed.content_hash.as_str())
+        })
+    {
+        if Path::new(&existing.central_path) != installed.central_path.as_path()
+            && installed.central_path.is_dir()
+        {
+            let _ = std::fs::remove_dir_all(&installed.central_path);
+        }
+        return Ok(installed_dto(existing.name, existing.id));
+    }
     let stamp = now();
     let id = format!("{}-{stamp:x}", installed.name);
     store

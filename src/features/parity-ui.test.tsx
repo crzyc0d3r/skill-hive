@@ -68,7 +68,9 @@ describe("ui parity invokes", () => {
     const user = userEvent.setup();
     renderAt("/my-skills");
     expect(await screen.findByText("research-notes")).toBeInTheDocument();
-    await user.click(screen.getAllByTitle("claude_code")[0]);
+    await user.click(screen.getByRole("button", { name: /^research-notes/ }));
+    await user.click(screen.getByRole("button", { name: "Add to agent" }));
+    await user.click(screen.getByRole("button", { name: "Claude Code" }));
     expect(calls("sync_skill_to_tool").some((entry) => entry.args.tool === "claude_code" && entry.args.skillId === "skill-research")).toBe(true);
 
     await user.click(screen.getByRole("link", { name: /Tools/ }));
@@ -179,7 +181,7 @@ describe("ui parity invokes", () => {
     expect(calls("update_project_skill_from_center").some((entry) => entry.args.id === "field" && entry.args.skillId === "billing")).toBe(true);
     await user.click(screen.getByRole("button", { name: "Update center" }));
     expect(calls("update_project_skill_to_center").some((entry) => entry.args.id === "field" && entry.args.name === "billing")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "codex" }));
+    await user.click(screen.getByRole("button", { name: "Codex" }));
     expect(calls("set_settings").some((entry) => entry.args.key === "project_last_agents" && String(entry.args.value).includes("codex"))).toBe(true);
     await user.click(screen.getByRole("button", { name: "Delete local skill" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));

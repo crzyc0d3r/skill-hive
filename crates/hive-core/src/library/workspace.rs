@@ -12,6 +12,7 @@ use crate::deploy::sync_engine::{
     deploy_skill, link_points_at, remove_deployed_link, NativeBackend, OsKind, SyncMode,
 };
 use crate::library::content_hash::hash_skill_dir;
+use crate::library::identity::{self, SkillInstance};
 use crate::library::installer::install_local;
 use crate::library::skill_metadata::read_skill_document;
 
@@ -28,6 +29,7 @@ pub enum WorkspaceStatus {
 pub struct WorkspaceSkill {
     pub name: String,
     pub path: String,
+    pub locations: Vec<String>,
     pub skill_id: Option<String>,
     pub status: WorkspaceStatus,
 }
@@ -42,67 +44,96 @@ pub fn list_agent_skills(
     tool: &str,
     agent_skills: &Path,
 ) -> Result<Vec<WorkspaceSkill>> {
-    let mut rows = Vec::new();
+    list_agent_skills_in(store, tool, &[agent_skills.to_path_buf()])
+}
+
+/// One card per skill name across every root. Copies and symlinks/junctions group together.
+pub fn list_agent_skills_in(
+    store: &SkillStore,
+    tool: &str,
+    roots: &[PathBuf],
+) -> Result<Vec<WorkspaceSkill>> {
     let managed = store.get_all_skills()?;
-    if agent_skills.exists() {
-        for entry in fs::read_dir(agent_skills)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !path.is_dir() && fs::symlink_metadata(&path)?.file_type().is_symlink() {
-                // A symlink to a skill directory still counts.
-            } else if !path.join("SKILL.md").is_file()
-                && !fs::symlink_metadata(&path)?.file_type().is_symlink()
-            {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let matched = managed.iter().find(|skill| {
-                skill.name == name || link_points_at(&path, Path::new(&skill.central_path))
-            });
-            let status = match matched {
-                None => WorkspaceStatus::LocalOnly,
-                Some(skill) => {
-                    if link_points_at(&path, Path::new(&skill.central_path)) {
-                        WorkspaceStatus::InSync
-                    } else {
-                        let center = hash_skill_dir(Path::new(&skill.central_path)).ok();
-                        let agent = hash_skill_dir(&path).ok();
-                        if center.is_some() && center == agent {
-                            WorkspaceStatus::InSync
-                        } else {
-                            WorkspaceStatus::CenterChanged
-                        }
-                    }
-                }
-            };
-            rows.push(WorkspaceSkill {
-                name,
-                path: path.to_string_lossy().to_string(),
-                skill_id: matched.map(|skill| skill.id.clone()),
-                status,
-            });
-        }
+    let mut rows = Vec::new();
+    let mut seen_names = Vec::new();
+    for group in identity::group_instances(roots) {
+        let name = group[0].name.clone();
+        seen_names.push(name.to_ascii_lowercase());
+        let locations: Vec<String> = group
+            .iter()
+            .map(|hit| hit.path.to_string_lossy().to_string())
+            .collect();
+        let matched = managed.iter().find(|skill| {
+            skill.name.eq_ignore_ascii_case(&name)
+                || group.iter().any(|hit| {
+                    link_points_at(&hit.path, Path::new(&skill.central_path))
+                        || identity::canonical_dir(&hit.path)
+                            == identity::canonical_dir(Path::new(&skill.central_path))
+                })
+        });
+        let status = status_for_group(matched.map(|skill| skill.central_path.as_str()), &group);
+        rows.push(WorkspaceSkill {
+            name,
+            path: locations.first().cloned().unwrap_or_default(),
+            locations,
+            skill_id: matched.map(|skill| skill.id.clone()),
+            status,
+        });
     }
+    let anchor = roots.first().cloned().unwrap_or_default();
     for skill in &managed {
+        if seen_names
+            .iter()
+            .any(|name| name == &skill.name.to_ascii_lowercase())
+        {
+            continue;
+        }
         let deployed = store
             .get_targets_for_skill(&skill.id)?
             .into_iter()
             .any(|target| target.tool == tool);
-        if deployed
-            && !rows
-                .iter()
-                .any(|row| row.skill_id.as_deref() == Some(skill.id.as_str()))
-        {
-            rows.push(WorkspaceSkill {
-                name: skill.name.clone(),
-                path: agent_skills.join(&skill.name).to_string_lossy().to_string(),
-                skill_id: Some(skill.id.clone()),
-                status: WorkspaceStatus::Missing,
-            });
+        if !deployed {
+            continue;
         }
+        let path = anchor.join(&skill.name).to_string_lossy().to_string();
+        rows.push(WorkspaceSkill {
+            name: skill.name.clone(),
+            path: path.clone(),
+            locations: vec![path],
+            skill_id: Some(skill.id.clone()),
+            status: WorkspaceStatus::Missing,
+        });
     }
     rows.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(rows)
+}
+
+fn status_for_group(central: Option<&str>, group: &[SkillInstance]) -> WorkspaceStatus {
+    let Some(central) = central else {
+        return WorkspaceStatus::LocalOnly;
+    };
+    let center_path = Path::new(central);
+    let mut saw_sync = false;
+    for hit in group {
+        if link_points_at(&hit.path, center_path)
+            || identity::canonical_dir(&hit.path) == identity::canonical_dir(center_path)
+        {
+            saw_sync = true;
+            continue;
+        }
+        let center = hash_skill_dir(center_path).ok();
+        let agent = hash_skill_dir(&hit.path).ok();
+        if center.is_some() && center == agent {
+            saw_sync = true;
+        } else {
+            return WorkspaceStatus::CenterChanged;
+        }
+    }
+    if saw_sync {
+        WorkspaceStatus::InSync
+    } else {
+        WorkspaceStatus::LocalOnly
+    }
 }
 
 pub fn import_agent_local_skill_to_center(

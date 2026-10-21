@@ -37,6 +37,19 @@ fn persist(
     installed: &InstallResult,
     source: &Path,
 ) -> Result<String, AppError> {
+    if let Some(existing) = store
+        .get_all_skills()
+        .map_err(db)?
+        .into_iter()
+        .find(|skill| skill.name.eq_ignore_ascii_case(&installed.name))
+    {
+        if Path::new(&existing.central_path) != installed.central_path.as_path()
+            && installed.central_path.is_dir()
+        {
+            let _ = std::fs::remove_dir_all(&installed.central_path);
+        }
+        return Ok(existing.id);
+    }
     let stamp = now();
     let id = format!("{}-{stamp:x}", installed.name);
     store
@@ -91,8 +104,11 @@ pub async fn get_global_local_skills(
 ) -> Result<Vec<WorkspaceSkill>, AppError> {
     let store = store.inner().clone();
     crate::offload::offload(move || {
-        let dir = agent_dir(store.as_ref(), tool.trim())?;
-        workspace::list_agent_skills(store.as_ref(), tool.trim(), &dir)
+        let adapter = all_tool_adapters(store.as_ref())
+            .into_iter()
+            .find(|adapter| adapter.key == tool.trim())
+            .ok_or_else(|| AppError::not_found(format!("unknown agent {}", tool.trim())))?;
+        workspace::list_agent_skills_in(store.as_ref(), tool.trim(), &adapter.all_scan_dirs())
             .map_err(|err| AppError::io(err.to_string()))
     })
     .await
