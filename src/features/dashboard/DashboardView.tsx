@@ -8,7 +8,7 @@ import { useGenerate } from "@/features/generate/store";
 import { installManageSkills } from "@/lib/ipc/actions";
 import { AgentBadge } from "@/components/app/AgentBadge";
 import { SourceBadge } from "@/components/app/SourceBadge";
-import { EmptyState, ErrorState, Panel, PrimaryLink, QuietLink, Screen, Stat } from "@/components/chrome";
+import { ErrorState, Panel, PrimaryLink, QuietLink, Screen, Stat } from "@/components/chrome";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DashboardSkeleton } from "@/components/skeletons";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
