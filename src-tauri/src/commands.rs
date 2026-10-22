@@ -492,7 +492,12 @@ fn sync_skill(store: &SkillStore, skill_id: &str, tool: &str, add: bool) -> Resu
     result
 }
 
-fn sync_skill_now(store: &SkillStore, skill_id: &str, tool: &str, add: bool) -> Result<(), AppError> {
+fn sync_skill_now(
+    store: &SkillStore,
+    skill_id: &str,
+    tool: &str,
+    add: bool,
+) -> Result<(), AppError> {
     let skill = store
         .get_skill_by_id(skill_id)
         .map_err(db)?
@@ -675,7 +680,8 @@ pub async fn get_managed_skills(
         remember_index(&cached);
         let refreshing = store.clone();
         tauri::async_runtime::spawn(async move {
-            let rebuilt = crate::offload::offload(move || rebuild_library(refreshing.as_ref())).await;
+            let rebuilt =
+                crate::offload::offload(move || rebuild_library(refreshing.as_ref())).await;
             if let Ok(rows) = rebuilt {
                 if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
                     let _ = app.emit("library-index", &rows);
