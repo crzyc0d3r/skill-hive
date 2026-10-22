@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DeltaBar, VerdictChip } from "@/components/app/VerdictChip";
-import { EmptyState, Panel, Screen, StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, Panel, Screen, StatePanel } from "@/components/chrome";
 import { scoreDelta } from "@/lib/verdict";
 import { EffectivenessSkeleton } from "@/components/skeletons";
 import { t } from "@/lib/i18n";
@@ -124,7 +124,7 @@ export function EffectivenessView() {
         title={t("effect.title")}
         actions={phase === "loading" ? <Button type="button" size="sm" disabled aria-busy>{t("effect.runAgain")}</Button> : undefined}
       >
-        {phase === "loading" ? <EffectivenessSkeleton /> : phase === "ready" || phase === "empty" ? <EmptyState title={phaseCopy("empty")} action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>} /> : <StatePanel tone={phase} title={phaseCopy(phase)} action={retry} />}
+        {phase === "loading" ? <EffectivenessSkeleton /> : phase === "error" ? <ErrorState title={t("effect.error")} detail={t("shell.renderError")} onRetry={() => setAttempt((value) => value + 1)} /> : phase === "ready" || phase === "empty" ? <EmptyState title={phaseCopy("empty")} action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>} /> : <StatePanel tone={phase} title={phaseCopy(phase)} action={retry} />}
       </Screen>
     );
   }
@@ -157,8 +157,23 @@ export function EffectivenessView() {
         <p className="text-sm" data-testid="effect-verdict">{verdictText(code)}</p>
         <p className="mt-1 text-sm text-muted-foreground" data-testid="effect-action">{actionText(code)}</p>
       </Panel>
-      <Panel>
-        <GradeMark letter={report.grade} score={report.grade_score} hero testId="effect-grade" />
+      <Panel title={t("effect.grade")}>
+        <div className="flex flex-wrap items-center gap-6">
+          <GradeMark letter={report.grade} score={report.grade_score} hero testId="effect-grade" />
+          <div className="min-w-0 max-w-prose flex-1">
+            <p className="text-sm font-medium">{verdictText(code)}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{actionText(code)}</p>
+          </div>
+        </div>
+      </Panel>
+      <Panel title={t("effect.radar")} className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          {open ? <p className="text-sm text-muted-foreground">{t("effect.series.skill")}</p> : <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>}
+          <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById("effect-radar-table")?.focus()}>
+            {t("effect.showTable")}
+          </Button>
+        </div>
+        <AxisTable report={report} showOverlay={open} />
       </Panel>
       <details className="rounded-lg border border-border bg-card px-4 py-3">
         <summary className="cursor-pointer text-sm font-medium">{t("effect.advanced")}</summary>
@@ -214,15 +229,6 @@ export function EffectivenessView() {
           </Panel>
         </>
       ) : null}
-      <Panel title={t("effect.radar")} className="min-w-0">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {open ? <p className="text-sm text-muted-foreground">{t("effect.series.skill")}</p> : <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>}
-          <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById("effect-radar-table")?.focus()}>
-            {t("effect.showTable")}
-          </Button>
-        </div>
-        <AxisTable report={report} showOverlay={open} />
-      </Panel>
     </Screen>
   );
 }

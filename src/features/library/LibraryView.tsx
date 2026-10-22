@@ -293,8 +293,9 @@ export function LibraryView({
     });
   }
 
+  const missingDetail = phase === "empty" && Boolean(initialId);
   return (
-    <Screen testId="library" title={t("library.title")} lede={t("library.emptyBody")} actions={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
+    <Screen testId="library" title={t("library.title")} lede={missingDetail ? undefined : t("library.emptyBody")} actions={missingDetail ? undefined : <PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
       <div className="flex flex-wrap items-center gap-2">
         <SearchField
           aria-label={t("library.search")}
@@ -481,7 +482,7 @@ export function LibraryView({
       ) : null}
       {phase === "loading" ? <LibrarySkeleton /> : null}
       {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
-      {phase === "empty" || (phase === "ready" && rendered.length === 0) ? (
+      {(phase === "empty" && !initialId) || (phase === "ready" && rendered.length === 0) ? (
         <EmptyState title={t("library.emptyTitle")} body={t("library.emptyBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} />
       ) : null}
       <div className={cn("flex min-w-0 flex-col gap-4", open && band >= 1440 && "flex-row items-start")}>
@@ -523,7 +524,7 @@ export function LibraryView({
                   </DropdownMenuContent> : null}
                 </DropdownMenu>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1 px-3">
+              <div className="mt-2 flex h-6 shrink-0 items-center gap-1 overflow-hidden px-3">
                 {skill.draft ? <Badge data-testid="draft-badge" variant="warning">{t("library.badge.draft")}</Badge> : null}
                 {badgeFor(seed, skill.id) === "tested" ? <Badge data-testid="tested-badge" variant="success">{t("library.badge.tested")}</Badge> : null}
                 {badgeFor(seed, skill.id) === "regressed" ? <Badge data-testid="regressed-badge" variant="warning">{t("library.badge.regressed")}</Badge> : null}
@@ -557,8 +558,8 @@ export function LibraryView({
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="mt-auto space-y-2 border-t border-border px-3 py-2">
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="mt-auto flex h-9 shrink-0 items-center gap-2 border-t border-border px-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                   <SourceBadge source={skill.source} />
                   <span className="relative inline-flex size-4 shrink-0 items-center justify-center" title={t("library.membership")}>
                     <span
@@ -572,10 +573,12 @@ export function LibraryView({
                       className="absolute inset-0 opacity-0 focus-visible:opacity-100"
                     />
                   </span>
-                  {memberIds.includes(skill.id) ? <span className="whitespace-nowrap text-xs text-muted-foreground">{presetName}</span> : null}
+                  {memberIds.includes(skill.id) ? <span className="truncate text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
-                  <span className="text-xs text-muted-foreground">{skill.agents.length === 1 ? t("library.inAgent") : t("library.inAgents", { count: String(skill.agents.length) })}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">{skill.agents.length === 0 ? t("library.inNone") : skill.agents.length === 1 ? t("library.inAgent") : t("library.inAgents", { count: String(skill.agents.length) })}</span>
                   <InstalledTiles skill={skill} agents={catalogAgents} />
+                </span>
               </div>
             </Card>
           </li>
@@ -666,7 +669,7 @@ export function LibraryView({
         <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
           {phase === "loading" ? <div data-testid="detail-loading" className="h-40 animate-pulse rounded-md bg-muted" /> : null}
           {phase === "error" || phase === "offline" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
-          {phase === "empty" ? <EmptyState title={t("library.installedNone")} body={t("library.emptyBody")} /> : null}
+          {phase === "empty" ? <EmptyState title={t("library.detailMissing")} body={t("library.detailMissingBody")} /> : null}
         </aside>
       ) : null}
       </div>

@@ -6,7 +6,7 @@ import { t } from "../../lib/i18n";
 import { applyOptimized, optimizeDescription, useGenerate } from "@/features/generate/store";
 import { runEffectivenessSuite, saveSuiteDraft } from "@/lib/ipc/actions";
 import { VerdictChip } from "@/components/app/VerdictChip";
-import { Panel, Screen, StatePanel, TextField } from "@/components/chrome";
+import { EmptyState, ErrorState, Panel, Screen, StatePanel, TextField } from "@/components/chrome";
 import { SuiteSkeleton } from "@/components/skeletons";
 import { previewPhase, useOnline, useShellPhase, type ViewPhase } from "@/lib/view-state";
 
@@ -66,10 +66,21 @@ export function SuiteView() {
     return condition === "with_skill" ? t("suite.withSkill") : t("suite.withoutSkill");
   }
 
+  if (forced === "error") {
+    return (
+      <Screen testId="suite" className="min-h-[calc(100dvh-8.5rem)]" title={t("suite.title")}>
+        <ErrorState title={t("effect.error")} detail={t("shell.renderError")} retryLabel={t("suite.tryAgain")} onRetry={() => undefined} />
+      </Screen>
+    );
+  }
   if (forced && forced !== "loading") {
     return (
       <Screen testId="suite" className="min-h-[calc(100dvh-8.5rem)]" title={t("suite.title")}>
-        <StatePanel tone={forced} title={phaseCopy(forced)} />
+        {forced === "empty" ? (
+          <EmptyState title={t("effect.empty")} body={t("suite.emptyBody")} action={<Button type="button" size="sm">{t("suite.run")}</Button>} />
+        ) : (
+          <StatePanel tone={forced} title={phaseCopy(forced)} />
+        )}
       </Screen>
     );
   }
@@ -81,8 +92,8 @@ export function SuiteView() {
       </Button>
     }>
       {!online ? <StatePanel tone="offline" title={t("effect.offline")} /> : null}
-      <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <Panel title={t("suite.cases")} className="h-full">
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <Panel title={t("suite.cases")}>
           <div className="flex flex-col gap-3">
             <label className="text-sm">
               <span className="text-xs font-medium text-muted-foreground">{t("suite.mode")}</span>
@@ -114,9 +125,9 @@ export function SuiteView() {
             <p className="text-sm text-muted-foreground">{t("suite.withSkill")} · {t("suite.withoutSkill")}</p>
           </div>
         </Panel>
-        <Panel title={t("suite.matrix")} className="h-full">
+        <Panel title={t("suite.matrix")}>
           {shell === "loading" ? <SuiteSkeleton /> : (
-          <div data-testid="suite-matrix" className="flex h-full flex-col gap-3">
+          <div data-testid="suite-matrix" className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               {t("suite.withSkill")} · {t("suite.withoutSkill")} · {t("suite.repetitions")} {repetitions}
             </p>
@@ -129,7 +140,7 @@ export function SuiteView() {
                 </li>
               ))}
             </ul>
-            <div className="grid flex-1 gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               {CONDITIONS.map((condition) => (
                 <div key={condition} className="rounded-md border border-border bg-muted/20 p-3">
                   <div className="mb-2 text-xs text-muted-foreground">{conditionLabel(condition)}</div>
@@ -144,15 +155,15 @@ export function SuiteView() {
                 </div>
               ))}
             </div>
-            <p className="font-mono text-sm tabular-nums">{t("suite.estimate")}: 2 × 1 × {repetitions}</p>
+            <p className="text-sm text-muted-foreground">{t("suite.estimate")}: 2 × 1 × {repetitions}</p>
           </div>
           )}
         </Panel>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="secondary" size="sm" onClick={() => optimizeDescription(id)}>{t("suite.optimize")}</Button>
-        <Button type="button" variant="secondary" size="sm" disabled={!wizard.optimized || wizard.applied} onClick={() => applyOptimized()}>{t("suite.apply")}</Button>
-        <Link to="/effectiveness" data-testid="effectiveness-link" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+      <div className="inline-flex w-fit max-w-full flex-wrap items-center divide-x divide-border overflow-hidden rounded-lg border border-border bg-card" aria-label={t("suite.actions")}>
+        <Button type="button" variant="ghost" size="sm" className="rounded-none" onClick={() => optimizeDescription(id)}>{t("suite.optimize")}</Button>
+        <Button type="button" variant="ghost" size="sm" className="rounded-none" disabled={!wizard.optimized || wizard.applied} onClick={() => applyOptimized()}>{t("suite.apply")}</Button>
+        <Link to="/effectiveness" data-testid="effectiveness-link" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "rounded-none")}>
           {t("suite.effectiveness")}
         </Link>
       </div>

@@ -136,7 +136,8 @@ describe("ui parity invokes", () => {
     installIpc([{ ...SKILLS[0], agents: ["claude_code"] }, SKILLS[1], SKILLS[2]]);
     const user = userEvent.setup();
     const overview = renderAt("/global-workspace");
-    expect(await screen.findByRole("button", { name: "Research 1/2" })).toHaveAttribute("data-fill", "partial");
+    expect(await screen.findByRole("button", { name: "Research" })).toHaveAttribute("data-fill", "partial");
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
     overview.unmount();
 
     installIpc([{ ...SKILLS[0], agents: ["claude_code"] }, SKILLS[1], SKILLS[2]]);
@@ -179,13 +180,16 @@ describe("ui parity invokes", () => {
     expect(calls("add_project").some((entry) => entry.args.path === "/tmp/skills-root")).toBe(true);
     expect(calls("add_linked_workspace").some((entry) => entry.args.path === "/tmp/skills-root")).toBe(true);
     expect(calls("reveal_project_folder")).toHaveLength(0);
-    await user.click(screen.getByRole("button", { name: "Update project" }));
+    await user.click(screen.getByRole("button", { name: "More billing" }));
+    await user.click(screen.getByRole("menuitem", { name: "Update project" }));
     expect(calls("update_project_skill_from_center").some((entry) => entry.args.id === "field" && entry.args.skillId === "billing")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Update center" }));
+    await user.click(screen.getByRole("button", { name: "More billing" }));
+    await user.click(screen.getByRole("menuitem", { name: "Update center" }));
     expect(calls("update_project_skill_to_center").some((entry) => entry.args.id === "field" && entry.args.name === "billing")).toBe(true);
     await user.click(screen.getByRole("button", { name: "Codex" }));
     expect(calls("set_settings").some((entry) => entry.args.key === "project_last_agents" && String(entry.args.value).includes("codex"))).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Delete local skill" }));
+    await user.click(screen.getByRole("button", { name: "More billing" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete local skill" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     expect(calls("delete_project_skill").some((entry) => entry.args.name === "billing")).toBe(true);
 
@@ -206,7 +210,8 @@ describe("ui parity invokes", () => {
     expect((await screen.findAllByText("research-notes")).length).toBeGreaterThan(0);
     await user.click(screen.getByTestId("link-project"));
     expect(screen.queryByText("research-notes")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Pull center" }));
+    await user.click(screen.getByRole("button", { name: "More notes" }));
+    await user.click(screen.getByRole("menuitem", { name: "Pull center" }));
     expect(calls("pull_project_center")).toEqual([
       expect.objectContaining({ args: expect.objectContaining({ name: "notes", body: "center v2" }) }),
     ]);
@@ -261,7 +266,8 @@ describe("ui parity invokes", () => {
     installIpc();
     const user = userEvent.setup();
     renderAt("/settings?tab=agents");
-    await user.type(await screen.findByRole("textbox", { name: "Agent name" }), "Field Notes");
+    await user.click(await screen.findByRole("button", { name: "Add agent" }));
+    await user.type(screen.getByRole("textbox", { name: "Agent name" }), "Field Notes");
     await user.type(screen.getByRole("textbox", { name: "Agent path" }), "~/.field-notes/skills");
     await user.click(screen.getByRole("button", { name: "New Agent" }));
     const rows = document.querySelectorAll("[data-agent]");

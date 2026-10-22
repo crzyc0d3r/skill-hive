@@ -8,7 +8,7 @@ import { useGenerate } from "@/features/generate/store";
 import { installManageSkills } from "@/lib/ipc/actions";
 import { AgentBadge } from "@/components/app/AgentBadge";
 import { SourceBadge } from "@/components/app/SourceBadge";
-import { ErrorState, Panel, PrimaryLink, QuietLink, Screen, Stat } from "@/components/chrome";
+import { ErrorState, Panel, PrimaryLink, Screen, Stat } from "@/components/chrome";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DashboardSkeleton } from "@/components/skeletons";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -66,19 +66,23 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
       {uninstalled > 0 || regressions > 0 ? (
         <div className="space-y-2" data-testid="attention-strip">
           {uninstalled > 0 ? (
-            <Alert className="border-warning/40 bg-warning-subtle text-warning-subtle-foreground">
-              <AlertTitle>{uninstalled === 1 ? t("dashboard.attention.one") : t("dashboard.attention.uninstalled", { count: String(uninstalled) })}</AlertTitle>
-              <AlertDescription>
-                <QuietLink to="/my-skills">{t("dashboard.attention.review")}</QuietLink>
+            <Alert className="border-border bg-secondary text-foreground" style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}>
+              <AlertTitle className="text-foreground">{uninstalled === 1 ? t("dashboard.attention.one") : t("dashboard.attention.uninstalled", { count: String(uninstalled) })}</AlertTitle>
+              <AlertDescription className="text-foreground">
+                <Button asChild type="button" variant="outline" size="sm">
+                  <Link to="/my-skills">{t("dashboard.attention.review")}</Link>
+                </Button>
               </AlertDescription>
             </Alert>
           ) : null}
           {regressions > 0 ? (
-            <Alert className="border-warning/40 bg-warning-subtle text-warning-subtle-foreground" data-testid="regressions">
-              <AlertTitle>{t("dashboard.attention.regressions", { count: String(regressions) })}</AlertTitle>
-              <AlertDescription data-testid="regression-row">
+            <Alert className="border-border bg-secondary text-foreground" style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }} data-testid="regressions">
+              <AlertTitle className="text-foreground">{t("dashboard.attention.regressions", { count: String(regressions) })}</AlertTitle>
+              <AlertDescription className="text-foreground" data-testid="regression-row">
                 {seed.regressions.map((row) => <span key={`${row.skillId}-${row.rule}`}>{row.rule} {row.message} </span>)}
-                <QuietLink to="/effectiveness">{t("dashboard.attention.review")}</QuietLink>
+                <Button asChild type="button" variant="outline" size="sm">
+                  <Link to="/effectiveness">{t("dashboard.attention.review")}</Link>
+                </Button>
               </AlertDescription>
             </Alert>
           ) : null}
@@ -90,8 +94,8 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
         <Stat label={t("dashboard.stat.agents")} value={connected} icon={<BotIcon className="size-4" aria-hidden="true" />} />
         <Stat label={t("dashboard.stat.tested")} value={<span data-testid="tested-count">{seed.tested.length}</span>} icon={<FlaskConicalIcon className="size-4" aria-hidden="true" />} />
       </div>
-      <div className="grid min-h-0 flex-1 gap-3 min-[1440px]:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)]">
-        <Panel title={t("dashboard.recent")} className="h-full">
+      <div className="grid items-start gap-3 min-[1440px]:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)]">
+        <Panel title={t("dashboard.recent")}>
           <ul data-testid="recent-activity" className="divide-y divide-border">
             {recent.slice(0, 6).map((skill) => (
               <li key={skill.id}>
@@ -114,7 +118,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
             ))}
           </ul>
         </Panel>
-        <div className="flex h-full flex-col gap-3">
+        <div className="flex flex-col gap-3">
           <Panel title={t("dashboard.setup")} testId="manage-skills">
             <p className="text-sm text-muted-foreground">{t("dashboard.setup.body")}</p>
             <Button
@@ -131,17 +135,28 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
             </Button>
             {setupNote ? <p role="status" className="mt-2 text-sm">{setupNote}</p> : null}
           </Panel>
-          {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : <Panel title={t("dashboard.health")} testId="test-health" className="flex-1">
-            <div className="flex h-3 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-              <span className="h-full bg-[var(--verdict-helps-lot)]" style={{ width: `${skills.length ? (Math.max(synced, 1) / skills.length) * 40 : 0}%` }} />
-              <span className="h-full bg-[var(--verdict-neutral)]" style={{ width: "35%" }} />
-              <span className="h-full bg-[var(--verdict-worse)]" style={{ width: `${regressions ? 25 : 8}%` }} />
-            </div>
-            <ul className="mt-3 space-y-1 text-sm">
-              <li>{t("dashboard.health.helps")}</li>
-              <li>{t("dashboard.health.neutral")}</li>
-              <li>{t("dashboard.health.worse")} · {regressions}</li>
-            </ul>
+          {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : <Panel title={t("dashboard.health")} testId="test-health">
+            {(() => {
+              const tested = seed.tested.length;
+              const worseCount = tested === 0 ? 0 : Math.min(regressions, tested);
+              const helpsCount = tested === 0 ? 0 : tested - worseCount;
+              const neutralCount = 0;
+              const share = (count: number) => (tested === 0 ? 0 : (count / tested) * 100);
+              return (
+                <>
+                  <div className="flex h-3 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                    <span className="h-full bg-[var(--verdict-helps-lot)]" style={{ width: `${share(helpsCount)}%` }} />
+                    <span className="h-full bg-[var(--verdict-neutral)]" style={{ width: `${share(neutralCount)}%` }} />
+                    <span className="h-full bg-[var(--verdict-worse)]" style={{ width: `${share(worseCount)}%` }} />
+                  </div>
+                  <ul className="mt-3 space-y-1 text-sm">
+                    <li>{t("dashboard.health.helps")} · {helpsCount}</li>
+                    <li>{t("dashboard.health.neutral")} · {neutralCount}</li>
+                    <li>{t("dashboard.health.worse")} · {worseCount}</li>
+                  </ul>
+                </>
+              );
+            })()}
           </Panel>}
         </div>
       </div>

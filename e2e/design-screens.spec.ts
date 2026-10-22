@@ -104,7 +104,7 @@ for (const theme of THEMES) {
       test(`design ${theme} ${width} ${state}`, async ({ page }) => {
         test.setTimeout(240_000);
         await boot(page, theme, width);
-        for (const screen of SCREENS) {
+        for (const screen of [...SCREENS, { id: "workspace-agent", path: "/global-workspace/claude_code", landmark: "global-workspace" }]) {
           const join = screen.path.includes("?") ? "&" : "?";
           await page.goto(`${screen.path}${join}state=${state}`);
           await expect(page.getByTestId(screen.landmark)).toBeVisible();

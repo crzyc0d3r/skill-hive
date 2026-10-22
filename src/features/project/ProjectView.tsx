@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useContext, useEffect, useRef, useState } from "react";
+import { MoreHorizontalIcon } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useDebounced } from "@/lib/use-debounced";
 import { t } from "@/lib/i18n";
@@ -82,6 +83,7 @@ export function ProjectView() {
   const [picked, setPicked] = useState<string[]>([]);
   const [anchor, setAnchor] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ProjectSkill | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
   const pinned = useRef(false);
   const previewOnly = useRef(demoEnabled());
   const skill = rows[0] ?? FIXTURE;
@@ -150,9 +152,31 @@ export function ProjectView() {
 
   return (
     <section data-testid="project" className="flex w-full min-w-0 flex-col gap-4">
-      <header>
-        <h1 className="font-sans text-display font-semibold tracking-tight">{t("project.title")}</h1>
-        <p className="mt-1 max-w-prose text-sm leading-5 text-muted-foreground">{t("project.linked")}</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-sans text-display font-semibold tracking-tight">{t("project.title")}</h1>
+        </div>
+        {phase === "ready" ? (
+          <>
+          <label className="sr-only">
+            {t("project.skillsRoot")}
+            <Input aria-label={t("project.skillsRoot")} value={root} onChange={(event) => setRoot(event.target.value)} />
+          </label>
+          <Button type="button" data-testid="link-project" size="sm" onClick={() => {
+            pinned.current = true;
+            previewOnly.current = false;
+            const next = root.trim() && rows.length ? rows : [FIXTURE];
+            setRows(next);
+            setLinked(true);
+            setProjectSkills(next);
+            const chosen = next[0] ?? FIXTURE;
+            void addProject("fixture", root);
+            void silent("add_linked_workspace", { name: chosen.name, path: root || chosen.name, agent: agents[0] ?? "claude_code" });
+          }}>
+            {t("project.link")}
+          </Button>
+          </>
+        ) : null}
       </header>
       {phase === "loading" ? <ProjectSkeleton /> : null}
       {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
@@ -181,72 +205,46 @@ export function ProjectView() {
           </table>
         </div>
       ) : null}
-      {phase === "ready" ? <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 shadow-none">
-        <p className="text-sm text-muted-foreground">{t("project.linked")}</p>
-        <label className="block text-sm">
-          {t("project.skillsRoot")}
-          <Input aria-label={t("project.skillsRoot")} value={root} onChange={(event) => setRoot(event.target.value)} className="mt-1 h-8" />
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" data-testid="link-project" size="sm"             onClick={() => {
-              pinned.current = true;
-              previewOnly.current = false;
-              const next = root.trim() && rows.length ? rows : [FIXTURE];
-              setRows(next);
-              setLinked(true);
-              setProjectSkills(next);
-              const chosen = next[0] ?? FIXTURE;
-              void addProject("fixture", root);
-              void silent("add_linked_workspace", { name: chosen.name, path: root || chosen.name, agent: agents[0] ?? "claude_code" });
-            }}
-          >
-            {t("project.link")}
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => { setLinked(true); void addProject(skill.name, root); }}>
-            {t("project.linked")}
-          </Button>
-        </div>
-      </Card> : null}
+      {phase === "ready" && !linked ? (
+        <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => { setLinked(true); void addProject(skill.name, root); }}>
+          {t("project.linked")}
+        </Button>
+      ) : null}
       {phase === "ready" && linked ? (
-        <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 text-sm shadow-none">
-          {(rows.length ? rows : [skill]).map((item) => (
-            <div key={item.id} className="space-y-2">
-              <p>
-                {item.name}
-                <span data-testid="project-dot" data-color={dotColor(item)} className="ml-2 inline-block h-2 w-2 rounded-full bg-current" />
-              </p>
-              <p>{t("project.agents")}: {(item.agents ?? []).map((agent) => agentDisplayName(agent)).join(", ") || "—"}</p>
-              <Button type="button" variant="outline" size="sm" onClick={() => { update(addSkillToAgents(item, ["claude_code", "codex"])); void syncSkillToTool(item.id, "claude_code"); void syncSkillToTool(item.id, "codex"); void silent("export_skill_to_project", { id, skillId: item.id, agent: "claude_code" }); void silent("export_skill_to_project", { id, skillId: item.id, agent: "codex" }); }}>
-                {t("project.add")}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { const enabled = !item.enabled; update(toggleSkill(item, enabled)); void setSkillsEnabled([item.id], enabled); void silent("toggle_project_skill", { id, name: item.name, enabled }); }}>
-                {t("project.disable")}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { update(pullCenter(item)); void pullProjectCenter(item.name, item.center); void silent("update_project_skill_from_center", { id, skillId: item.id, agent: "claude_code" }); }}>
-                {t("project.pull")}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void silent("update_project_skill_from_center", { id, skillId: item.id, agent: agents[0] ?? "claude_code" }); }}>
-                {t("project.update")}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void silent("update_project_skill_to_center", { id, name: item.name, skillId: item.id }); }}>
-                {t("project.updateCenter")}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => setPendingDelete(item)}>
-                {t("workspace.delete")}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { update({ ...item, enabled: true }); void setSkillsEnabled([item.id], true); void silent("toggle_project_skill", { id, name: item.name, enabled: true }); }}>
-                {t("project.batch")}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void silent("reveal_project_folder", { id }); }}>
-                {t("library.detail.local")}
-              </Button>
-            </div>
-          ))}
-          <div className="flex gap-2">
+        <Card className="gap-3 rounded-lg border-border px-4 py-4 text-sm shadow-none">
+          <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant={tab === "local" ? "secondary" : "outline"} onClick={() => setTab("local")}>{t("library.detail.local")}</Button>
             <Button type="button" size="sm" variant={tab === "diff" ? "secondary" : "outline"} onClick={() => setTab("diff")}>{t("library.detail.diff")}</Button>
             <Button type="button" size="sm" variant={tab === "center" ? "secondary" : "outline"} onClick={() => setTab("center")}>{t("workspace.detail.center")}</Button>
           </div>
+          {(rows.length ? rows : [skill]).map((item) => (
+            <div key={item.id} className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <p>
+                  {item.name}
+                  <span data-testid="project-dot" data-color={dotColor(item)} className="ml-2 inline-block h-2 w-2 rounded-full bg-current" />
+                </p>
+                <span className="relative">
+                  <Button type="button" variant="ghost" size="icon-sm" aria-label={`${t("shell.more")} ${item.name}`} aria-expanded={menuId === item.id} onClick={() => setMenuId(menuId === item.id ? null : item.id)}>
+                    <MoreHorizontalIcon aria-hidden="true" />
+                  </Button>
+                  {menuId === item.id ? (
+                    <div role="menu" className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-border bg-popover p-1 text-left shadow-md">
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); update(addSkillToAgents(item, ["claude_code", "codex"])); void syncSkillToTool(item.id, "claude_code"); void syncSkillToTool(item.id, "codex"); void silent("export_skill_to_project", { id, skillId: item.id, agent: "claude_code" }); void silent("export_skill_to_project", { id, skillId: item.id, agent: "codex" }); }}>{t("project.add")}</button>
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); const enabled = !item.enabled; update(toggleSkill(item, enabled)); void setSkillsEnabled([item.id], enabled); void silent("toggle_project_skill", { id, name: item.name, enabled }); }}>{t("project.disable")}</button>
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); update(pullCenter(item)); void pullProjectCenter(item.name, item.center); void silent("update_project_skill_from_center", { id, skillId: item.id, agent: "claude_code" }); }}>{t("project.pull")}</button>
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); void silent("update_project_skill_from_center", { id, skillId: item.id, agent: agents[0] ?? "claude_code" }); }}>{t("project.update")}</button>
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); void silent("update_project_skill_to_center", { id, name: item.name, skillId: item.id }); }}>{t("project.updateCenter")}</button>
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); update({ ...item, enabled: true }); void setSkillsEnabled([item.id], true); void silent("toggle_project_skill", { id, name: item.name, enabled: true }); }}>{t("project.batch")}</button>
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); void silent("reveal_project_folder", { id }); }}>{t("library.detail.local")}</button>
+                      <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent" onClick={() => { setMenuId(null); setPendingDelete(item); }}>{t("workspace.delete")}</button>
+                    </div>
+                  ) : null}
+                </span>
+              </div>
+              <p>{t("project.agents")}: {(item.agents ?? []).map((agent) => agentDisplayName(agent)).join(", ") || "—"}</p>
+            </div>
+          ))}
           {tab === "local" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.local}</pre> : null}
           {tab === "center" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.center}</pre> : null}
           {tab === "diff" ? <pre className="whitespace-pre-wrap font-mono text-sm">{skill.local}{"\n"}{skill.center}</pre> : null}

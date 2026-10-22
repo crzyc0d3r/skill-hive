@@ -81,7 +81,9 @@ export function AgentsView() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-medium">{t("agents.field.import")}</th>
+                <th className="px-3 py-2 font-medium">{t("agents.col.name")}</th>
+                <th className="px-3 py-2 font-medium">{t("agents.col.usedBy")}</th>
+                <th className="px-3 py-2 font-medium">{t("agents.col.edited")}</th>
                 <th className="px-3 py-2 font-medium">{t("agents.col.status")}</th>
               </tr>
             </thead>
@@ -89,6 +91,8 @@ export function AgentsView() {
               {agents.map((agent) => (
                 <tr key={agent.id} className="border-t border-border">
                   <td className="px-3 py-3"><Link to={`/agents/${agent.id}/edit`} className="font-medium">{agent.name}</Link></td>
+                  <td className="px-3 py-3 text-muted-foreground">{t("agents.usedBy.draft")}</td>
+                  <td className="px-3 py-3 text-muted-foreground">{t("agents.edited.today")}</td>
                   <td className="px-3 py-3"><Badge variant="secondary">{t("library.badge.draft")}</Badge></td>
                 </tr>
               ))}

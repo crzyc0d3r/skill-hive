@@ -83,14 +83,14 @@ export function EmptyState({ title, body, action }: { title: string; body?: Reac
   );
 }
 
-export function ErrorState({ title, detail, onRetry }: { title: string; detail?: string; onRetry?: () => void }) {
+export function ErrorState({ title, detail, onRetry, retryLabel }: { title: string; detail?: string; onRetry?: () => void; retryLabel?: string }) {
   return (
     <div role="alert" data-testid="error-state" className="rounded-lg border border-destructive/40 bg-card px-4 py-4 text-card-foreground">
       <h2 className="font-sans text-base font-semibold">{title}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{t("shell.renderError")}</p>
       {onRetry ? (
         <Button type="button" size="sm" className="mt-3" onClick={onRetry}>
-          {t("banner.retry")}
+          {retryLabel ?? t("banner.retry")}
         </Button>
       ) : null}
       <details className="mt-3">
@@ -163,8 +163,8 @@ export function PrimaryLink({ to, children }: { to: string; children: ReactNode 
 
 export function QuietLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Button asChild size="sm" variant="outline">
-      <Link to={to}>{children}</Link>
-    </Button>
+    <Link to={to} className="text-sm font-medium underline underline-offset-2">
+      {children}
+    </Link>
   );
 }

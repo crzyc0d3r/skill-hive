@@ -7,7 +7,7 @@ import { writeHistoryBaseline } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
 import { VerdictChip } from "@/components/app/VerdictChip";
 import { AgentName } from "@/components/app/AgentBadge";
-import { EmptyState, Panel, Screen, StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, Panel, Screen, StatePanel } from "@/components/chrome";
 import { verdictFromDelta } from "@/lib/verdict";
 import { Link } from "react-router-dom";
 import { HistorySkeleton } from "@/components/skeletons";
@@ -91,9 +91,9 @@ export function HistoryView() {
 
   const points = rows.map((row) => Number(row.rate)).filter((value) => Number.isFinite(value));
   const spark = points.map((value, index) => {
-    const x = points.length === 1 ? 160 : (index / (points.length - 1)) * 300 + 10;
-    const y = 70 - ((value - 0.5) / 0.5) * 55;
-    return `${x},${Math.max(8, Math.min(72, y))}`;
+    const x = points.length === 1 ? 340 : (index / (points.length - 1)) * 600 + 40;
+    const y = 150 - ((value - 0.5) / 0.5) * 110;
+    return `${x},${Math.max(16, Math.min(150, y))}`;
   }).join(" ");
 
   return (
@@ -102,27 +102,29 @@ export function HistoryView() {
       className="min-h-[calc(100dvh-8.5rem)]"
       title={t("history.title")}
       actions={
-        <Button type="button" size="sm" aria-busy={refreshing || phase === "loading"} disabled={phase === "loading"} onClick={() => { void writeHistoryBaseline("baseline").then((raw) => { setSaved(true); if (typeof raw !== "string") return; try { const next = readIterations(raw); if (next.length) { setRows(next); setPhase("ready"); } } catch { /* the command returns the history document */ } }); }}>
+        <Button type="button" size="sm" variant="outline" aria-busy={refreshing || phase === "loading"} disabled={phase === "loading"} onClick={() => { void writeHistoryBaseline("baseline").then((raw) => { setSaved(true); if (typeof raw !== "string") return; try { const next = readIterations(raw); if (next.length) { setRows(next); setPhase("ready"); } } catch { /* the command returns the history document */ } }); }}>
           {t("history.baseline")}
         </Button>
       }
     >
       {phase === "loading" && rows.length === 0 ? <HistorySkeleton /> : null}
-      {phase !== "ready" && phase !== "loading" && phase !== "empty" && rows.length === 0 ? (
-        <StatePanel tone={phase} title={phaseCopy(phase)} action={phase === "error" || phase === "offline" ? <Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button> : null} />
+      {phase === "error" && rows.length === 0 ? (
+        <ErrorState title={t("history.error")} detail={t("shell.renderError")} onRetry={() => setAttempt((value) => value + 1)} />
+      ) : null}
+      {phase === "offline" && rows.length === 0 ? (
+        <StatePanel tone="offline" title={phaseCopy("offline")} action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button>} />
       ) : null}
       {saved ? <p role="status">{t("history.baseline")}</p> : null}
-      {phase === "ready" && rows.length === 0 ? <EmptyState title={t("history.empty")} /> : null}
-      {phase === "empty" ? <EmptyState title={t("history.empty")} /> : null}
-      {phase === "ready" && rows.length > 0 ? <p className="text-sm text-muted-foreground">{t("history.trend")}</p> : null}
+      {phase === "ready" && rows.length === 0 ? <EmptyState title={t("history.empty")} body={t("results.emptyBody")} action={<Button asChild size="sm"><Link to="/skills/skill-research/tests">{t("history.emptyCta")}</Link></Button>} /> : null}
+      {phase === "empty" ? <EmptyState title={t("history.empty")} body={t("results.emptyBody")} action={<Button asChild size="sm"><Link to="/skills/skill-research/tests">{t("history.emptyCta")}</Link></Button>} /> : null}
       {alerts.length ? <p data-testid="history-alerts" className="rounded-md border border-warning/40 bg-warning-subtle px-3 py-2 text-sm text-warning-text">{t("history.alerts")}: {alerts.join("; ")}</p> : null}
       {rows.length > 0 ? (
         <Panel title={t("history.trend")} className="min-w-0">
-          <svg viewBox="0 0 320 96" role="img" aria-label={t("history.trend")} className="h-28 w-full">
-            <text x="4" y="14" fontSize="10" fill="var(--color-muted-foreground)">100%</text>
-            <text x="4" y="74" fontSize="10" fill="var(--color-muted-foreground)">50%</text>
-            <line x1="28" y1="70" x2="310" y2="70" stroke="var(--color-border)" />
-            <line x1="28" y1="12" x2="28" y2="70" stroke="var(--color-border)" />
+          <svg viewBox="0 0 680 180" role="img" aria-label={t("history.trend")} className="h-48 w-full">
+            <text x="4" y="20" fontSize="12" fill="var(--color-muted-foreground)">100%</text>
+            <text x="4" y="156" fontSize="12" fill="var(--color-muted-foreground)">50%</text>
+            <line x1="40" y1="156" x2="660" y2="156" stroke="var(--color-border)" />
+            <line x1="40" y1="16" x2="40" y2="156" stroke="var(--color-border)" />
             <polyline points={spark} fill="none" stroke="var(--color-chart-1)" strokeWidth="2.5" />
             {spark.split(" ").map((pair) => {
               const [x, y] = pair.split(",");

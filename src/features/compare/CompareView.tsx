@@ -3,7 +3,7 @@ import { t } from "../../lib/i18n";
 import { recordVerdict, useGenerate } from "@/features/generate/store";
 import { demoEnabled } from "@/lib/demo";
 import { DeltaBar, VerdictChip } from "@/components/app/VerdictChip";
-import { ErrorState, Panel, Screen, StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, Panel, Screen, StatePanel } from "@/components/chrome";
 import { CompareSkeleton } from "@/components/skeletons";
 import { previewPhase, useOnline, useShellPhase } from "@/lib/view-state";
 
@@ -14,10 +14,12 @@ export function CompareView() {
   const online = useOnline();
   const demo = demoEnabled() && !forced;
   const revealed = wizard.verdict.length > 0;
+  const withDelta = 75 - 63;
+  const rateDelta = 80 - 78;
   if (forced === "error") {
     return (
       <Screen testId="compare" className="min-h-[calc(100dvh-8.5rem)]" title={t("compare.title")}>
-        <ErrorState title={t("compare.error")} detail={t("compare.error")} />
+        <ErrorState title={t("compare.error")} detail={t("compare.errorDetail")} onRetry={() => undefined} />
       </Screen>
     );
   }
@@ -25,7 +27,11 @@ export function CompareView() {
     const title = forced === "offline" ? t("compare.offline") : t("compare.empty");
     return (
       <Screen testId="compare" className="min-h-[calc(100dvh-8.5rem)]" title={t("compare.title")}>
-        <StatePanel tone={forced} title={title} />
+        {forced === "empty" ? (
+          <EmptyState title={title} body={t("compare.lede")} action={<Button type="button" size="sm">{t("compare.start")}</Button>} />
+        ) : (
+          <StatePanel tone={forced} title={title} />
+        )}
       </Screen>
     );
   }
@@ -34,8 +40,8 @@ export function CompareView() {
       testId="compare"
       className="min-h-[calc(100dvh-8.5rem)]"
       title={t("compare.title")}
-      lede={demo ? t("compare.summary", { delta: "12" }) : undefined}
-      actions={<Button type="button" size="sm" onClick={() => recordVerdict("Output A")}>{t("compare.verdict")}</Button>}
+      lede={demo ? t("compare.lede") : undefined}
+      actions={demo ? <Button type="button" size="sm" onClick={() => recordVerdict("Output A")}>{t("compare.verdict")}</Button> : undefined}
     >
       {!online ? <StatePanel tone="offline" title={t("compare.offline")} /> : null}
       {shell === "loading" ? <CompareSkeleton /> : null}
@@ -55,10 +61,9 @@ export function CompareView() {
               </select>
             </label>
           </div>
-          <p className="text-sm">{t("compare.summary", { delta: "12" })}</p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <DeltaBar delta={12} />
-            <DeltaBar delta={12} />
+          <p className="text-sm">{t("compare.summary", { delta: String(withDelta) })}</p>
+          <div className="max-w-md">
+            <DeltaBar delta={withDelta} />
           </div>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
@@ -74,13 +79,13 @@ export function CompareView() {
                 <td className="py-2">{t("suite.withSkill")}</td>
                 <td>75%</td>
                 <td>63%</td>
-                <td><VerdictChip delta={12} /></td>
+                <td><VerdictChip delta={withDelta} /></td>
               </tr>
               <tr className="border-t border-border text-muted-foreground">
                 <td className="py-2">{t("history.rate")}</td>
                 <td>80%</td>
                 <td>78%</td>
-                <td><VerdictChip delta={2} /></td>
+                <td><VerdictChip delta={rateDelta} /></td>
               </tr>
             </tbody>
           </table>
@@ -91,9 +96,8 @@ export function CompareView() {
           <p data-testid="compare-live">{wizard.compareText}</p>
         </Panel>
       ) : (
-        shell === "loading" ? null : <StatePanel tone="empty" title={t("compare.empty")} />
+        shell === "loading" ? null : <EmptyState title={t("compare.empty")} body={t("compare.lede")} action={<Button type="button" size="sm" onClick={() => recordVerdict("Output A")}>{t("compare.verdict")}</Button>} />
       )}
-      {demo ? <VerdictChip delta={12} /> : null}
       {revealed && demo ? (
         <p data-testid="compare-unblind" className="rounded-md border border-success/40 bg-success-subtle px-3 py-2 text-sm text-success-text">
           {t("compare.unblind")}: {wizard.verdict}

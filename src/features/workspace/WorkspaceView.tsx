@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
+import { lcsDiff, moveById, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
 import { useShellBand } from "@/lib/shell-width";
-import { MoreHorizontalIcon } from "lucide-react";
+import { GripVerticalIcon, MoreHorizontalIcon } from "lucide-react";
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
 import { deleteManagedSkills, silent, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
 import { useDebounced } from "@/lib/use-debounced";
@@ -81,6 +81,16 @@ export function WorkspaceView({
     });
   }, []);
   const shownPresets = loadedPresets ?? presets;
+  const [presetOrder, setPresetOrder] = useState<string[] | null>(null);
+  const [presetDrag, setPresetDrag] = useState<string | null>(null);
+  const orderedPresets = useMemo(() => {
+    const ids = presetOrder ?? shownPresets.map((preset) => preset.id);
+    return [...shownPresets].sort((left, right) => ids.indexOf(left.id) - ids.indexOf(right.id));
+  }, [presetOrder, shownPresets]);
+
+  function skillCount(count: number) {
+    return count === 1 ? t("workspace.skillCount.one") : t("workspace.skillsCount", { count: String(count) });
+  }
 
   const debouncedQuery = useDebounced(query, 150);
   const debouncedPicker = useDebounced(pickerQuery, 150);
@@ -142,6 +152,53 @@ export function WorkspaceView({
     setPending(null);
   }
 
+  if (!agentKey && params.get("view") === "presets") {
+    return (
+      <Screen testId="global-workspace" title={t("workspace.presets")} lede={t("workspace.presets.lede")}>
+        {phase === "loading" ? <WorkspaceSkeleton /> : null}
+        {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+        {phase === "empty" ? <EmptyState title={t("workspace.presets")} body={t("workspace.presets.lede")} /> : null}
+        {phase === "ready" ? (
+          <ol className="space-y-3">
+            {orderedPresets.map((preset) => (
+              <li
+                key={preset.id}
+                draggable
+                onDragStart={() => setPresetDrag(preset.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (!presetDrag) return;
+                  const ids = presetOrder ?? orderedPresets.map((item) => item.id);
+                  setPresetOrder(moveById(ids, presetDrag, preset.id, (id) => id));
+                  setPresetDrag(null);
+                }}
+                className="rounded-lg border border-border bg-card p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <button type="button" aria-label={t("workspace.drag")} className="mt-0.5 cursor-grab text-muted-foreground">
+                    <GripVerticalIcon className="size-4" aria-hidden="true" />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{preset.name}</p>
+                    <p className="text-xs text-muted-foreground">{skillCount(preset.skillIds.length)}</p>
+                    <ol className="mt-2 space-y-1">
+                      {preset.skillIds.map((id) => (
+                        <li key={id} className="flex items-center gap-2 text-sm">
+                          <GripVerticalIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                          <span>{coverageSkills.find((skill) => skill.id === id)?.name ?? id}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </Screen>
+    );
+  }
+
   if (!agentKey) {
     return (
       <Screen testId="global-workspace" title={t("workspace.title")} lede={t("workspace.lede")} actions={<Button type="button" size="sm" onClick={() => setCreating(true)}>{t("preset.new")}</Button>}>
@@ -177,39 +234,26 @@ export function WorkspaceView({
             }).length;
             const fill = presetFill(synced, total);
             return (
-              <Button key={preset.id} type="button" data-fill={fill} aria-pressed={applied === preset.id} variant="outline" size="sm" onClick={() => {
-                const tool = agents[0]?.key ?? "claude_code";
-                setCoverageSkills((current) => current.map((skill) => {
-                  if (!preset.skillIds.includes(skill.id) || skill.agents.includes(tool)) return skill;
-                  return { ...skill, agents: [...skill.agents, tool] };
-                }));
-                setApplied(preset.id);
-                void onApply(preset.id);
-                void silent("switch_preset", { presetId: preset.id });
-                void silent("apply_preset_to_coding_agents", { presetId: preset.id });
-                void silent<string[]>("get_preset_skill_order", { presetId: preset.id });
-              }}>
-                {presetLabel(preset.name, synced, total)}
-              </Button>
+              <span key={preset.id} className="inline-flex items-center gap-1.5">
+                <Button type="button" data-fill={fill} aria-pressed={applied === preset.id} variant="outline" size="sm" onClick={() => {
+                  const tool = agents[0]?.key ?? "claude_code";
+                  setCoverageSkills((current) => current.map((skill) => {
+                    if (!preset.skillIds.includes(skill.id) || skill.agents.includes(tool)) return skill;
+                    return { ...skill, agents: [...skill.agents, tool] };
+                  }));
+                  setApplied(preset.id);
+                  void onApply(preset.id);
+                  void silent("switch_preset", { presetId: preset.id });
+                  void silent("apply_preset_to_coding_agents", { presetId: preset.id });
+                  void silent<string[]>("get_preset_skill_order", { presetId: preset.id });
+                }}>
+                  {fill === "partial" ? preset.name : presetLabel(preset.name, synced, total)}
+                </Button>
+                {fill === "partial" ? <span className="text-xs text-muted-foreground">{t("workspace.presetProgress", { synced: String(synced), total: String(total) })}</span> : null}
+              </span>
             );
           })}
         </div>
-        {params.get("view") === "presets" ? (
-          <section className="mt-4 rounded-lg border border-border bg-card p-4">
-            <h2 className="font-sans text-title font-semibold">{t("library.presetOrder")}</h2>
-            <ol className="mt-3 space-y-2">
-              {shownPresets.map((preset) => (
-                <li key={preset.id} className="rounded-md border border-border px-3 py-2">
-                  <p className="font-medium">{preset.name}</p>
-                  <p className="text-xs text-muted-foreground">{t("workspace.skillsCount", { count: String(preset.skillIds.length) })}</p>
-                  <ol className="mt-2 space-y-1 text-sm">
-                    {preset.skillIds.map((id) => <li key={id}>{coverageSkills.find((skill) => skill.id === id)?.name ?? id}</li>)}
-                  </ol>
-                </li>
-              ))}
-            </ol>
-          </section>
-        ) : null}
         <ul className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]" data-testid="agent-catalog">
           {(showAllAgents ? agents : agents.filter((agent) => agent.installed).slice(0, 8).concat(agents.filter((agent) => agent.installed).length ? [] : agents.slice(0, 4))).map((agent) => {
             const count = coverageSkills.filter((skill) => skill.agents.includes(agent.key)).length;
@@ -217,7 +261,7 @@ export function WorkspaceView({
             <li key={agent.key} className="flex h-full flex-col rounded-lg border border-border bg-card p-3 text-sm shadow-sm">
               <Link to={`/global-workspace/${agent.key}`} className="font-medium"><AgentName agent={agent.key} displayName={agent.name} /></Link>
               <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{agent.path}</div>
-              <p className="mt-2 text-sm">{t("workspace.skillsCount", { count: String(count) })}</p>
+              <p className="mt-2 text-sm">{skillCount(count)}</p>
               <Button asChild type="button" variant="outline" size="sm" className="mt-3 w-fit"><Link to={`/global-workspace/${agent.key}`}>{t("workspace.open")}</Link></Button>
             </li>
             );
@@ -229,9 +273,29 @@ export function WorkspaceView({
     );
   }
 
+  const agent = agents.find((item) => item.key === agentKey);
+  if (phase !== "ready") {
+    return (
+      <Screen testId="global-workspace" title={agentDisplayName(agentKey, agents)} lede={agent?.path ? <span className="font-mono text-xs">{agent.path}</span> : undefined}>
+        {phase === "loading" ? <WorkspaceSkeleton /> : null}
+        {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+        {phase === "empty" ? <EmptyState title={t("workspace.emptyTitle")} body={t("workspace.emptyBody")} action={<Button type="button" size="sm" onClick={() => setAdding(false)}>{t("workspace.add")}</Button>} /> : null}
+      </Screen>
+    );
+  }
+
   return (
-    <Screen testId="global-workspace" title={agentDisplayName(agentKey, agents)} actions={<Button type="button" size="sm" onClick={() => setAdding(true)}>{t("workspace.add")}</Button>}>
+    <Screen testId="global-workspace" title={agentDisplayName(agentKey, agents)} lede={agent?.path ? <span className="font-mono text-xs">{agent.path}</span> : undefined} actions={<Button type="button" size="sm" onClick={() => setAdding(true)}>{t("workspace.add")}</Button>}>
       <div data-testid="agent-page">
+        <div className="flex flex-wrap items-center gap-2" data-testid="apply-preset">
+          <span className="text-sm text-muted-foreground">{t("workspace.apply")}</span>
+          {orderedPresets.map((preset) => (
+            <Button key={preset.id} type="button" variant="outline" size="sm" aria-pressed={applied === preset.id} onClick={() => { setApplied(preset.id); void onApply(preset.id); }}>
+              {preset.name}
+            </Button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">{t("workspace.centerChangedHelp")}</p>
         <div className="flex flex-wrap items-center gap-2">
           <SearchField aria-label={t("workspace.search")} data-search value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("workspace.search")} />
         </div>
@@ -254,7 +318,7 @@ export function WorkspaceView({
           <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
             <tr>
               <th className="w-10 px-3 py-2" />
-              <th className="px-3 py-2">{t("library.title")}</th>
+              <th className="px-3 py-2">{t("workspace.col.skill")}</th>
               {band === 800 ? null : <th className="px-3 py-2">{t("workspace.from")}</th>}
               <th className="w-12 px-3 py-2" />
             </tr>
@@ -267,7 +331,7 @@ export function WorkspaceView({
               </td>
               <td className="px-3 py-2">
                 <button type="button" className="font-medium" onClick={() => { setOpenId(card.id); setSheet("local"); if (agentKey) void silent<{ body: string; description: string }>("get_global_local_skill_document", { tool: agentKey, name: card.name }).then((doc) => { if (doc?.body) setRows((current) => current.map((row) => row.id === card.id ? { ...row, body: doc.body } : row)); }); }}>{card.name}</button>
-                <Badge variant="outline" className="ml-2 font-normal">
+                <Badge variant="outline" className="ml-2 font-normal" title={card.status === "center_changed" ? t("workspace.centerChangedHelp") : undefined}>
                   {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
                 </Badge>
                 {(card.locations?.length ?? 0) > 1 ? (

@@ -130,8 +130,8 @@
   --warning: oklch(0.769 0.165 70.1);
   --warning-foreground: oklch(0.208 0.040 265.8);
   --warning-text: oklch(0.837 0.164 84.4);
-  --warning-subtle: oklch(0.414 0.105 45.9);
-  --warning-subtle-foreground: oklch(0.924 0.115 95.7);
+  --warning-subtle: oklch(0.30 0.025 75);
+  --warning-subtle-foreground: oklch(0.97 0.01 95);
   --destructive: oklch(0.637 0.208 25.3);
   --destructive-foreground: oklch(0.208 0.040 265.8);
   --destructive-text: oklch(0.711 0.166 22.2);
@@ -265,6 +265,12 @@ body,
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.45;
+}
+
+button[data-theme-selected="true"] {
+  background-color: #f4f1ea !important;
+  color: #1c1917 !important;
+  border-color: #f4f1ea !important;
 }
 
 @keyframes skeleton-shimmer {

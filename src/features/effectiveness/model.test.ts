@@ -5,7 +5,7 @@ describe("radar axis labels", () => {
   it("wraps multi-word labels and keeps every word inside the viewBox", () => {
     const axes = SAMPLE_REPORT.axes;
     expect(axisLabelLines(shortAxis("With-skill task pass rate"))).toEqual(["With", "skill"]);
-    expect(axisLabelLines(shortAxis("Weak-model performance"))).toEqual(["Weak", "model"]);
+    expect(axisLabelLines(shortAxis("Weak-model performance"))).toEqual(["Smaller", "model"]);
     expect(axisLabelLines(shortAxis("Survival in a crowded library"))).toEqual(["Survival"]);
 
     for (const [index, axis] of axes.entries()) {

@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AgentName } from "@/components/app/AgentBadge";
-import { ErrorState, Screen } from "@/components/chrome";
+import { EmptyState, ErrorState, Screen } from "@/components/chrome";
 import { SettingsSkeleton } from "@/components/skeletons";
 import { Switch } from "@/components/ui/switch";
 import { RetryContext, useViewPhase } from "@/lib/view-state";
@@ -59,6 +59,7 @@ export function SettingsView({
   const [path, setPath] = useState("~/.skill-hive");
   const [agentName, setAgentName] = useState("");
   const [agentPath, setAgentPath] = useState("");
+  const [addAgentOpen, setAddAgentOpen] = useState(false);
   const [syncMode, setSyncMode] = useState<"symlink" | "copy">("symlink");
   const [updateNote, setUpdateNote] = useState<string | null>(null);
   const [updateAction, setUpdateAction] = useState<"install" | "download" | null>(null);
@@ -114,9 +115,9 @@ export function SettingsView({
   return (
     <Screen testId="settings" title="Settings">
       <div className="grid items-start gap-4 min-[1100px]:grid-cols-[12.5rem_minmax(0,720px)]">
-      <div role="tablist" className="flex max-w-full flex-wrap gap-1 min-[1100px]:flex-col">
+      <div role="tablist" aria-label="Settings" className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 min-[1100px]:flex-col min-[1100px]:bg-transparent min-[1100px]:p-0">
         {TABS.map((item) => (
-          <Button key={item} type="button" role="tab" aria-selected={tab === item} variant="ghost" size="sm" className={`h-8 justify-start rounded-md px-3 shadow-none ${tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
+          <Button key={item} type="button" role="tab" aria-selected={tab === item} variant="ghost" size="sm" className={`h-8 shrink-0 justify-start rounded-md px-3 shadow-none ${tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
             {t(`settings.${item}`)}
           </Button>
         ))}
@@ -124,6 +125,7 @@ export function SettingsView({
       <div className="min-w-0 max-w-[720px] rounded-lg border border-border bg-card p-4">
       {phase === "loading" ? <SettingsSkeleton /> : null}
       {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+      {phase === "empty" ? <EmptyState title={t("settings.emptyTitle")} body={t("settings.emptyBody")} /> : null}
       {phase === "ready" && tab === "keyboard" ? (
         <div className="mt-4">
           <h2 className="text-sm font-medium">{t("shortcuts.editor")}</h2>
@@ -150,7 +152,28 @@ export function SettingsView({
           <h2 className="text-sm font-medium">{t("settings.appearance")}</h2>
           <div role="group" aria-label="Theme" className="mt-2 flex gap-2">
             {choices.map((choice) => (
-              <Button key={choice} type="button" size="sm" aria-pressed={theme === choice} variant={theme === choice ? "default" : "outline"} className={theme === choice ? "!bg-primary !text-primary-foreground" : undefined} onClick={() => setTheme(choice)}>
+              <Button
+                key={choice}
+                type="button"
+                size="sm"
+                aria-pressed={theme === choice}
+                data-theme-selected={theme === choice ? "true" : "false"}
+                variant="outline"
+                className="transition-none"
+                ref={(node) => {
+                  if (!node) return;
+                  if (theme === choice) {
+                    node.style.setProperty("background-color", "#f4f1ea", "important");
+                    node.style.setProperty("color", "#1c1917", "important");
+                    node.style.setProperty("border-color", "#f4f1ea", "important");
+                  } else {
+                    node.style.removeProperty("background-color");
+                    node.style.removeProperty("color");
+                    node.style.removeProperty("border-color");
+                  }
+                }}
+                onClick={() => setTheme(choice)}
+              >
                 {t(`settings.theme.${choice}`)}
               </Button>
             ))}
@@ -230,24 +253,32 @@ export function SettingsView({
             <Button type="button" variant="outline" size="sm" disabled={agentRefresh} aria-busy={agentRefresh} onClick={() => { setAgentRefresh(true); setRefreshed(true); void silent<string[]>("get_tool_order_cmd").finally(() => setAgentRefresh(false)); }}>{t("settings.agents.refresh")}</Button>
           </div>
           {refreshed ? <p role="status">{t("settings.agents.refreshed")}</p> : null}
-          <form
-            className="mt-3 flex flex-wrap items-end gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onAddAgent(agentName, agentPath);
-            }}
-          >
-            <label className="block text-sm">
-              {t("settings.agents.name")}
-              <Input aria-label={t("settings.agents.name")} placeholder={t("settings.agents.namePlaceholder")} value={agentName} onChange={(event) => setAgentName(event.target.value)} className="mt-1 h-8 w-56" />
-            </label>
-            <label className="block text-sm">
-              {t("settings.agents.path")}
-              <Input aria-label={t("settings.agents.path")} placeholder={t("settings.agents.pathPlaceholder")} value={agentPath} onChange={(event) => setAgentPath(event.target.value)} className="mt-1 h-8 w-56" />
-            </label>
-            <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</Button>
-            <Button type="submit" size="sm">{t("settings.agents.new")}</Button>
-          </form>
+          <Button type="button" size="sm" className="mt-3" onClick={() => setAddAgentOpen(true)}>{t("settings.agents.add")}</Button>
+          {addAgentOpen ? (
+            <form
+              role="dialog"
+              aria-label={t("settings.agents.add")}
+              className="mt-3 max-w-xl space-y-3 rounded-lg border border-border bg-background p-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onAddAgent(agentName, agentPath);
+                setAddAgentOpen(false);
+              }}
+            >
+              <label className="block text-sm">
+                {t("settings.agents.name")}
+                <Input aria-label={t("settings.agents.name")} placeholder={t("settings.agents.namePlaceholder")} value={agentName} onChange={(event) => setAgentName(event.target.value)} className="mt-1 h-8 w-full" />
+              </label>
+              <label className="block text-sm">
+                {t("settings.agents.path")}
+                <Input aria-label={t("settings.agents.path")} placeholder={t("settings.agents.pathPlaceholder")} value={agentPath} onChange={(event) => setAgentPath(event.target.value)} className="mt-1 h-8 w-full" />
+              </label>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => void pickPath(true).then((selected) => selected && setAgentPath(selected))}>Browse</Button>
+                <Button type="submit" size="sm">{t("settings.agents.new")}</Button>
+              </div>
+            </form>
+          ) : null}
           <label className="mt-3 flex items-center gap-2 text-sm">
             <input type="checkbox" aria-label={t("settings.detectedOnly")} checked={!showAllAgents} onChange={(event) => setShowAllAgents(!event.target.checked)} />
             {t("settings.detectedOnly")}
@@ -257,7 +288,7 @@ export function SettingsView({
           <Table data-testid="agent-order" className="mt-3">
             <TableHeader>
               <TableRow>
-                <TableHead>{t("agents.field.import")}</TableHead>
+                <TableHead>{t("agents.col.name")}</TableHead>
                 <TableHead>{t("settings.agents.found")}</TableHead>
                 <TableHead>{t("settings.agents.enable")}</TableHead>
                 <TableHead />
@@ -287,7 +318,7 @@ export function SettingsView({
                   <span className="sr-only">{agent.enabled ? "Enabled" : "Disabled"}</span>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setFoldersFor(agent.key)}>{t("settings.changeFolders")} {agent.name}</Button>
+                  <Button type="button" variant="outline" size="sm" aria-label={t("settings.changeFoldersFor", { name: agent.name })} onClick={() => setFoldersFor(agent.key)}>{t("settings.changeFolders")}</Button>
                   {agent.custom ? (
                     <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => { void onAgents(agents.filter((item) => item.key !== agent.key)); void removeCustomTool(agent.key); }}>{t("settings.agents.remove")} {agent.name}</Button>
                   ) : null}

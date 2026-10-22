@@ -739,8 +739,9 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
           {job && !job.done ? t("job.working") : authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : t("shell.ready")}
         </span>
-        <Link to="/runs/run-fixture" data-testid="run-chip" aria-label={t("results.title")} className="inline-flex text-muted-foreground">
+        <Link to="/runs/run-fixture" data-testid="run-chip" aria-label={t("results.title")} className="inline-flex items-center gap-1 text-muted-foreground">
           <ClipboardListIcon className="size-3.5" aria-hidden="true" />
+          <span>{t("results.title")}</span>
         </Link>
         <span className="font-mono tabular-nums">Skill Hive 1.0.0</span>
       </footer>
