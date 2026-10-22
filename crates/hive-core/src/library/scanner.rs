@@ -116,7 +116,10 @@ pub fn scan_roots_with_central(
 }
 
 fn failed_skill(tool: &str, dir: &Path, reason: &str) -> ScannedSkill {
-    let folder = dir.file_name().and_then(|name| name.to_str()).unwrap_or("skill");
+    let folder = dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("skill");
     ScannedSkill {
         tool: tool.to_string(),
         path: dir.to_string_lossy().to_string(),

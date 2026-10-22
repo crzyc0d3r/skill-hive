@@ -3246,10 +3246,13 @@ pub fn remove_preset_by_id(store: &SkillStore, preset_id: &str) -> Result<(), Ap
 }
 #[cfg(test)]
 mod tests {
-    use super::{confirm_preview, invalidate_library_index, memory_index, preview_repository, remember_index, ManagedSkill, LIBRARY_DIRTY};
+    use super::{
+        confirm_preview, invalidate_library_index, memory_index, preview_repository,
+        remember_index, ManagedSkill, LIBRARY_DIRTY,
+    };
     use std::fs;
-    use std::sync::atomic::Ordering;
     use std::process::Command;
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn invalidation_keeps_the_library_index() {

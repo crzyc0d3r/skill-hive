@@ -139,7 +139,13 @@ pub fn reindex_from_metadata(store: &SkillStore) -> Result<bool> {
 
 pub(crate) fn reindex_from_metadata_if_stale(store: &SkillStore) -> Result<bool> {
     if let Ok(stamp) = metadata_stamp() {
-        if store.get_setting(METADATA_STAMP_KEY).ok().flatten().as_deref() == Some(stamp.as_str()) {
+        if store
+            .get_setting(METADATA_STAMP_KEY)
+            .ok()
+            .flatten()
+            .as_deref()
+            == Some(stamp.as_str())
+        {
             return Ok(false);
         }
     }
@@ -174,7 +180,11 @@ fn metadata_stamp() -> Result<String> {
             .map(|elapsed| elapsed.as_millis())
             .unwrap_or(0);
         let relative = entry.path().strip_prefix(&metadata).unwrap_or(entry.path());
-        lines.push(format!("meta:{}:{modified}:{}", relative.display(), meta.len()));
+        lines.push(format!(
+            "meta:{}:{modified}:{}",
+            relative.display(),
+            meta.len()
+        ));
     }
     let root = central_repo::skills_dir();
     for skill in read_skill_files()? {
@@ -184,7 +194,9 @@ fn metadata_stamp() -> Result<String> {
         ));
         let dir = root.join(&skill.path);
         for file in super::content_hash::list_content_files(&dir) {
-            let len = std::fs::metadata(&file.path).map(|meta| meta.len()).unwrap_or(0);
+            let len = std::fs::metadata(&file.path)
+                .map(|meta| meta.len())
+                .unwrap_or(0);
             lines.push(format!(
                 "file:{}:{}:{}:{len}",
                 skill.skill_id,

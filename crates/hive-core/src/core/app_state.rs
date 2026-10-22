@@ -74,7 +74,9 @@ fn reindex_or_rebuild_metadata(store: &SkillStore) -> Result<bool> {
         // better record: rebuild the metadata from it. Otherwise keep refusing —
         // starting with an empty library would let the auto backup commit that
         // emptiness.
-        Err(err) if err.is::<sync_metadata::EmptySkillMetadata>() && db_library_is_intact(store) => {
+        Err(err)
+            if err.is::<sync_metadata::EmptySkillMetadata>() && db_library_is_intact(store) =>
+        {
             central_repo::record_startup_error(format!(
                 "sync metadata: {err}; rebuilt it from the database"
             ));
