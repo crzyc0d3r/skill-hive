@@ -105,7 +105,14 @@ for (const theme of THEMES) {
         }
         await page.goto(`/my-skills?skill=skill-research&state=${state}`);
         await expect(page.getByTestId("library")).toBeVisible();
+        await expect(page.getByTestId("detail-panel")).toBeVisible();
         await saveShot(page, theme, width, `detail-${state}`);
+        if (width === 1440) {
+          fs.copyFileSync(
+            path.join("docs/parity/screenshots", theme, `design-detail-${state}-${width}.png`),
+            path.join("docs/parity/screenshots", theme, `design-detail-${state}.png`),
+          );
+        }
       });
     }
   }

@@ -122,9 +122,9 @@ export function EffectivenessView() {
         testId="effectiveness"
         className="min-h-[calc(100dvh-8.5rem)]"
         title={t("effect.title")}
-        actions={<Button type="button" size="sm" disabled={phase === "loading"} aria-busy={phase === "loading"} onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>}
+        actions={phase === "loading" ? <Button type="button" size="sm" disabled aria-busy>{t("effect.runAgain")}</Button> : undefined}
       >
-        {phase === "loading" ? <EffectivenessSkeleton /> : phase === "ready" || phase === "empty" ? <EmptyState title={phaseCopy("empty")} body={t("effect.deltaLine", { delta: "0" })} action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>} /> : <StatePanel tone={phase} title={phaseCopy(phase)} action={retry} />}
+        {phase === "loading" ? <EffectivenessSkeleton /> : phase === "ready" || phase === "empty" ? <EmptyState title={phaseCopy("empty")} action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>} /> : <StatePanel tone={phase} title={phaseCopy(phase)} action={retry} />}
       </Screen>
     );
   }
@@ -136,7 +136,6 @@ export function EffectivenessView() {
       testId="effectiveness"
       className="min-h-[calc(100dvh-8.5rem)]"
       title={t("effect.title")}
-      lede={open ? undefined : verdictText(code)}
       actions={
         <>
           <Button type="button" size="sm" aria-busy={refreshing} disabled={refreshing} onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>
@@ -222,7 +221,7 @@ export function EffectivenessView() {
             {t("effect.showTable")}
           </Button>
         </div>
-        <AxisTable report={report} />
+        <AxisTable report={report} showOverlay={open} />
       </Panel>
     </Screen>
   );

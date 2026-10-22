@@ -567,6 +567,7 @@
   "dashboard.health.neutral": "No clear effect",
   "dashboard.health.worse": "Worse",
   "library.inAgents": "In {count} agents",
+  "library.inAgent": "In 1 agent",
   "library.emptyTitle": "Your library is empty",
   "library.emptyBody": "Install a skill or scan this computer.",
   "library.synced": "Synced",
@@ -620,6 +621,7 @@
   "suite.tests": "Tests",
   "backup.lede": "Save a copy of your library and restore it later.",
   "backup.snapshots": "Backups",
+  "backup.size": "Size",
   "settings.detectedOnly": "Detected only",
   "settings.changeFolders": "Change folders"
 }

@@ -659,7 +659,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             className={cn("sticky top-0 z-10 flex h-11 items-center justify-between gap-3 border-b border-border bg-background", pagePad, "py-0")}
           >
             <div className="min-w-0">
-              <div data-testid="breadcrumb" className="truncate text-overline font-semibold tracking-[0.04em] text-muted-foreground uppercase">{crumb}</div>
+              <div data-testid="breadcrumb" className="truncate text-overline font-semibold text-muted-foreground uppercase">{crumb}</div>
             </div>
             <div data-testid="toolbar" className="flex items-center gap-1">
               <Button type="button" size="sm" variant="outline" className="text-muted-foreground" onClick={() => setPaletteOpen(true)}>

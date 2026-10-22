@@ -567,6 +567,7 @@
   "dashboard.health.neutral": "没有明显效果",
   "dashboard.health.worse": "更差",
   "library.inAgents": "用于 {count} 个代理",
+  "library.inAgent": "用于 1 个代理",
   "library.emptyTitle": "技能库是空的",
   "library.emptyBody": "安装一个技能，或扫描这台电脑。",
   "library.synced": "已同步",
@@ -620,6 +621,7 @@
   "suite.tests": "测试",
   "backup.lede": "保存库的副本，以便以后恢复。",
   "backup.snapshots": "备份",
+  "backup.size": "大小",
   "settings.detectedOnly": "仅已检测到的",
   "settings.changeFolders": "更改文件夹"
 }

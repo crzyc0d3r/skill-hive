@@ -543,7 +543,7 @@ export function LibraryView({
                   </span>
                   {memberIds.includes(skill.id) ? <span className="whitespace-nowrap text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
-                  <span className="text-xs text-muted-foreground">{t("library.inAgents", { count: String(skill.agents.length) })}</span>
+                  <span className="text-xs text-muted-foreground">{skill.agents.length === 1 ? t("library.inAgent") : t("library.inAgents", { count: String(skill.agents.length) })}</span>
                   <InstalledTiles skill={skill} agents={catalogAgents} />
               </div>
             </Card>
@@ -551,7 +551,7 @@ export function LibraryView({
         ))}
       </ul>
       </div> : null}
-      {open ? (
+      {open && phase === "ready" ? (
         <aside data-testid="detail-panel" className={cn("rounded-lg border border-border bg-card p-3", band < 1440 && "fixed inset-y-0 right-0 z-30 w-[min(560px,100%)] overflow-auto shadow-lg", band >= 1920 ? "w-[520px] shrink-0" : band >= 1440 ? "w-[440px] shrink-0" : undefined)}>
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -629,6 +629,13 @@ export function LibraryView({
               ))}
             </ul>
           </div>
+        </aside>
+      ) : null}
+      {phase !== "ready" && initialId ? (
+        <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
+          {phase === "loading" ? <div data-testid="detail-loading" className="h-40 animate-pulse rounded-md bg-muted" /> : null}
+          {phase === "error" || phase === "offline" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+          {phase === "empty" ? <EmptyState title={t("library.installedNone")} body={t("library.emptyBody")} /> : null}
         </aside>
       ) : null}
       </div>

@@ -42,7 +42,10 @@ export function BackupView() {
   const phase = useViewPhase();
   const retry = useContext(RetryContext);
   const [body, setBody] = useState("library v1");
-  const [history, setHistory] = useState<SnapshotRow[]>([]);
+  const [history, setHistory] = useState<SnapshotRow[]>(() => (demoEnabled() ? [
+    { id: "2026-10-21", label: "2026-10-21" },
+    { id: "2026-10-18", label: "2026-10-18" },
+  ] : []));
   const [safety, setSafety] = useState<string | null>(null);
   const [device, setDevice] = useState("");
   const [remote, setRemote] = useState("");
@@ -162,6 +165,45 @@ export function BackupView() {
       </Button>
     }>
       <p className="mt-2 text-sm" role="status">{body}</p>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <caption className="px-3 py-2 text-left text-sm font-medium">{t("backup.snapshots")}</caption>
+          <thead className="text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">{t("history.date")}</th>
+              <th className="px-3 py-2">{t("backup.size")}</th>
+              <th className="px-3 py-2">{t("backup.scope.skills")}</th>
+              <th className="px-3 py-2 text-right">{t("backup.restore")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((snap, index) => (
+              <tr key={snap.id} className="border-t border-border">
+                <td className="px-3 py-2">{snap.label}</td>
+                <td className="px-3 py-2">{index === 0 ? "1.2 MB" : "1.1 MB"}</td>
+                <td className="px-3 py-2">{index === 0 ? "12" : "11"}</td>
+                <td className="px-3 py-2 text-right">
+                  <Button type="button" data-testid="backup-restore" variant="outline" size="sm" onClick={() =>
+                    void run(async () => {
+                      if (demoEnabled()) {
+                        const restored = restoreSnapshot([{ id: snap.id, label: snap.label, body }], snap.id);
+                        setBody(restored?.body ?? snap.label);
+                        setSafety(restored?.safety ?? null);
+                        return;
+                      }
+                      const restored = await gitBackupRestore(snap.id);
+                      setBody(snap.label);
+                      setSafety(restored);
+                    })
+                  }>
+                    {t("backup.restore")}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {status ? (
         <p data-testid="backup-status" className="text-sm">
           {t("backup.branch")} {status.branch} · {status.clean ? t("backup.clean") : t("backup.dirty")}
@@ -266,36 +308,6 @@ export function BackupView() {
       ) : null}
       {note ? <p role="status">{note}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
-      <div className="overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <caption className="px-3 py-2 text-left text-sm font-medium">{t("backup.snapshots")}</caption>
-          <tbody>
-        {history.map((snap) => (
-          <tr key={snap.id} className="border-t border-border">
-            <td className="px-3 py-2">{snap.label}</td>
-            <td className="px-3 py-2 text-right">
-            <Button type="button" data-testid="backup-restore" variant="outline" size="sm" onClick={() =>
-                void run(async () => {
-                  if (demoEnabled()) {
-                    const restored = restoreSnapshot([{ id: snap.id, label: snap.label, body }], snap.id);
-                    setBody(restored?.body ?? snap.label);
-                    setSafety(restored?.safety ?? null);
-                    return;
-                  }
-                  const restored = await gitBackupRestore(snap.id);
-                  setBody(snap.label);
-                  setSafety(restored);
-                })
-              }
-            >
-              {t("backup.restore")}
-            </Button>
-            </td>
-          </tr>
-        ))}
-          </tbody>
-        </table>
-      </div>
       {safety ? <p role="status">{t("backup.history")} {safety}</p> : null}
       <form
         className="mt-3 space-y-2 text-sm"

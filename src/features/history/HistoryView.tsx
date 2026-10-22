@@ -131,7 +131,7 @@ export function HistoryView() {
           </svg>
         </Panel>
       ) : null}
-      {phase === "loading" && rows.length === 0 ? null : <div className="overflow-hidden rounded-md border border-border">
+      {phase === "ready" && rows.length > 0 ? <div className="overflow-hidden rounded-md border border-border">
         <Table>
           <TableCaption className="sr-only">{t("history.table")}</TableCaption>
           <TableHeader>
@@ -168,8 +168,8 @@ export function HistoryView() {
             })}
           </TableBody>
         </Table>
-      </div>}
-      {picked.length === 2 ? <Button asChild type="button" size="sm" className="w-fit self-start"><Link to="/compare/fixture">{t("history.compare")}</Link></Button> : <Button type="button" size="sm" variant="outline" className="w-fit self-start" disabled>{t("history.compare")}</Button>}
+      </div> : null}
+      {phase === "ready" && rows.length > 0 ? (picked.length === 2 ? <Button asChild type="button" size="sm" className="w-fit self-start"><Link to="/compare/fixture">{t("history.compare")}</Link></Button> : <Button type="button" size="sm" variant="outline" className="w-fit self-start" disabled>{t("history.compare")}</Button>) : null}
     </Screen>
   );
 }

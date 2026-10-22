@@ -20,7 +20,14 @@ import { AgentMark } from "@/components/app/AgentBadge";
 import { agentDisplayName } from "@/lib/agents";
 import { EmptyState, ErrorState } from "@/components/chrome";
 import { ProjectSkeleton } from "@/components/skeletons";
+import { demoEnabled } from "@/lib/demo";
 import { RetryContext, useViewPhase } from "@/lib/view-state";
+
+const DEMO_ROWS: ProjectSkill[] = [
+  { id: "research-notes", name: "research-notes", agents: ["claude_code"], enabled: true, center: "v2", local: "v2" },
+  { id: "billing", name: "billing", agents: ["codex"], enabled: true, center: "", local: "local copy" },
+  { id: "review-diff", name: "review-diff", agents: [], enabled: true, center: "library", local: "" },
+];
 
 const FIXTURE: ProjectSkill = {
   id: "notes",
@@ -64,8 +71,8 @@ export function ProjectView() {
   const phase = useViewPhase();
   const retry = useContext(RetryContext);
   const { id = "fixture" } = useParams();
-  const [linked, setLinked] = useState(false);
-  const [rows, setRows] = useState<ProjectSkill[]>([]);
+  const [linked, setLinked] = useState(() => demoEnabled());
+  const [rows, setRows] = useState<ProjectSkill[]>(() => (demoEnabled() ? DEMO_ROWS : []));
   const [tab, setTab] = useState<"local" | "diff" | "center">("local");
   const [library, setLibrary] = useState<SkillCard[]>([]);
   const [adding, setAdding] = useState(false);
@@ -144,6 +151,30 @@ export function ProjectView() {
       {phase === "loading" ? <ProjectSkeleton /> : null}
       {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
       {phase === "empty" ? <EmptyState title={t("project.title")} body={t("project.linked")} /> : null}
+      {phase === "ready" && rows.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <p className="px-3 py-2 text-sm font-medium">{t("project.compareTitle")}</p>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">{t("library.title")}</th>
+                <th className="px-3 py-2">{t("project.col.status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((item) => {
+                const same = item.local === item.center;
+                return (
+                  <tr key={`compare-${item.id}`} className="border-t border-border">
+                    <td className="px-3 py-2">{item.name}</td>
+                    <td className="px-3 py-2">{same ? t("project.same") : item.local ? t("project.onlyHere") : t("project.onlyLibrary")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       {phase === "ready" ? <Card className="max-w-xl gap-3 rounded-lg border-border px-4 py-4 shadow-none">
         <p className="text-sm text-muted-foreground">{t("project.linked")}</p>
         <label className="block text-sm">
@@ -249,29 +280,7 @@ export function ProjectView() {
               }}
             />
           ) : null}
-          <div className="overflow-hidden rounded-lg border border-border">
-            <p className="px-3 py-2 text-sm font-medium">{t("project.compareTitle")}</p>
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">{t("library.title")}</th>
-                  <th className="px-3 py-2">{t("project.col.status")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(rows.length ? rows : [skill]).map((item) => {
-                  const same = item.local === item.center;
-                  return (
-                    <tr key={`compare-${item.id}`} className="border-t border-border">
-                      <td className="px-3 py-2">{item.name}</td>
-                      <td className="px-3 py-2">{same ? t("project.same") : item.local ? t("project.onlyHere") : t("project.onlyLibrary")}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+          </Card>
       ) : null}
     </section>
   );

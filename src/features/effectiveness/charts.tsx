@@ -123,7 +123,7 @@ export function RadarFigure({ report }: { report: EffectivenessReport }) {
   );
 }
 
-export function AxisTable({ report }: { report: EffectivenessReport }) {
+export function AxisTable({ report, showOverlay = false }: { report: EffectivenessReport; showOverlay?: boolean }) {
   const overlay = report.overlay?.axes ?? [];
   return (
     <div className="overflow-hidden rounded-md border border-border">
@@ -133,7 +133,7 @@ export function AxisTable({ report }: { report: EffectivenessReport }) {
           <TableRow>
             <TableHead>{t("effect.radar")}</TableHead>
             <TableHead className="text-right">{t("effect.series.skill")}</TableHead>
-            {report.overlay?.name ? <TableHead className="text-right">{report.overlay.name}</TableHead> : null}
+            {showOverlay && report.overlay?.name ? <TableHead className="text-right">{report.overlay.name}</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -150,7 +150,7 @@ export function AxisTable({ report }: { report: EffectivenessReport }) {
                     <span className="w-8 text-right font-mono tabular-nums">{axis.value == null ? "—" : axis.value}</span>
                   </span>
                 </TableCell>
-                {report.overlay?.name ? (
+                {showOverlay && report.overlay?.name ? (
                   <TableCell>
                     <span className="flex items-center justify-end gap-3">
                       <span className="hidden h-2 w-24 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">

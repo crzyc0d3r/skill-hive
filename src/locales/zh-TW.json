@@ -567,6 +567,7 @@
   "dashboard.health.neutral": "沒有明顯效果",
   "dashboard.health.worse": "更差",
   "library.inAgents": "用於 {count} 個代理",
+  "library.inAgent": "用於 1 個代理",
   "library.emptyTitle": "技能庫是空的",
   "library.emptyBody": "安裝一個技能，或掃描這台電腦。",
   "library.synced": "已同步",
@@ -620,6 +621,7 @@
   "suite.tests": "測試",
   "backup.lede": "儲存庫的複本，以便以後還原。",
   "backup.snapshots": "備份",
+  "backup.size": "大小",
   "settings.detectedOnly": "僅已偵測到的",
   "settings.changeFolders": "變更資料夾"
 }

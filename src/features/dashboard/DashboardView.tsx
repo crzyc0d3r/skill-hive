@@ -51,12 +51,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
       }
     >
       {phase === "loading" ? <DashboardSkeleton /> : null}
-      {phase === "error" ? (
-        <div className="grid gap-3 min-[1440px]:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)]">
-          <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} />
-          <Panel title={t("dashboard.health")}><p className="text-sm text-muted-foreground">{t("dashboard.health.neutral")}</p></Panel>
-        </div>
-      ) : null}
+      {phase === "error" && skills.length === 0 ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
       {phase === "empty" || (phase === "ready" && skills.length === 0) ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-4 py-6">
           <h2 className="font-sans text-title font-semibold">{t("dashboard.onboard.title")}</h2>
@@ -67,7 +62,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
           </ol>
         </div>
       ) : null}
-      {phase === "ready" && skills.length > 0 ? <>
+      {(phase === "ready" || phase === "error") && skills.length > 0 ? <>
       {uninstalled > 0 || regressions > 0 ? (
         <div className="space-y-2" data-testid="attention-strip">
           {uninstalled > 0 ? (
@@ -136,7 +131,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
             </Button>
             {setupNote ? <p role="status" className="mt-2 text-sm">{setupNote}</p> : null}
           </Panel>
-          <Panel title={t("dashboard.health")} testId="test-health" className="flex-1">
+          {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : <Panel title={t("dashboard.health")} testId="test-health" className="flex-1">
             <div className="flex h-3 overflow-hidden rounded-full bg-muted" aria-hidden="true">
               <span className="h-full bg-[var(--verdict-helps-lot)]" style={{ width: `${skills.length ? (Math.max(synced, 1) / skills.length) * 40 : 0}%` }} />
               <span className="h-full bg-[var(--verdict-neutral)]" style={{ width: "35%" }} />
@@ -147,7 +142,7 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
               <li>{t("dashboard.health.neutral")}</li>
               <li>{t("dashboard.health.worse")} · {regressions}</li>
             </ul>
-          </Panel>
+          </Panel>}
         </div>
       </div>
       </> : null}
