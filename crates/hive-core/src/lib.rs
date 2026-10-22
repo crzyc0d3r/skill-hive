@@ -23,6 +23,8 @@ mod install_tests;
 #[cfg(test)]
 mod library_import_tests;
 #[cfg(test)]
+mod library_open_path_tests;
+#[cfg(test)]
 mod library_sidecar_tests;
 #[cfg(test)]
 mod test_support;

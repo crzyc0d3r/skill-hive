@@ -1,8 +1,8 @@
-use super::content_hash::hash_skill_dir;
-use super::scanner::scan_roots;
-use super::skill_check::classify_dirs;
-use super::skill_metadata::read_skill_document;
 use crate::db::skill_store::{SkillRecord, SkillStore};
+use crate::library::content_hash::hash_skill_dir;
+use crate::library::scanner::scan_roots;
+use crate::library::skill_check::classify_dirs;
+use crate::library::skill_metadata::read_skill_document;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
