@@ -256,6 +256,10 @@ fn remember_index(path: &str, skills: &[ManagedSkill]) {
     }
 }
 
+fn remember_disk_index(path: &str, skills: &[ManagedSkill]) {
+    remember_index(path, skills);
+}
+
 fn read_disk_index() -> Option<Vec<ManagedSkill>> {
     let text = std::fs::read_to_string(library_index_path()).ok()?;
     serde_json::from_str(&text).ok()
@@ -266,10 +270,11 @@ fn write_library_index(store: &SkillStore, skills: &[ManagedSkill]) {
     let path = library_index_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
+        hive_core::util::file_watcher::mute_self_writes(parent);
     }
     hive_core::util::file_watcher::mute_self_writes(&path);
     if let Ok(text) = serde_json::to_string(skills) {
-        let _ = std::fs::write(path, text);
+        let _ = std::fs::write(&path, text);
     }
 }
 
@@ -736,8 +741,10 @@ pub async fn get_managed_skills(
         return Ok(cached);
     }
     if let Some(cached) = read_disk_index() {
-        remember_index(&path, &cached);
-        LIBRARY_DIRTY.store(true, Ordering::Release);
+        // A disk hit is a fresh cache. Marking it dirty rewrote the index,
+        // the watcher treated that write as a library change, and the next
+        // read rebuilt again.
+        remember_disk_index(&path, &cached);
         schedule_quiet_refresh(app, store, &path);
         return Ok(cached);
     }
@@ -1595,11 +1602,11 @@ pub fn maybe_run_auto_update(store: &SkillStore, now_ms: i64) -> Result<u32, App
 
 pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
     let skills = store.get_all_skills().map_err(db)?;
-    let total = skills.len() as u32;
     let ttl = check_ttl_ms(store);
     let mut available = 0u32;
     let mut pending = Vec::new();
-    report("scan", 0, total.max(1), "Checking for updates")?;
+    // Silent on purpose. The shell runs this while the user is idle, and a
+    // job event here mounts progress UI on every launch.
     for skill in &skills {
         if crate::progress::cancelled() {
             return Err(AppError::invalid_input("cancelled"));
@@ -1622,7 +1629,6 @@ pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
     if !pending.is_empty() {
         store.update_skill_check_states(&pending).map_err(db)?;
     }
-    crate::progress::finish("scan", "Update check finished");
     Ok(available)
 }
 
@@ -3266,11 +3272,31 @@ mod tests {
                 locations: vec!["/skills/notes".into()],
             }],
         );
+        LIBRARY_DIRTY.store(false, Ordering::Release);
+        super::remember_disk_index(path, &memory_index(path).expect("cached rows"));
+        assert!(
+            !LIBRARY_DIRTY.load(Ordering::Acquire),
+            "reading the disk index must not schedule a rebuild"
+        );
         invalidate_library_index();
         let rows = memory_index(path).expect("memory index");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].name, "notes");
         assert!(LIBRARY_DIRTY.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn idle_update_check_emits_no_job() {
+        let tmp = std::env::temp_dir().join(format!("skill-hive-idle-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let store = hive_core::db::skill_store::SkillStore::new(&tmp.join("hive.db")).unwrap();
+        crate::progress::capture_job_events();
+        let count = super::check_updates_in(&store).unwrap();
+        let events = crate::progress::captured_job_events();
+        let _ = fs::remove_dir_all(&tmp);
+        assert_eq!(count, 0);
+        assert!(events.is_empty(), "idle job events: {events:?}");
     }
 
     fn git(dir: &std::path::Path, args: &[&str]) {

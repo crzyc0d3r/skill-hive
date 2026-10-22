@@ -4,6 +4,7 @@
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Write;
@@ -18,6 +19,7 @@ use super::skill_store::{ScenarioRecord, SkillRecord, SkillStore};
 
 const SCHEMA_VERSION: u32 = 1;
 const APP_MIN_VERSION: &str = "2.0.0";
+const METADATA_STAMP_KEY: &str = "sync_metadata_stamp";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SchemaFile {
@@ -121,15 +123,83 @@ pub(crate) fn write_all_from_db_unlocked(store: &SkillStore) -> Result<()> {
     write_skill_records_from_db(store)?;
     write_scenario_records_from_db(store)?;
     remove_stale_metadata_files(store)?;
+    let _ = remember_metadata_stamp(store);
     Ok(())
 }
 
+/// `Ok(true)` when the database was rebuilt. `Ok(false)` when the metadata
+/// stamp still matches, so startup can skip the per-skill hash.
 #[allow(dead_code)]
-pub fn reindex_from_metadata(store: &SkillStore) -> Result<()> {
+pub fn reindex_from_metadata(store: &SkillStore) -> Result<bool> {
     // Foreground wait: runs at process startup (GUI and every CLI invocation),
     // which aborts on error — better to wait out transient contention than fail.
     let _lock = RepoLock::acquire_foreground("reindex sync metadata")?;
-    reindex_from_metadata_unlocked(store)
+    reindex_from_metadata_if_stale(store)
+}
+
+pub(crate) fn reindex_from_metadata_if_stale(store: &SkillStore) -> Result<bool> {
+    if let Ok(stamp) = metadata_stamp() {
+        if store.get_setting(METADATA_STAMP_KEY).ok().flatten().as_deref() == Some(stamp.as_str()) {
+            return Ok(false);
+        }
+    }
+    reindex_from_metadata_unlocked(store)?;
+    let _ = remember_metadata_stamp(store);
+    Ok(true)
+}
+
+fn remember_metadata_stamp(store: &SkillStore) -> Result<()> {
+    let stamp = metadata_stamp()?;
+    store.set_setting(METADATA_STAMP_KEY, &stamp)?;
+    Ok(())
+}
+
+/// File mtimes and sizes for the metadata sidecars and each skill's content.
+/// This is the cheap stand-in for hashing every file on launch.
+fn metadata_stamp() -> Result<String> {
+    if !metadata_exists() {
+        bail!("sync metadata is absent");
+    }
+    let mut lines = Vec::new();
+    let metadata = metadata_dir();
+    for entry in WalkDir::new(&metadata).into_iter().flatten() {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let meta = entry.metadata()?;
+        let modified = meta
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|elapsed| elapsed.as_millis())
+            .unwrap_or(0);
+        let relative = entry.path().strip_prefix(&metadata).unwrap_or(entry.path());
+        lines.push(format!("meta:{}:{modified}:{}", relative.display(), meta.len()));
+    }
+    let root = central_repo::skills_dir();
+    for skill in read_skill_files()? {
+        lines.push(format!(
+            "skill:{}:{}:{}",
+            skill.skill_id, skill.path, skill.enabled
+        ));
+        let dir = root.join(&skill.path);
+        for file in super::content_hash::list_content_files(&dir) {
+            let len = std::fs::metadata(&file.path).map(|meta| meta.len()).unwrap_or(0);
+            lines.push(format!(
+                "file:{}:{}:{}:{len}",
+                skill.skill_id,
+                file.relative_path,
+                file.modified_ms.unwrap_or(0)
+            ));
+        }
+    }
+    lines.sort();
+    let mut hasher = Sha256::new();
+    for line in &lines {
+        hasher.update(line.as_bytes());
+        hasher.update(b"\n");
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 pub(crate) fn reindex_from_metadata_unlocked(store: &SkillStore) -> Result<()> {
@@ -791,6 +861,32 @@ mod tests {
                 .unwrap(),
             vec!["tag-a".to_string(), "tag-b".to_string()]
         );
+    }
+
+    #[test]
+    fn unchanged_metadata_skips_the_next_reindex() {
+        let repo = test_repo();
+        let skill_dir = write_skill_dir("cached-skill");
+        repo.store
+            .insert_skill(&sample_skill("skill-cache", &skill_dir))
+            .unwrap();
+        write_all_from_db_unlocked(&repo.store).unwrap();
+
+        assert!(
+            !reindex_from_metadata_if_stale(&repo.store).unwrap(),
+            "a matching stamp skips the hash"
+        );
+
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: cached-skill\n---\nchanged\n",
+        )
+        .unwrap();
+        assert!(
+            reindex_from_metadata_if_stale(&repo.store).unwrap(),
+            "an edited skill runs the reindex"
+        );
+        assert!(!reindex_from_metadata_if_stale(&repo.store).unwrap());
     }
 
     #[test]

@@ -1,5 +1,6 @@
+import { listen } from "@tauri-apps/api/event";
 import { QueryClient } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { App } from "../App";
@@ -57,5 +58,35 @@ describe("application shell", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     await user.keyboard("{Control>}1{/Control}");
     expect(await screen.findByTestId("settings")).toBeInTheDocument();
+  });
+
+  it("keeps the content top offset while a job starts and stops", async () => {
+    const handlers = new Map<string, (event: { payload: { job: string; current: number; total: number; message: string; done: boolean } }) => void>();
+    vi.mocked(listen).mockImplementation(async (event, callback) => {
+      handlers.set(event, callback as (event: { payload: { job: string; current: number; total: number; message: string; done: boolean } }) => void);
+      return () => {};
+    });
+    renderApp("/my-skills");
+    const content = await screen.findByTestId("content");
+    const before = content.getBoundingClientRect().top;
+    await waitFor(() => expect(handlers.has("job-progress")).toBe(true));
+    const emit = (job: string, done: boolean) => {
+      act(() => {
+        handlers.get("job-progress")?.({
+          payload: { job, current: done ? 1 : 0, total: 1, message: "file", done },
+        });
+      });
+    };
+    emit("library", false);
+    expect(screen.queryByTestId("job-progress")).not.toBeInTheDocument();
+    expect(content.getBoundingClientRect().top).toBe(before);
+    emit("sync", false);
+    const job = screen.getByTestId("job-progress");
+    expect(content.contains(job)).toBe(false);
+    expect(job.className).toContain("fixed");
+    expect(content.getBoundingClientRect().top).toBe(before);
+    emit("sync", true);
+    expect(screen.queryByTestId("job-progress")).not.toBeInTheDocument();
+    expect(content.getBoundingClientRect().top).toBe(before);
   });
 });

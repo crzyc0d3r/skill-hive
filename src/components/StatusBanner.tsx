@@ -10,7 +10,7 @@ export function StatusBanner({ message, onRetry }: { message: string | null; onR
     <Alert
       data-testid="status-banner"
       variant="destructive"
-      className="rounded-none border-x-0 border-t-0 bg-destructive-subtle text-destructive-subtle-foreground"
+      className="fixed inset-x-0 top-0 z-[70] rounded-none border-x-0 border-t-0 bg-destructive-subtle text-destructive-subtle-foreground"
     >
       <AlertTitle className="sr-only">{t("banner.retry")}</AlertTitle>
       <AlertDescription className="flex items-center justify-between gap-3 text-destructive-subtle-foreground">

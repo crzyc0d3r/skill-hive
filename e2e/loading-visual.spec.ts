@@ -76,3 +76,27 @@ for (const theme of ["light", "dark"] as const) {
     });
   });
 }
+
+test("content top stays constant while a job is showing", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("skill-hive-demo", "1");
+    localStorage.setItem("demo-setting:theme", "dark");
+  });
+  await page.setViewportSize({ width: 1100, height: 640 });
+  await page.goto("/my-skills");
+  await expect(page.getByTestId("library")).toBeVisible();
+  const before = await page.getByTestId("content").evaluate((node) => node.getBoundingClientRect().top);
+  const libraryTop = await page.getByTestId("library").evaluate((node) => node.getBoundingClientRect().top);
+  await page.goto("/my-skills?job=sync");
+  await expect(page.getByTestId("job-progress")).toBeVisible();
+  const during = await page.getByTestId("content").evaluate((node) => node.getBoundingClientRect().top);
+  const libraryDuring = await page.getByTestId("library").evaluate((node) => node.getBoundingClientRect().top);
+  expect(during).toBe(before);
+  expect(libraryDuring).toBe(libraryTop);
+  await page.goto("/settings?job=sync");
+  await expect(page.getByTestId("settings")).toBeVisible();
+  const settings = await page.getByTestId("content").evaluate((node) => node.getBoundingClientRect().top);
+  const settingsPage = await page.getByTestId("settings").evaluate((node) => node.getBoundingClientRect().top);
+  expect(settings).toBe(before);
+  expect(settingsPage).toBe(libraryTop);
+});

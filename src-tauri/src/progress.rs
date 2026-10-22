@@ -1,5 +1,36 @@
+use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+
+thread_local! {
+    static CAPTURE_JOBS: Cell<bool> = const { Cell::new(false) };
+}
+static CAPTURED_JOBS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+pub fn capture_job_events() {
+    CAPTURE_JOBS.with(|flag| flag.set(true));
+    if let Ok(mut events) = CAPTURED_JOBS.lock() {
+        events.clear();
+    }
+}
+
+pub fn captured_job_events() -> Vec<String> {
+    CAPTURE_JOBS.with(|flag| flag.set(false));
+    CAPTURED_JOBS
+        .lock()
+        .map(|mut events| std::mem::take(&mut *events))
+        .unwrap_or_default()
+}
+
+fn record_job_event(phase: &str, job: &str, current: u32, total: u32) {
+    let capture = CAPTURE_JOBS.with(|flag| flag.get());
+    if !capture {
+        return;
+    }
+    if let Ok(mut events) = CAPTURED_JOBS.lock() {
+        events.push(format!("{phase} {job} {current}/{total}"));
+    }
+}
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -50,6 +81,9 @@ pub fn finish(job: &str, message: impl Into<String>) {
 }
 
 pub fn emit(job: &str, current: u32, total: u32, message: impl Into<String>, done: bool) {
+    let phase = if done { "stop" } else { "start" };
+    log::info!("job-event {phase} job={job} current={current} total={total}");
+    record_job_event(phase, job, current, total);
     let Ok(slot) = APP.lock() else {
         return;
     };

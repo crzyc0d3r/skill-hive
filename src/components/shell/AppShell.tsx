@@ -744,7 +744,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       >
         <span className="flex items-center gap-2">
           <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
-          {job && !job.done ? t("job.working") : authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : t("shell.ready")}
+          {job && !job.done ? jobLabel(job.job, job.message, job.current, job.total).text : authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : t("shell.ready")}
         </span>
         <Link to="/runs/run-fixture" data-testid="run-chip" aria-label={t("results.title")} className="inline-flex items-center gap-1 text-muted-foreground">
           <ClipboardListIcon className="size-3.5" aria-hidden="true" />
@@ -905,7 +905,7 @@ function JobBanner({
 }) {
   const { text, percent } = jobLabel(job.job, job.message, job.current, job.total);
   return (
-    <div data-testid="job-progress" className="pointer-events-auto fixed inset-x-0 top-0 z-[80]">
+    <div data-testid="job-progress" className="pointer-events-none fixed inset-x-0 top-0 z-[80]">
       <div className="h-0.5 bg-primary/25" aria-hidden="true">
         <div className="h-full bg-primary" style={{ width: `${percent}%` }} />
       </div>
