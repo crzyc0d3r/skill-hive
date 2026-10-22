@@ -41,6 +41,7 @@ describe("library", () => {
     renderAt("/my-skills");
     const name = await screen.findByText("research-notes");
     expect(name.className).not.toContain("truncate");
+    expect(name.nextElementSibling?.className).toContain("truncate");
   });
 
   it("reorders a preset, uses the card menu, and deletes a tag", async () => {

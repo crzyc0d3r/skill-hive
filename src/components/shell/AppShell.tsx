@@ -226,7 +226,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         const choice = isThemeChoice(value) ? value : "system";
         setTheme(choice);
         applyTheme(choice);
-        setBanner(null);
+        const showLoadBanner = import.meta.env.DEV && new URLSearchParams(window.location.search).get("banner") === "load";
+        setBanner(showLoadBanner ? t("banner.load") : null);
       })
       .catch(() => {
         if (!cancelled) setBanner(t("banner.load"));
@@ -414,7 +415,6 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
       {platform === "mac" ? (
         <div data-testid="drag-strip" data-tauri-drag-region className="h-7 shrink-0 bg-sidebar" />
       ) : null}
-      <StatusBanner message={banner} onRetry={() => setReloadKey((value) => value + 1)} />
       <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)} className="relative h-full min-h-0 flex-1">
         <Sidebar
           collapsible="none"
@@ -673,11 +673,11 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             </SidebarMenu>
           </SidebarFooter>
         </Sidebar>
-        <div data-theme-surface="" className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <div data-theme-surface="" className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background">
           <header
             data-testid="header"
             data-theme-surface=""
-            className={cn("sticky top-0 z-10 flex h-11 items-center justify-between gap-3 border-b border-border bg-background", pagePad, "py-0")}
+            className={cn("sticky top-0 z-30 flex h-11 items-center justify-between gap-3 border-b border-border bg-background", pagePad, "py-0")}
           >
             <div className="min-w-0">
               <div data-testid="breadcrumb" className="truncate text-overline font-semibold text-muted-foreground uppercase">{crumb}</div>
@@ -696,6 +696,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
               </Button>
             </div>
           </header>
+          <StatusBanner message={banner} onRetry={() => setReloadKey((value) => value + 1)} />
           <main
             data-testid="content"
             data-theme-surface=""

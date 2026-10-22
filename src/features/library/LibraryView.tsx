@@ -512,7 +512,7 @@ export function LibraryView({
                 />
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                   <span className="block h-5 overflow-hidden text-sm font-medium leading-5">{skill.name}</span>
-                  <span className="block h-5 overflow-hidden text-[13px] leading-5 text-muted-foreground">{skill.description.replace(/\s+/g, " ").trim()}</span>
+                  <span className="block h-5 truncate text-[13px] leading-5 text-muted-foreground">{skill.description.replace(/\s+/g, " ").trim()}</span>
                 </button>
                 <DropdownMenu modal={false} open={menuId === skill.id} onOpenChange={(next) => setMenuId(next ? skill.id : null)}>
                   <DropdownMenuTrigger asChild>

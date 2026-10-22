@@ -121,6 +121,16 @@ jobs:
           echo "tauri-driver 2.1.0 does not listen on macOS, so this job runs the hive-core effect test instead"
           cargo test -p skill-hive --lib effects -- --test-threads=1
 
+      - name: Upload Windows navigation frames
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-navigation
+          path: |
+            docs/polish/windows/*.png
+            docs/polish/windows/tops.json
+          if-no-files-found: error
+
       - name: Show WebView2 driver traces
         if: always() && runner.os == 'Windows'
         shell: pwsh

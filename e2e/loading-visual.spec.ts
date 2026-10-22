@@ -100,3 +100,33 @@ test("content top stays constant while a job is showing", async ({ page }) => {
   expect(settings).toBe(before);
   expect(settingsPage).toBe(libraryTop);
 });
+
+test("the retry banner sits below the header and search", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("skill-hive-demo", "1");
+    localStorage.setItem("demo-setting:theme", "dark");
+  });
+  await page.setViewportSize({ width: 1100, height: 640 });
+  await page.goto("/my-skills");
+  await expect(page.getByTestId("library")).toBeVisible();
+  const before = await page.getByTestId("content").evaluate((node) => node.getBoundingClientRect().top);
+  await page.goto("/my-skills?banner=load");
+  const banner = page.getByTestId("status-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText("Could not load settings.");
+  const box = await page.evaluate(() => {
+    const header = document.querySelector("[data-testid=header]")?.getBoundingClientRect();
+    const search = [...document.querySelectorAll("button")].find((node) => node.textContent?.includes("Search"))?.getBoundingClientRect();
+    const alert = document.querySelector("[data-testid=status-banner]")?.getBoundingClientRect();
+    const content = document.querySelector("[data-testid=content]")?.getBoundingClientRect();
+    return {
+      headerBottom: header?.bottom ?? 0,
+      searchBottom: search?.bottom ?? 0,
+      bannerTop: alert?.top ?? 0,
+      contentTop: content?.top ?? 0,
+    };
+  });
+  expect(box.bannerTop).toBeGreaterThanOrEqual(box.headerBottom - 1);
+  expect(box.bannerTop).toBeGreaterThanOrEqual(box.searchBottom - 1);
+  expect(box.contentTop).toBe(before);
+});

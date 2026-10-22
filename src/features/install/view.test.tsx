@@ -1,5 +1,7 @@
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
+import { InstallView } from "@/features/install/InstallView";
 import { installIpc, renderAt } from "@/test/render-app";
 
 describe("install", () => {
@@ -39,5 +41,29 @@ describe("install", () => {
     expect(screen.getByText("Imported renamed-demo")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel clone" }));
     expect(screen.getByText("Temporary clone directory removed.")).toBeInTheDocument();
+  });
+
+  it("keeps read failures out of the new count and names the reason", () => {
+    render(
+      <MemoryRouter initialEntries={["/install?tab=scan"]}>
+        <InstallView
+          scanned={[
+            { name: "notes", tool: "cursor", path: "~/.cursor/skills/notes" },
+            { name: "locked-skill", tool: "claude_code", path: "~/.claude/skills/locked-skill", reason: "error" },
+            { name: "blank-skill", tool: "cursor", path: "~/.cursor/skills/blank-skill", reason: "parse" },
+          ]}
+          onImportAll={() => {}}
+          onImportOne={() => {}}
+          onPreview={() => {}}
+          onImportGit={() => {}}
+          onCancel={() => {}}
+          onInstallLocal={() => {}}
+          onInstallArchive={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("We found 3 skills in 2 agents. 1 are new.")).toBeInTheDocument();
+    expect(screen.getByText("permission denied").closest("td")).toHaveClass("text-destructive");
+    expect(screen.getByText("Parse error").closest("td")).toHaveClass("text-destructive");
   });
 });

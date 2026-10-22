@@ -1,4 +1,4 @@
-import { groupScanRows } from "./scans";
+import { groupScanRows, isFreshScan } from "./scans";
 
 describe("scan grouping", () => {
   it("marks a skill when two copies have different fingerprints", () => {
@@ -29,5 +29,12 @@ describe("scan grouping", () => {
       { name: "broken", tool: "codex", path: "/b/SKILL.md", reason: "error" },
     ]);
     expect(rows[0]?.reason).toBe("error");
+  });
+
+  it("does not count a read or parse failure as new", () => {
+    expect(isFreshScan({ reason: "error" })).toBe(false);
+    expect(isFreshScan({ reason: "parse" })).toBe(false);
+    expect(isFreshScan({ alreadyManaged: true })).toBe(false);
+    expect(isFreshScan({})).toBe(true);
   });
 });

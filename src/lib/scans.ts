@@ -16,6 +16,11 @@ export interface GroupedScan extends ScanCopy {
   differs: boolean;
 }
 
+/** A row can be imported. Read and parse failures are not new skills. */
+export function isFreshScan(row: { alreadyManaged?: boolean; reason?: string }): boolean {
+  return !row.alreadyManaged && row.reason !== "error" && row.reason !== "parse";
+}
+
 /** One row per skill name. Copies differ when their content fingerprints do. */
 export function groupScanRows(rows: ScanCopy[]): GroupedScan[] {
   const grouped: GroupedScan[] = [];

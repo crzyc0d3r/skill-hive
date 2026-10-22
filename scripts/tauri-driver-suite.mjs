@@ -108,9 +108,9 @@ const driver = spawnCommand("tauri-driver", driverArgs, { stdio: "inherit" });
 await new Promise((resolve) => setTimeout(resolve, 1000));
 
 const suiteDeadline = setTimeout(() => {
-  console.error("tauri-driver suite exceeded 10 minutes");
+  console.error("tauri-driver suite exceeded 12 minutes");
   process.exit(1);
-}, 10 * 60 * 1000);
+}, 12 * 60 * 1000);
 
 async function call(method, urlPath, body, timeoutMs = 20000) {
   const response = await fetch(`http://127.0.0.1:4444${urlPath}`, {
@@ -768,6 +768,56 @@ conn.commit()
     const menu = readFileSync(path.join(base, "tray-menu.json"), "utf8");
     return menu.includes("apply:") && menu.includes("Preset");
   });
+
+  if (process.platform === "win32") {
+    const frameDir = path.join(process.cwd(), "docs", "polish", "windows");
+    mkdirSync(frameDir, { recursive: true });
+    const tops = [];
+    async function contentTop() {
+      const result = await call("POST", `${prefix}/execute/sync`, {
+        script: `const node = document.querySelector('[data-testid="content"]');
+          return node ? node.getBoundingClientRect().top : null;`,
+        args: [],
+      });
+      if (typeof result.value !== "number") throw new Error(`content top missing: ${JSON.stringify(result)}`);
+      return result.value;
+    }
+    async function saveFrame(name) {
+      await dismissToasts();
+      const shot = await call("GET", `${prefix}/screenshot`);
+      writeFileSync(path.join(frameDir, `${name}.png`), Buffer.from(shot.value, "base64"));
+      const top = await contentTop();
+      tops.push({ name, top });
+      return top;
+    }
+    const steps = [
+      ["01-library", "/my-skills", "library"],
+      ["02-settings", "/settings", "settings"],
+      ["03-add-marketplace", "/install?tab=leaderboard", "install"],
+      ["04-add-folder", "/install?tab=local", "install"],
+      ["05-add-git", "/install?tab=git", "install"],
+      ["06-add-scan", "/install?tab=scan", "install"],
+      ["07-library-return", "/my-skills", "library"],
+    ];
+    for (const theme of ["Light", "Dark"]) {
+      await openPath("/settings");
+      await find("[data-testid=settings]");
+      await clickText(theme);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      let first = null;
+      for (const [name, pathname, landmark] of steps) {
+        await openPath(pathname);
+        await find(`[data-testid=${landmark}]`);
+        const top = await saveFrame(`${theme.toLowerCase()}-${name}`);
+        if (first === null) first = top;
+        if (Math.abs(top - first) > 1) {
+          throw new Error(`content top moved on ${theme} ${name}: ${first} -> ${top}`);
+        }
+      }
+    }
+    writeFileSync(path.join(frameDir, "tops.json"), JSON.stringify(tops, null, 2));
+    console.log(`windows navigation frames ${tops.length} content tops ${[...new Set(tops.map((row) => row.top))].join(", ")}`);
+  }
 
   console.log("tauri-driver suite: shell routes, install, and authoring artifacts");
 } catch (err) {

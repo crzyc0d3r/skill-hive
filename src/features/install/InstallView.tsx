@@ -6,7 +6,7 @@ import type { ScanRow } from "@/lib/ipc/catalog";
 import { listScanRows, type GitPreview, type GitPreviewSkill } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
 import { AgentBadge } from "@/components/app/AgentBadge";
-import { groupScanRows } from "@/lib/scans";
+import { groupScanRows, isFreshScan } from "@/lib/scans";
 
 import { t } from "@/lib/i18n";
 import { EmptyState, ErrorState, Screen } from "@/components/chrome";
@@ -64,7 +64,7 @@ export function InstallView({
   const [onlyNew, setOnlyNew] = useState(false);
   const scanRows = rescanned ?? scanned;
   const groupedScan = useMemo(() => groupScanRows(scanRows), [scanRows]);
-  const freshCount = groupedScan.filter((row) => !row.alreadyManaged).length;
+  const freshCount = groupedScan.filter((row) => isFreshScan(row)).length;
   const visibleScan = groupedScan.filter((row) => {
     if (onlyNew && row.alreadyManaged) return false;
     const needle = scanQuery.trim().toLowerCase();
@@ -124,8 +124,16 @@ export function InstallView({
         </ul>
       ) : null}
       {phase === "error" && active !== "scan" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+      {phase === "offline" && active !== "leaderboard" ? (
+        <div data-testid="install-offline" role="alert" className="mt-4 flex min-h-40 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-destructive/40 px-6 py-10 text-center">
+          <p className="max-w-sm text-sm text-destructive">{t("install.leaderboard.offline")}</p>
+          <Button type="button" size="sm" variant="outline" onClick={retry}>{t("banner.retry")}</Button>
+        </div>
+      ) : null}
       {phase === "empty" ? <EmptyState title={t("install.scan.empty")} body={t("install.lede")} /> : null}
-      {phase === "ready" && active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
+      {(phase === "ready" || phase === "offline") && active === "leaderboard" ? (
+        <MarketplacePanel reachable={reachable} mode={phase === "offline" || params.get("market") === "offline" ? "offline" : params.get("market") === "initial" ? "initial" : null} />
+      ) : null}
       {phase === "ready" && active === "local" ? (
         <form
           className="max-w-xl"
@@ -226,16 +234,16 @@ export function InstallView({
         </form>
       ) : null}
       {phase === "ready" && active === "scan" && scanRows.length === 0 ? <EmptyState title={t("install.scan.empty")} /> : null}
-      {phase === "ready" && active === "scan" && scanRows.length > 0 ? (
+      {(phase === "ready" || phase === "error") && active === "scan" && scanRows.length > 0 ? (
         <div className="mt-4 space-y-3">
-          <p className="text-sm text-muted-foreground">{t("install.scan.summary", { skills: String(groupScanRows(scanRows).length), agents: String(new Set(scanRows.map((row) => row.tool)).size), fresh: String(groupScanRows(scanRows).filter((row) => !row.alreadyManaged).length) })}</p>
+          <p className="text-sm text-muted-foreground">{t("install.scan.summary", { skills: String(groupedScan.length), agents: String(new Set(scanRows.map((row) => row.tool)).size), fresh: String(freshCount) })}</p>
           <div className="flex flex-wrap items-end gap-2">
             <label className="block text-sm">
               <span className="mb-1.5 block text-muted-foreground">{t("install.scan.search")}</span>
               <Input aria-label={t("install.scan.search")} value={scanQuery} onChange={(event) => setScanQuery(event.target.value)} className="h-8 w-56" />
             </label>
             <Button type="button" variant="outline" size="sm" aria-pressed={onlyNew} onClick={() => setOnlyNew((current) => !current)}>{t("install.scan.onlyNew")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setPicked(groupedScan.filter((row) => !row.alreadyManaged).map((row) => row.name))}>{t("install.scan.selectNew")}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setPicked(groupedScan.filter((row) => isFreshScan(row)).map((row) => row.name))}>{t("install.scan.selectNew")}</Button>
             <Button type="button" variant="ghost" size="sm" className="sr-only" disabled={busy} aria-busy={busy} onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>{t("install.scan.all")}</Button>
             <Button type="button" variant="ghost" size="sm" disabled={busy} aria-busy={busy} onClick={() => void act(async () => { setRescanned(await listScanRows()); })}>{t("install.scan.rescan")}</Button>
           </div>
@@ -243,9 +251,9 @@ export function InstallView({
             <table className="w-full table-fixed text-sm">
               <colgroup>
                 <col className="w-10" />
+                <col className="w-[34%]" />
+                <col className="w-[40%]" />
                 <col className="w-[22%]" />
-                <col />
-                <col className="w-36" />
               </colgroup>
               <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                 <tr>
@@ -270,8 +278,10 @@ export function InstallView({
                   </td>
                   <td className="px-3">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-medium">{row.name}</span>
-                      {row.tools.slice(0, 3).map((tool) => <AgentBadge key={tool} agent={tool} />)}
+                      <span className="min-w-0 flex-1 truncate font-medium">{row.name}</span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        {row.tools.slice(0, 3).map((tool) => <AgentBadge key={tool} agent={tool} />)}
+                      </span>
                     </span>
                     <span className="sr-only">
                       <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} />
