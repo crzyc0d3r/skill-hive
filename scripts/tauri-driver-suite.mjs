@@ -525,16 +525,24 @@ try {
 
   await click("a[href='/settings']");
   await find("[data-testid=settings]");
-  const agentTabs = await call("POST", `${prefix}/elements`, { using: "css selector", value: 'button[role="tab"]' });
-  const tabIds = agentTabs.value ?? [];
-  let agentsTab = null;
-  for (const entry of tabIds) {
-    const id = entry["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(entry)[0];
-    const text = await call("GET", `${prefix}/element/${id}/text`);
-    if (String(text.value ?? "").trim() === "Agents") agentsTab = id;
+  const openedAgents = await call("POST", `${prefix}/execute/sync`, {
+    script: `const select = document.querySelector('select[aria-label="Section"]');
+      const selectVisible = Boolean(select && select.getClientRects().length);
+      if (selectVisible) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;
+        setter.call(select, "agents");
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        return "select";
+      }
+      const agents = [...document.querySelectorAll('button[role="tab"]')].find((node) => node.textContent.trim() === "Agents");
+      if (!agents) return "missing";
+      agents.click();
+      return "tab";`,
+    args: [],
+  });
+  if (openedAgents?.value !== "select" && openedAgents?.value !== "tab") {
+    throw new Error(`Agents settings section was not found (${JSON.stringify(openedAgents)})`);
   }
-  if (!agentsTab) throw new Error("Agents settings tab was not found");
-  await call("POST", `${prefix}/element/${agentsTab}/click`, {});
   await clickText("Add agent");
   await typeInto('input[aria-label="Agent name"]', "Field Notes");
   await typeInto('input[aria-label="Agent path"]', path.join(home, ".field-notes", "skills"));
