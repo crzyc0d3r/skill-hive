@@ -105,6 +105,8 @@
   "settings.agents.project": "Project path",
   "settings.agents.refreshed": "Agents refreshed",
   "settings.motion": "Reduce motion",
+  "settings.state.on": "On",
+  "settings.state.off": "Off",
   "settings.about.latest": "You are on the latest version.",
   "settings.about.available": "Version {version} is available.",
   "settings.about.install": "Install Update",

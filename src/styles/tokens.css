@@ -255,6 +255,11 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
 }
 
+button,
+[data-slot="button"] {
+  transition-property: none;
+}
+
 html,
 body,
 #root {
