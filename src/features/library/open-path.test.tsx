@@ -58,7 +58,8 @@ it("paints a cached library on revisit without scanning again", async () => {
   // This machine paints the cached click in about 92 ms. The same click in
   // GitHub's jsdom job measured 239 ms with no extra scan, so CI allows 500 ms.
   // A multi-second rescan still fails this budget.
-  const budget = process.env.CI ? 500 : 200;
+  const ci = (globalThis as { process?: { env?: { CI?: string } } }).process?.env?.CI;
+  const budget = ci ? 500 : 200;
   expect(revisitMs, report).toBeLessThan(budget);
   expect(ipcLog.filter((entry) => entry.cmd === "check_all_skill_updates").length).toBe(checksBefore);
   expect(ipcLog.filter((entry) => entry.cmd === "get_managed_skills").length).toBe(fetchesBefore);
