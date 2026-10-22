@@ -62,22 +62,33 @@ function DashboardPage() {
 
 function LibraryPage() {
   const client = useQueryClient();
-  const { skills, presets, setPresets, activePresetId } = useOutletContext<ShellOutletContext>();
-  useAuthoring();
-  const drafts = draftSkillCards();
+  const { skills, presets, setPresets, activePresetId, agents } = useOutletContext<ShellOutletContext>();
+  const authoring = useAuthoring();
   const [params] = useSearchParams();
   const crowded = params.get("crowd") === "1";
-  const sourceSkills = useMemo(() => (crowded ? crowdSkills() : skills), [crowded, skills]);
+  const sourceSkills = useMemo(() => groupSkillCards(crowded ? crowdSkills() : skills), [crowded, skills]);
   const [rows, setRows] = useState(sourceSkills);
-  useEffect(() => {
-    setRows(groupSkillCards(sourceSkills));
-  }, [sourceSkills]);
+  const [syncedFrom, setSyncedFrom] = useState(sourceSkills);
+  if (sourceSkills !== syncedFrom) {
+    setSyncedFrom(sourceSkills);
+    setRows(sourceSkills);
+  }
+  const viewSkills = useMemo(() => {
+    const drafts = draftSkillCards();
+    const ids = new Set(rows.map((skill) => skill.id));
+    const draftIds = new Set(drafts.map((draft) => draft.id));
+    return [
+      ...drafts.filter((draft) => !ids.has(draft.id)),
+      ...rows.map((skill) => (draftIds.has(skill.id) ? { ...skill, draft: true } : skill)),
+    ];
+  }, [rows, authoring]);
   const preset = presets.find((item) => item.id === activePresetId) ?? presets.find((item) => item.id === "research") ?? presets[0];
   const memberIds = preset?.skillIds ?? [];
   const refresh = () => client.invalidateQueries({ queryKey: ["skills"] });
   return (
     <LibraryView
-      skills={[...drafts.filter((draft) => !rows.some((skill) => skill.id === draft.id)), ...rows.map((skill) => (drafts.some((draft) => draft.id === skill.id) ? { ...skill, draft: true } : skill))]}
+      skills={viewSkills}
+      agents={agents}
       initialId={params.get("skill")}
       memberIds={memberIds}
       onAddTag={(skillId, tag) => {

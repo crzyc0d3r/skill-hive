@@ -97,7 +97,7 @@ export function SkillEditor() {
 
   return (
     <section data-testid="skill-editor" className="flex min-h-0 flex-col">
-      <h1 className="font-mono text-lg font-semibold">{draft.name}</h1>
+      <h1 className="font-sans text-display font-semibold tracking-tight">{draft.name}</h1>
       <div className="mt-2 flex flex-wrap gap-2 text-sm">
         <label>
           {t("editor.profile")}

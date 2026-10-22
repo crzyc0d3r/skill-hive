@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { applyRemoval } from "@/features/library/updates";
 import { applyAvailableSkillUpdates, checkAllSkillUpdates, silent } from "@/lib/ipc/actions";
 import type { SkillCard } from "@/features/library/model";
@@ -13,12 +13,6 @@ export function UpdateFlow({ skills = [] }: { skills?: SkillCard[] }) {
   const [paths, setPaths] = useState<string[]>([]);
   const [relinkPath, setRelinkPath] = useState("");
   const plan = { paths, token: paths.join("|") };
-
-  useEffect(() => {
-    void silent<number>("check_all_skill_updates").then((count) => {
-      if (typeof count === "number") setAvailable(count);
-    });
-  }, []);
 
   return (
     <div data-testid="updates" className="flex flex-wrap items-center gap-1">

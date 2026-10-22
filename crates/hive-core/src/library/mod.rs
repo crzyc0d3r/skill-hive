@@ -16,3 +16,6 @@ pub mod skill_metadata;
 pub mod sync_metadata;
 pub mod updates;
 pub mod workspace;
+
+#[cfg(test)]
+mod open_path;

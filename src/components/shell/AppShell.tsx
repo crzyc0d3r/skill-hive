@@ -155,9 +155,11 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     void silent<string>("check_app_update").then((value) => {
       if (typeof value === "string" && value.startsWith("available")) setShowUpdate(true);
     });
-    void silent<number>("check_all_skill_updates").then((count) => {
-      if (typeof count === "number" && count > 0) setSkillUpdates(count);
-    });
+    const checkUpdates = window.setTimeout(() => {
+      void silent<number>("check_all_skill_updates").then((count) => {
+        if (typeof count === "number" && count > 0) setSkillUpdates(count);
+      });
+    }, 0);
     void silent<string | null>("get_settings", { key: "skill_update_count" }).then((value) => {
       const count = Number(value);
       if (Number.isFinite(count) && count > 0) setSkillUpdates(count);
@@ -168,6 +170,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     void silent<{ id: string; name: string; path: string }[]>("get_projects").then((rows) => {
       if (Array.isArray(rows)) setProjectRows(rows);
     });
+    return () => window.clearTimeout(checkUpdates);
   }, [reloadKey]);
   useEffect(() => {
     const onRestart = () => setRestartNow(localStorage.getItem("skill-hive-restart-now") === "1");
@@ -321,7 +324,12 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     placeholderData: () => (demoEnabled() ? undefined : readLibraryIndex() ?? undefined),
   });
   const presets = useQuery({ queryKey: ["presets"], queryFn: listPresets });
-  const agents = useQuery({ queryKey: ["agents"], queryFn: listAgents });
+  const agents = useQuery({
+    queryKey: ["agents"],
+    queryFn: listAgents,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
   const dataPhase = !demoEnabled() && skills.isPending && skills.data === undefined ? "loading" : skills.isError && skills.data === undefined ? "error" : "ready";
   const retryData = () => {
     void skills.refetch();

@@ -29,7 +29,7 @@ export function AgentEditor() {
 
   return (
     <section data-testid="agent-editor" className="min-w-0">
-      <h1 className="font-mono text-lg font-semibold">{agent.name}</h1>
+      <h1 className="font-sans text-display font-semibold tracking-tight">{agent.name}</h1>
       <div className="mt-2 flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => saveAgent(agent)}>{t("editor.save")}</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => exportAgent(agent.id)}>{t("agents.user")}</Button>

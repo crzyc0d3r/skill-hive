@@ -4,7 +4,7 @@ import { useContext, useEffect, useState } from "react";
 import { t } from "../../lib/i18n";
 import { exportEndpoints, setEndpointSecret, useEndpoints } from "@/features/endpoints/store";
 import { probeEndpoint, silent } from "@/lib/ipc/actions";
-import { StatePanel } from "@/components/chrome";
+import { Screen, StatePanel } from "@/components/chrome";
 import { EndpointSkeleton } from "@/components/skeletons";
 import { RetryContext, useShellPhase } from "@/lib/view-state";
 
@@ -30,8 +30,7 @@ export function EndpointsView() {
     });
   }, []);
   return (
-    <section data-testid="endpoints" className="min-w-0 space-y-3">
-      <h1 className="font-mono text-xl font-semibold">{t("endpoints.title")}</h1>
+    <Screen testId="endpoints" title={t("endpoints.title")}>
       <ol className="flex flex-wrap gap-2 text-xs" data-testid="probe-stepper">
         {STAGES.map((stage, index) => (
           <li key={stage} className="rounded border border-border px-2 py-1">
@@ -83,18 +82,23 @@ export function EndpointsView() {
       {probed ? <p data-testid="probe-result">{probed}</p> : null}
       {phase === "ready" ? <p className="text-sm">{t("endpoints.probe")}</p> : null}
       {phase === "ready" ? <section data-testid="endpoint-prices">
-        <h2 className="text-sm font-semibold">{t("endpoints.prices")}</h2>
-        <ul className="text-sm tabular-nums">
-          {prices.map((row) => (
-            <li key={row.model}>{row.model} {row.input_per_mtok} / {row.output_per_mtok}</li>
-          ))}
-        </ul>
+        <h2 className="font-sans text-sm font-semibold">{t("endpoints.prices")}</h2>
+        <table className="mt-2 w-full text-sm">
+          <tbody>
+            {prices.map((row) => (
+              <tr key={row.model} className="border-b border-border">
+                <td className="py-1.5">{row.model}</td>
+                <td className="py-1.5 text-right tabular-nums">{row.input_per_mtok} / {row.output_per_mtok}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </section> : null}
       {exported ? (
-        <pre data-testid="endpoint-export" className="max-w-full overflow-auto text-xs">
+        <pre data-testid="endpoint-export" className="max-w-full whitespace-pre-wrap break-all font-mono text-xs">
           {exported}
         </pre>
       ) : null}
-    </section>
+    </Screen>
   );
 }

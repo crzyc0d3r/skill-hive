@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { designColumns } from "@/lib/shell-width";
 
 const MIN_CARD = 280;
@@ -36,10 +36,11 @@ export function useVirtualGrid<T>(items: T[], layout: "grid" | "list") {
   const rowHeight = layout === "grid" ? ROW_HEIGHT.grid : ROW_HEIGHT.list;
   const [frame, setFrame] = useState({ width: 0, height: 0, scrollTop: 0 });
   const [viewport, setViewport] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
     const scroller = scrollParent(node);
+    let raf = 0;
     const measure = () => {
       const origin = node.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
       const next = {
@@ -47,20 +48,25 @@ export function useVirtualGrid<T>(items: T[], layout: "grid" | "list") {
         height: scroller.clientHeight,
         scrollTop: Math.max(0, scroller.scrollTop - origin),
       };
-      setViewport(window.innerWidth);
+      setViewport((current) => (current === window.innerWidth ? current : window.innerWidth));
       setFrame((current) =>
         current.width === next.width && current.height === next.height && current.scrollTop === next.scrollTop ? current : next,
       );
     };
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(measure);
+    };
     measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(schedule);
     observer.observe(scroller);
-    scroller.addEventListener("scroll", measure, { passive: true });
-    window.addEventListener("resize", measure);
+    scroller.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
     return () => {
+      cancelAnimationFrame(raf);
       observer.disconnect();
-      scroller.removeEventListener("scroll", measure);
-      window.removeEventListener("resize", measure);
+      scroller.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
     };
   }, [layout, items.length]);
   const columns = layout === "list" ? 1 : designColumns(viewport || frame.width);

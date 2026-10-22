@@ -28,13 +28,16 @@ function copyStamp(description: string): boolean {
 
 export function groupSkillCards(skills: SkillCard[]): SkillCard[] {
   const grouped: SkillCard[] = [];
+  const index = new Map<string, number>();
   for (const skill of skills) {
     const key = skill.name.trim().toLowerCase();
-    const existing = grouped.find((row) => row.name.trim().toLowerCase() === key);
-    if (!existing) {
+    const at = index.get(key);
+    if (at === undefined) {
+      index.set(key, grouped.length);
       grouped.push({ ...skill, agents: [...skill.agents], locations: [...(skill.locations ?? [])], tags: [...skill.tags] });
       continue;
     }
+    const existing = grouped[at];
     existing.agents = [...new Set([...existing.agents, ...skill.agents])];
     existing.locations = [...new Set([...(existing.locations ?? []), ...(skill.locations ?? [])])];
     if (skill.description && (!existing.description || (copyStamp(existing.description) && !copyStamp(skill.description)))) {

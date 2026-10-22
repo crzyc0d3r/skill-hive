@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckIcon, GripVerticalIcon, LayoutGridIcon, ListIcon, MoreHorizontalIcon, PlusIcon, XIcon } from "lucide-react";
@@ -139,6 +140,7 @@ export function LibraryView({
   skills,
   initialId,
   memberIds = [],
+  agents = [],
   presetName = "Research",
   onRenameTag,
   onAddTag,
@@ -155,6 +157,7 @@ export function LibraryView({
   skills: SkillCard[];
   initialId?: string | null;
   memberIds?: string[];
+  agents?: AgentRow[];
   presetName?: string;
   onRenameTag: (from: string, to: string) => void | Promise<void>;
   onAddTag: (skillId: string, tag: string) => void | Promise<void>;
@@ -195,22 +198,26 @@ export function LibraryView({
   const [dragId, setDragId] = useState<string | null>(null);
   const [batchTag, setBatchTag] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
-  const [catalogAgents, setCatalogAgents] = useState<AgentRow[]>([]);
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [agentQuery, setAgentQuery] = useState("");
   const [sourceRef, setSourceRef] = useState<string | null>(null);
   const { seed } = useGenerate();
+  const queryClient = useQueryClient();
+  const [fullAgents, setFullAgents] = useState<AgentRow[] | null>(null);
   useEffect(() => {
+    if (!showAllAgents) return;
     const cached = readAgentCache<AgentRow>();
-    if (cached?.length) setCatalogAgents(cached);
+    if (cached?.length) setFullAgents(cached);
     let live = true;
     void listAgents().then((rows) => {
-      if (live && Array.isArray(rows)) setCatalogAgents(rows);
+      if (live && Array.isArray(rows) && rows.length > 0) setFullAgents(rows);
     });
     return () => {
       live = false;
     };
-  }, []);
+  }, [showAllAgents]);
+  const queried = queryClient.getQueryData<AgentRow[]>(["agents"]);
+  const catalogAgents = fullAgents ?? (queried && queried.length > 0 ? queried : agents);
   useEffect(() => {
     if (!openId) return;
     void silent<{ path?: string }>("get_source_skill_document", { skillId: openId }).then((doc) => {
@@ -507,13 +514,13 @@ export function LibraryView({
                       <MoreHorizontalIcon aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
+                  {menuId === skill.id ? <DropdownMenuContent align="end" className="w-44">
                     <Link to={`/skills/${skill.id}/edit`} className={menuItem}>{t("library.menu.edit")}</Link>
                     <Link to={`/skills/${skill.id}/tests`} className={menuItem} aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
                     <button type="button" className={menuItem} onClick={() => { setChecked({ name: skill.name, status: "" }); void checkSkillUpdate(skill.id).then((status) => setChecked({ name: skill.name, status: status || "" })); }}>{t("library.menu.check")}</button>
                     <button type="button" className={menuItem} onClick={() => { void checkSkillUpdate(skill.id).then((status) => { setChecked({ name: skill.name, status: status || "" }); void silent("update_skill", { skillId: skill.id }); }); if (skill.source === "local") void silent("reimport_local_skill", { skillId: skill.id }); }}>{skill.source === "local" ? t("library.menu.reimport") : t("library.menu.update")}</button>
                     <button type="button" className={cn(menuItem, "text-destructive")} onClick={() => onDeleteSkills([skill.id])}>{t("library.menu.delete")}</button>
-                  </DropdownMenuContent>
+                  </DropdownMenuContent> : null}
                 </DropdownMenu>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1 px-3">

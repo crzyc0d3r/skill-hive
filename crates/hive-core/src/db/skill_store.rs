@@ -145,6 +145,16 @@ impl SkillStore {
         })
     }
 
+    pub fn db_file(&self) -> String {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT file FROM pragma_database_list WHERE name = 'main'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_default()
+    }
+
     // ── Skills CRUD ──
 
     pub fn insert_skill(&self, skill: &SkillRecord) -> Result<()> {
@@ -336,6 +346,30 @@ impl SkillStore {
              WHERE id = ?5",
             params![remote_revision, update_status, now, last_check_error, id],
         )?;
+        Ok(())
+    }
+
+    /// One transaction for a library-wide check. A separate commit per skill
+    /// fsyncs once per row and is what made opening the library take seconds.
+    pub fn update_skill_check_states(
+        &self,
+        rows: &[(String, String, Option<String>)],
+    ) -> Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn.lock().unwrap();
+        let tx = conn.unchecked_transaction()?;
+        let now = chrono::Utc::now().timestamp_millis();
+        for (id, status, detail) in rows {
+            tx.execute(
+                "UPDATE skills
+                 SET remote_revision = NULL, update_status = ?1, last_checked_at = ?2, last_check_error = ?3
+                 WHERE id = ?4",
+                params![status, now, detail, id],
+            )?;
+        }
+        tx.commit()?;
         Ok(())
     }
 
