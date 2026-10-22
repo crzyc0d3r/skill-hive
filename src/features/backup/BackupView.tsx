@@ -185,7 +185,7 @@ export function BackupView() {
                 <td className="px-3 py-2">{index === 0 ? "1.2 MB" : "1.1 MB"}</td>
                 <td className="px-3 py-2">{index === 0 ? "12" : "11"}</td>
                 <td className="relative px-3 py-2 text-right">
-                  <Button type="button" variant="ghost" size="icon-sm" aria-label={`${t("backup.rowMenu")} ${snap.label}`} aria-expanded={menuId === snap.id} onClick={() => setMenuId(menuId === snap.id ? null : snap.id)}>
+                  <Button type="button" variant="ghost" size="icon-sm" data-testid="backup-row-menu" aria-label={`${t("backup.rowMenu")} ${snap.label}`} aria-expanded={menuId === snap.id} onClick={() => setMenuId(menuId === snap.id ? null : snap.id)}>
                     <MoreHorizontalIcon aria-hidden="true" />
                   </Button>
                   {menuId === snap.id ? (

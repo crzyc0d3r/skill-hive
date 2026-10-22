@@ -244,8 +244,8 @@ try {
   if (!attached) throw new Error(`sidebar did not appear\n${last}`);
   console.log(`attached ${last}`);
 
-  async function find(selector, using = "css selector") {
-    const deadline = Date.now() + 10000;
+  async function find(selector, using = "css selector", timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
     let last = `missing ${selector}`;
     while (Date.now() < deadline) {
       try {
@@ -266,7 +266,8 @@ try {
       .replace(/\s+/g, " ");
     const bodyAt = html.indexOf("<body");
     const slice = (bodyAt >= 0 ? html.slice(bodyAt) : html).slice(0, 1200);
-    throw new Error(`${selector} not found\n${last}\nurl ${url.value}\nsource ${slice}`);
+    const alert = html.match(/role="alert"[^>]*>([^<]+)/)?.[1]?.trim();
+    throw new Error(`${selector} not found${alert ? `\nalert ${alert}` : ""}\n${last}\nurl ${url.value}\nsource ${slice}`);
   }
 
   async function dismissToasts() {
@@ -307,10 +308,10 @@ try {
     const result = await call("POST", `${prefix}/execute/sync`, { script, args: [selector] });
     if (result?.value !== "clicked") throw new Error(`dom click failed for ${selector}: ${JSON.stringify(result)}`);
   }
-  async function click(selector) {
+  async function click(selector, timeoutMs = 10000) {
     let last;
     for (let attempt = 1; attempt <= 4; attempt += 1) {
-      const id = await find(selector);
+      const id = await find(selector, "css selector", timeoutMs);
       try {
         await clickFound(id);
         return;
@@ -328,6 +329,13 @@ try {
     throw last;
   }
 
+  // Restore lives in the snapshot row menu, and the row appears only after
+  // git backup finishes. Windows CI has needed more than the default 10s.
+  async function openBackupRestore() {
+    await click("[data-testid=backup-row-menu]", 30000);
+    await find("[data-testid=backup-restore]");
+  }
+
   await find("[data-testid=sidebar]");
   await click("a[href='/']");
   await find("[data-testid=dashboard]");
@@ -343,6 +351,7 @@ try {
   await find("[data-testid=marketplace]");
   await click("a[href='/backup']");
   await click("[data-testid=backup-now]");
+  await openBackupRestore();
   await click("[data-testid=backup-restore]");
   await find("[data-testid=backup]");
 
@@ -552,7 +561,7 @@ try {
   const original = readFileSync(skillFile, "utf8");
   await click("a[href='/backup']");
   await click("[data-testid=backup-now]");
-  await find("[data-testid=backup-restore]");
+  await openBackupRestore();
   writeFileSync(skillFile, `${original}\nchanged\n`);
   await click("[data-testid=backup-restore]");
   const restoreDeadline = Date.now() + 15000;

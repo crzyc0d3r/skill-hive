@@ -22,8 +22,9 @@ it("searches the marketplace, installs one skill, and cancels the next", async (
     renderAt("/install?tab=leaderboard");
     const search = await screen.findByLabelText("Search marketplace");
     await user.type(search, "review");
-    expect(await screen.findByText("acme/review")).toBeInTheDocument();
-    expect(screen.queryByText("beta/lint")).not.toBeInTheDocument();
+    expect(await screen.findByText("review")).toBeInTheDocument();
+    expect(screen.getByText("By acme")).toBeInTheDocument();
+    expect(screen.queryByText("lint")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Contributor acme" }));
     await user.click(screen.getByRole("button", { name: "Install" }));
     expect(screen.getByText("Installed review")).toBeInTheDocument();
