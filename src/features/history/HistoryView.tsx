@@ -91,7 +91,7 @@ export function HistoryView() {
 
   const points = rows.map((row) => Number(row.rate)).filter((value) => Number.isFinite(value));
   const spark = points.map((value, index) => {
-    const x = points.length === 1 ? 340 : (index / (points.length - 1)) * 600 + 40;
+    const x = points.length === 1 ? 320 : (index / (points.length - 1)) * 616 + 12;
     const y = 150 - ((value - 0.5) / 0.5) * 110;
     return `${x},${Math.max(16, Math.min(150, y))}`;
   }).join(" ");
@@ -120,17 +120,21 @@ export function HistoryView() {
       {alerts.length ? <p data-testid="history-alerts" className="rounded-md border border-warning/40 bg-warning-subtle px-3 py-2 text-sm text-warning-text">{t("history.alerts")}: {alerts.join("; ")}</p> : null}
       {rows.length > 0 ? (
         <Panel title={t("history.trend")} className="w-full min-w-0">
-          <svg viewBox="0 0 680 180" preserveAspectRatio="none" width="100%" role="img" aria-label={t("history.trend")} className="block h-44 w-full">
-            <text x="4" y="20" fontSize="12" fill="var(--color-muted-foreground)">100%</text>
-            <text x="4" y="156" fontSize="12" fill="var(--color-muted-foreground)">50%</text>
-            <line x1="40" y1="156" x2="660" y2="156" stroke="var(--color-border)" />
-            <line x1="40" y1="16" x2="40" y2="156" stroke="var(--color-border)" />
+          <div className="flex w-full min-w-0 items-stretch gap-2">
+            <div className="flex h-44 shrink-0 flex-col justify-between py-2 text-xs leading-none text-muted-foreground" aria-hidden="true">
+              <span>100%</span>
+              <span>50%</span>
+            </div>
+            <svg viewBox="0 0 640 180" preserveAspectRatio="none" role="img" aria-label={t("history.trend")} className="block h-44 min-w-0 flex-1">
+            <line x1="12" y1="156" x2="628" y2="156" stroke="var(--color-border)" />
+            <line x1="12" y1="16" x2="12" y2="156" stroke="var(--color-border)" />
             <polyline points={spark} fill="none" stroke="var(--color-chart-1)" strokeWidth="2.5" />
             {spark.split(" ").map((pair) => {
               const [x, y] = pair.split(",");
               return <circle key={pair} cx={x} cy={y} r="4" fill="var(--color-chart-1)" />;
             })}
-          </svg>
+            </svg>
+          </div>
         </Panel>
       ) : null}
       {phase === "ready" && rows.length > 0 ? <div className="overflow-hidden rounded-md border border-border">

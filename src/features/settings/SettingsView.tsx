@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useContext, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { AgentRow } from "@/lib/ipc/catalog";
-import { applyTextSize, setLocale, t, type TextSize } from "@/lib/i18n";
+import { applyTextSize, isTextSize, setLocale, t, type TextSize } from "@/lib/i18n";
 import { moveById } from "@/features/library/model";
 import { EDITOR_SHORTCUTS } from "@/lib/authoring/model";
 import { proxyOk } from "@/features/settings/proxy";
@@ -30,6 +30,19 @@ import type { ThemeChoice } from "@/lib/theme";
 import { decideUpdate, desktopPlatform, LINUX_DOWNLOAD_URL } from "@/lib/updater";
 
 const TABS = ["general", "appearance", "agents", "backup", "keyboard", "about"] as const;
+
+function paintSelected(node: HTMLButtonElement | null, selected: boolean) {
+  if (!node) return;
+  if (selected) {
+    node.style.setProperty("background-color", "#f4f1ea", "important");
+    node.style.setProperty("color", "#1c1917", "important");
+    node.style.setProperty("border-color", "#f4f1ea", "important");
+  } else {
+    node.style.removeProperty("background-color");
+    node.style.removeProperty("color");
+    node.style.removeProperty("border-color");
+  }
+}
 
 export function SettingsView({
   theme,
@@ -68,6 +81,7 @@ export function SettingsView({
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [motion, setMotion] = useState(false);
+  const [textSize, setTextSize] = useState<TextSize>("medium");
   const [proxy, setProxy] = useState("");
   const [proxyNote, setProxyNote] = useState<string | null>(null);
   const [closeChoice, setCloseChoice] = useState("ask");
@@ -88,7 +102,10 @@ export function SettingsView({
   const [repoWarnings, setRepoWarnings] = useState<string[]>([]);
   useEffect(() => {
     void silent<string | null>("get_settings", { key: "ui_text_size" }).then((value) => {
-      if (value === "small" || value === "medium" || value === "large" || value === "xl") applyTextSize(value);
+      if (isTextSize(value)) {
+        applyTextSize(value);
+        setTextSize(value);
+      }
     });
     void silent<string | null>("get_settings", { key: "ui_language" }).then(() => {
       setLocale("en");
@@ -168,18 +185,7 @@ export function SettingsView({
                 data-theme-selected={theme === choice ? "true" : "false"}
                 variant="outline"
                 className="transition-none"
-                ref={(node) => {
-                  if (!node) return;
-                  if (theme === choice) {
-                    node.style.setProperty("background-color", "#f4f1ea", "important");
-                    node.style.setProperty("color", "#1c1917", "important");
-                    node.style.setProperty("border-color", "#f4f1ea", "important");
-                  } else {
-                    node.style.removeProperty("background-color");
-                    node.style.removeProperty("color");
-                    node.style.removeProperty("border-color");
-                  }
-                }}
+                ref={(node) => paintSelected(node, theme === choice)}
                 onClick={() => setTheme(choice)}
               >
                 {t(`settings.theme.${choice}`)}
@@ -187,11 +193,11 @@ export function SettingsView({
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" aria-pressed={motion} variant="outline" size="sm" onClick={() => { const next = !motion; setMotion(next); document.documentElement.dataset.reduceMotion = next ? "on" : "off"; }}>
+            <Button type="button" aria-pressed={motion} variant="outline" size="sm" className="transition-none" ref={(node) => paintSelected(node, motion)} onClick={() => { const next = !motion; setMotion(next); document.documentElement.dataset.reduceMotion = next ? "on" : "off"; }}>
               {t("settings.motion")}
             </Button>
             {sizes.map((size) => (
-              <Button key={size} type="button" variant="outline" size="sm" onClick={() => { applyTextSize(size); void writeSetting("ui_text_size", size); }}>
+              <Button key={size} type="button" aria-pressed={textSize === size} variant="outline" size="sm" className="transition-none" ref={(node) => paintSelected(node, textSize === size)} onClick={() => { applyTextSize(size); setTextSize(size); void writeSetting("ui_text_size", size); }}>
                 {t(`settings.text.${size}`)}
               </Button>
             ))}

@@ -294,6 +294,11 @@ export function LibraryView({
   }
 
   const missingDetail = phase === "empty" && Boolean(initialId);
+  const detailClass = cn(
+    "rounded-lg border border-border bg-card p-3",
+    band < 1440 && "fixed inset-y-0 right-0 z-30 w-[min(560px,100%)] overflow-auto shadow-lg",
+    band >= 1920 ? "w-[520px] shrink-0" : band >= 1440 ? "w-[440px] shrink-0" : undefined,
+  );
   return (
     <Screen testId="library" title={t("library.title")} lede={missingDetail ? t("library.detailMissingBody") : t("library.emptyBody")} actions={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
       <div className="flex flex-wrap items-center gap-2">
@@ -481,7 +486,7 @@ export function LibraryView({
         </form>
       ) : null}
       {phase === "loading" ? <LibrarySkeleton /> : null}
-      {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+      {phase === "error" && !initialId ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
       {(phase === "empty" && !initialId) || (phase === "ready" && rendered.length === 0) ? (
         <EmptyState title={t("library.emptyTitle")} body={t("library.emptyBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} />
       ) : null}
@@ -586,7 +591,7 @@ export function LibraryView({
       </ul>
       </div> : null}
       {open && phase === "ready" ? (
-        <aside data-testid="detail-panel" className={cn("rounded-lg border border-border bg-card p-3", band < 1440 && "fixed inset-y-0 right-0 z-30 w-[min(560px,100%)] overflow-auto shadow-lg", band >= 1920 ? "w-[520px] shrink-0" : band >= 1440 ? "w-[440px] shrink-0" : undefined)}>
+        <aside data-testid="detail-panel" className={detailClass}>
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="font-sans text-title font-semibold">{open.name}</h2>
@@ -666,7 +671,10 @@ export function LibraryView({
         </aside>
       ) : null}
       {phase !== "ready" && initialId ? (
-        <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
+        <aside data-testid="detail-panel" className={detailClass}>
+          <div className="mb-3 flex items-center justify-end gap-3">
+            <Button asChild size="sm" className="shrink-0"><Link to={`/skills/${initialId}/edit`}>{t("library.detail.edit")}</Link></Button>
+          </div>
           {phase === "loading" ? <div data-testid="detail-loading" className="h-40 animate-pulse rounded-md bg-muted" /> : null}
           {phase === "error" || phase === "offline" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
           {phase === "empty" ? <EmptyState title={t("library.detailMissing")} body={t("library.detailMissingBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} /> : null}

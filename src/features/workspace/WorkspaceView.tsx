@@ -222,7 +222,7 @@ export function WorkspaceView({
         ) : null}
         {phase === "loading" ? <WorkspaceSkeleton /> : null}
         {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
-        {phase === "empty" ? <EmptyState title={t("workspace.title")} body={t("workspace.lede")} /> : null}
+        {phase === "empty" ? <EmptyState title={t("workspace.emptyAgents")} body={t("workspace.emptyAgentsBody")} action={<Button type="button" size="sm" onClick={() => setCreating(true)}>{t("preset.new")}</Button>} /> : null}
         {phase === "ready" ? <>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="preset-bar">
           {shownPresets.map((preset) => {

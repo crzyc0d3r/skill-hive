@@ -20,13 +20,13 @@ describe("dashboard", () => {
     expect(screen.getByText("Local body")).toBeInTheDocument();
   });
 
-  it("shows the load banner with Retry when settings fail", async () => {
+  it("shows the load banner with Try again when settings fail", async () => {
     installIpc([], true);
     const user = userEvent.setup();
     renderAt("/");
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not load settings.");
     installIpc([], false);
-    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("0 skills")).toBeInTheDocument();
   });
 });
