@@ -225,6 +225,7 @@
   "library.removeAgent": "Remove",
   "settings.agents.showAll": "Show all agents",
   "settings.agents.detected": "Agents on this machine",
+  "settings.agents.found": "Detected",
   "settings.agents.showingAll": "Showing every supported agent, including ones not on this machine.",
   "shell.reload": "Reload",
   "shell.renderError": "This screen hit an error and was stopped.",

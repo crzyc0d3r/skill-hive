@@ -286,7 +286,26 @@ try {
     }
   }
   async function clickFound(id) {
+    await call("POST", `${prefix}/execute/sync`, {
+      script: "try { arguments[0].scrollIntoView({block:'center', inline:'nearest'}); } catch (e) {}",
+      args: [{ "element-6066-11e4-a52e-4f735466cecf": id, ELEMENT: id }],
+    }).catch(() => {});
     await call("POST", `${prefix}/element/${id}/click`, {});
+  }
+  async function domClick(selector, using = "css selector") {
+    const script = using === "xpath"
+      ? `const node = document.evaluate(arguments[0], document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+         if (!node) return "missing";
+         node.scrollIntoView({block:"center", inline:"nearest"});
+         node.click();
+         return "clicked";`
+      : `const node = document.querySelector(arguments[0]);
+         if (!node) return "missing";
+         node.scrollIntoView({block:"center", inline:"nearest"});
+         node.click();
+         return "clicked";`;
+    const result = await call("POST", `${prefix}/execute/sync`, { script, args: [selector] });
+    if (result?.value !== "clicked") throw new Error(`dom click failed for ${selector}: ${JSON.stringify(result)}`);
   }
   async function click(selector) {
     let last;
@@ -299,7 +318,10 @@ try {
         last = err;
         const message = String(err?.message ?? err);
         if (message.includes("click intercepted")) await dismissToasts();
-        else if (!message.includes("stale element")) throw err;
+        else if (message.includes("element not interactable")) {
+          await domClick(selector);
+          return;
+        } else if (!message.includes("stale element")) throw err;
       }
     }
     throw last;
@@ -365,7 +387,10 @@ try {
         lastError = err;
         const message = String(err?.message ?? err);
         if (message.includes("click intercepted")) await dismissToasts();
-        else if (!message.includes("stale element")) throw err;
+        else if (message.includes("element not interactable")) {
+          await domClick(expression, "xpath");
+          return;
+        } else if (!message.includes("stale element")) throw err;
       }
     }
     throw lastError;

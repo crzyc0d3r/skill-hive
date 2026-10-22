@@ -235,7 +235,7 @@ export function InstallView({
                   </td>
                   <td className="px-3 py-2">
                     <span className="block font-medium">{row.name}</span>
-                    <span className="block text-xs text-muted-foreground">{row.paths[0]}</span>
+                    <span className="block text-xs text-muted-foreground">{row.paths.length > 1 ? t("install.scan.locations", { count: String(row.paths.length) }) : row.paths[0]}</span>
                   </td>
                   <td className="px-3 py-2">
                     <span className="flex flex-wrap gap-1">{row.tools.slice(0, 4).map((tool) => <AgentBadge key={tool} agent={tool} />)}</span>

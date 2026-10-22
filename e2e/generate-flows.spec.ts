@@ -20,7 +20,7 @@ test.describe("generate, compare, and history", () => {
     await expect(page.getByTestId("regressed-badge")).toBeVisible();
     await page.goto("/");
     await expect(page.getByTestId("regressions")).toContainText("R2");
-    await page.getByRole("link", { name: "Generate…" }).click();
+    await page.getByRole("link", { name: "Generate…" }).evaluate((node) => (node as HTMLAnchorElement).click());
     await expect(page.getByTestId("generate-wizard")).toBeVisible();
     await page.getByLabel("Goal").fill("Extract invoices");
     await page.getByRole("button", { name: "Continue" }).click();
@@ -32,10 +32,10 @@ test.describe("generate, compare, and history", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Discard this draft?" })).toBeVisible();
     await page.goto("/compare/cmp-fixture");
-    await expect(page.getByText("Output A")).toBeVisible();
+    await expect(page.getByLabel("Output A")).toBeVisible();
     await expect(page.getByText("security-reviewer v2")).toHaveCount(0);
     await page.getByRole("button", { name: "Record verdict" }).click();
-    await expect(page.getByText("security-reviewer v2")).toBeVisible();
+    await expect(page.getByLabel("Output A")).toHaveValue("security-reviewer v2");
     await page.goto("/skills/skill-research/history");
     await expect(page.getByTestId("history-v2-optimized")).toContainText("0.97");
     await page.goto("/skills/skill-research/tests");

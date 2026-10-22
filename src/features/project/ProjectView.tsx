@@ -83,7 +83,13 @@ export function ProjectView() {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ProjectSkill | null>(null);
   const pinned = useRef(false);
+  const previewOnly = useRef(demoEnabled());
   const skill = rows[0] ?? FIXTURE;
+
+  useEffect(() => {
+    if (previewOnly.current || rows.length === 0) return;
+    setProjectSkills(rows);
+  }, [rows]);
 
   useEffect(() => {
     let current = true;
@@ -115,11 +121,8 @@ export function ProjectView() {
     };
   }, [id]);
 
-  useEffect(() => {
-    if (rows.length) setProjectSkills(rows);
-  }, [rows]);
-
   const update = (next: ProjectSkill) => {
+    previewOnly.current = false;
     setRows((current) => (current.length ? current.map((item) => (item.id === next.id ? next : item)) : [next]));
   };
 
@@ -182,8 +185,9 @@ export function ProjectView() {
           <Input aria-label={t("project.skillsRoot")} value={root} onChange={(event) => setRoot(event.target.value)} className="mt-1 h-8" />
         </label>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" data-testid="link-project" size="sm" onClick={() => {
+          <Button type="button" data-testid="link-project" size="sm"             onClick={() => {
               pinned.current = true;
+              previewOnly.current = false;
               const next = root.trim() && rows.length ? rows : [FIXTURE];
               setRows(next);
               setLinked(true);

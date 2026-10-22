@@ -74,9 +74,9 @@ export function DashboardView({ skills }: { skills: SkillCard[] }) {
             </Alert>
           ) : null}
           {regressions > 0 ? (
-            <Alert className="border-warning/40 bg-warning-subtle text-warning-subtle-foreground" data-testid="regression-row">
+            <Alert className="border-warning/40 bg-warning-subtle text-warning-subtle-foreground" data-testid="regressions">
               <AlertTitle>{t("dashboard.attention.regressions", { count: String(regressions) })}</AlertTitle>
-              <AlertDescription>
+              <AlertDescription data-testid="regression-row">
                 {seed.regressions.map((row) => <span key={`${row.skillId}-${row.rule}`}>{row.rule} {row.message} </span>)}
                 <QuietLink to="/effectiveness">{t("dashboard.attention.review")}</QuietLink>
               </AlertDescription>

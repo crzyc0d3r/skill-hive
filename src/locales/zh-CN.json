@@ -225,6 +225,7 @@
   "library.removeAgent": "移除",
   "settings.agents.showAll": "显示全部代理",
   "settings.agents.detected": "本机上的代理",
+  "settings.agents.found": "已检测到",
   "settings.agents.showingAll": "正在显示全部受支持的代理，包括本机未检测到的。",
   "shell.reload": "重新加载",
   "shell.details": "详情",

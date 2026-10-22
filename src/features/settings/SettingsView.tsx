@@ -264,7 +264,7 @@ export function SettingsView({
             <TableHeader>
               <TableRow>
                 <TableHead>{t("agents.field.import")}</TableHead>
-                <TableHead>{t("settings.agents.detected")}</TableHead>
+                <TableHead>{t("settings.agents.found")}</TableHead>
                 <TableHead>{t("settings.agents.enable")}</TableHead>
                 <TableHead />
               </TableRow>

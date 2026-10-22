@@ -225,6 +225,7 @@
   "library.removeAgent": "移除",
   "settings.agents.showAll": "顯示全部代理",
   "settings.agents.detected": "這台電腦上的代理",
+  "settings.agents.found": "已偵測到",
   "settings.agents.showingAll": "正在顯示全部受支援的代理，包括這台電腦未偵測到的。",
   "shell.reload": "重新載入",
   "shell.renderError": "此畫面發生錯誤，已停止顯示。",

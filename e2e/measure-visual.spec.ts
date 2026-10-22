@@ -46,7 +46,7 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByTestId("suite-progress")).toBeVisible();
       await shot(page, theme, `suite-progress${suffix}`);
       await page.goto("/compare/fixture");
-      await expect(page.getByText("Output A")).toBeVisible();
+      await expect(page.getByLabel("Output A")).toBeVisible();
       await shot(page, theme, `compare${suffix}`);
       await page.goto("/skills/skill-research/history");
       await expect(page.getByTestId("history-v1")).toBeVisible();
@@ -72,7 +72,7 @@ for (const theme of ["light", "dark"] as const) {
             await expect(page.getByTestId("loading-state")).toBeVisible();
             await expect(page.getByRole("heading", { level: 1, name: "Loading" })).toHaveCount(0);
           } else {
-            const copy = state === "error" ? /could not be read/ : state === "offline" ? /offline/i : /No measured|No comparison/;
+            const copy = state === "error" ? /could not be read/ : state === "offline" ? /offline/i : /No measured|No comparison|hasn't been tested/;
             await expect(page.getByText(copy).first()).toBeVisible();
           }
           await shot(page, theme, `${name}-${state}${suffix}`);
