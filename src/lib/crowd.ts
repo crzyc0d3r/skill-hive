@@ -61,7 +61,7 @@ export function crowdSkills(): SkillCard[] {
     rows.push({
       id: name,
       name,
-      description: `Generated skill ${n}`,
+      description: `Generated skill ${n}. This description is long enough to wrap past two lines and must stay inside the card instead of covering the next one. ${"Keep going. ".repeat(12)}`,
       source: n % 5 === 0 ? "git" : "local",
       tags: [],
       enabled: n % 3 !== 0,

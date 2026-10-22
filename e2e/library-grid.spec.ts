@@ -32,7 +32,7 @@ test("a crowded library stays one card per name and resizes its columns", async 
     expect(template.split(" ").filter(Boolean)).toHaveLength(expected);
   };
   await columnsAt(1100, 2);
-  await columnsAt(1440, 4);
+  await columnsAt(1440, 3);
   await columnsAt(800, 1);
 
   await page.locator("a[href='/global-workspace/claude_code']").first().click();
@@ -40,9 +40,11 @@ test("a crowded library stays one card per name and resizes its columns", async 
   const workspace = page.getByTestId("workspace-cards");
   await expect(workspace.getByText("autopilot", { exact: true })).toHaveCount(1);
   await expect(page.getByText("Installed in 4 locations").first()).toBeVisible();
-  await expect(workspace).toHaveAttribute("data-columns", "1");
+  await expect(workspace).toHaveAttribute("data-layout", "table");
+  const headerText = () => workspace.locator("thead th").allTextContents();
+  expect(await headerText()).not.toContain("From");
   await page.setViewportSize({ width: 1440, height: 800 });
-  await expect(workspace).toHaveAttribute("data-columns", "4");
+  await expect.poll(headerText).toContain("From");
   const workspaceOverflow = await workspace.evaluate((node) => node.scrollWidth - node.clientWidth);
   expect(workspaceOverflow).toBeLessThanOrEqual(1);
   await page.locator("a[href='/settings']").first().click();
@@ -54,9 +56,9 @@ test("a crowded library stays one card per name and resizes its columns", async 
 });
 
 for (const theme of ["light", "dark"] as const) {
-  for (const width of [800, 1100, 1440] as const) {
+  for (const width of [800, 1100, 1440, 1920] as const) {
     test(`library grid ${theme} ${width}`, async ({ page }) => {
-      const columns = width === 800 ? 1 : width === 1100 ? 2 : 4;
+      const columns = width < 1100 ? 1 : width < 1440 ? 2 : width < 1920 ? 3 : 4;
       await prepare(page, theme, width, { "skill-hive-crowd": "1", "skill-hive-preview-agents": "1" });
       await page.goto("/my-skills");
       await expect(page.getByTestId("library-cards")).toHaveAttribute("data-columns", String(columns));
@@ -104,7 +106,7 @@ for (const theme of ["light", "dark"] as const) {
       path: `docs/parity/screenshots/${theme}/settings-agents-detected.png`,
       fullPage: false,
     });
-    await page.getByRole("button", { name: "Show all agents" }).click();
+    await page.getByRole("checkbox", { name: "Detected only" }).uncheck();
     const adal = page.getByText("AdaL").first();
     await adal.scrollIntoViewIfNeeded();
     await expect(adal).toBeVisible();
@@ -119,7 +121,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/my-skills?crash=route");
     await expect(page.getByTestId("sidebar")).toBeVisible();
     await expect(page.getByTestId("route-error")).toBeVisible();
-    await expect(page.getByText("Route render failed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     if (await page.locator("vite-error-overlay").count()) {
       await page.locator("vite-error-overlay").evaluate((node) => node.remove());
     }
@@ -127,10 +129,14 @@ for (const theme of ["light", "dark"] as const) {
       path: `docs/parity/screenshots/${theme}/error-route.png`,
       fullPage: false,
     });
+    await page.locator("summary", { hasText: "Details" }).click();
+    await expect(page.getByText("Route render failed")).toBeVisible();
     await page.goto("/?crash=app");
     await expect(page.getByTestId("route-error")).toBeVisible();
-    await expect(page.getByText("Top-level render failed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     await expect(page.getByTestId("sidebar")).toHaveCount(0);
+    const dark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    expect(dark).toBe(theme === "dark");
     if (await page.locator("vite-error-overlay").count()) {
       await page.locator("vite-error-overlay").evaluate((node) => node.remove());
     }
@@ -138,14 +144,19 @@ for (const theme of ["light", "dark"] as const) {
       path: `docs/parity/screenshots/${theme}/error-app.png`,
       fullPage: false,
     });
+    await page.locator("summary", { hasText: "Details" }).click();
+    await expect(page.getByText("Top-level render failed")).toBeVisible();
   });
 
   test(`install scan ${theme}`, async ({ page }) => {
     await prepare(page, theme, 1100, { "skill-hive-preview-agents": "1" });
     await page.goto("/install?tab=scan");
-    await expect(page.getByText("Found in 3 locations")).toBeVisible();
+    const scan = page.getByTestId("install");
+    await expect(scan.getByText("~/.claude/skills/autopilot, ~/.codex/skills/autopilot, ~/.cursor/skills/autopilot")).toBeVisible();
     await expect(page.getByRole("button", { name: "claude_code" })).toHaveCount(0);
-    await expect(page.getByText("Claude Code, Codex, Cursor")).toBeVisible();
+    await expect(scan.getByText("Claude Code", { exact: true })).toBeVisible();
+    await expect(scan.getByText("Codex", { exact: true })).toBeVisible();
+    await expect(scan.getByText("Cursor", { exact: true })).toBeVisible();
     await page.screenshot({
       path: `docs/parity/screenshots/${theme}/install-scan-grouped.png`,
       fullPage: false,

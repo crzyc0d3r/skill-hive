@@ -5,7 +5,11 @@ import { t } from "../../lib/i18n";
 import { HISTORY_ROWS, type HistoryRow } from "@/features/history/model";
 import { writeHistoryBaseline } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
-import { Panel, Screen, StatePanel } from "@/components/chrome";
+import { VerdictChip } from "@/components/app/VerdictChip";
+import { AgentName } from "@/components/app/AgentBadge";
+import { EmptyState, ErrorState, Panel, Screen, StatePanel } from "@/components/chrome";
+import { verdictFromDelta } from "@/lib/verdict";
+import { Link } from "react-router-dom";
 import { HistorySkeleton } from "@/components/skeletons";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
@@ -34,6 +38,7 @@ export function HistoryView() {
   const [phase, setPhase] = useState<ViewPhase>(() => previewPhase() ?? (demoEnabled() ? "ready" : "loading"));
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [picked, setPicked] = useState<string[]>([]);
 
   useEffect(() => {
     if (forced) {
@@ -86,9 +91,9 @@ export function HistoryView() {
 
   const points = rows.map((row) => Number(row.rate)).filter((value) => Number.isFinite(value));
   const spark = points.map((value, index) => {
-    const x = points.length === 1 ? 160 : (index / (points.length - 1)) * 300 + 10;
-    const y = 70 - ((value - 0.5) / 0.5) * 55;
-    return `${x},${Math.max(8, Math.min(72, y))}`;
+    const x = points.length === 1 ? 320 : (index / (points.length - 1)) * 616 + 12;
+    const y = 150 - ((value - 0.5) / 0.5) * 110;
+    return `${x},${Math.max(16, Math.min(150, y))}`;
   }).join(" ");
 
   return (
@@ -103,46 +108,74 @@ export function HistoryView() {
       }
     >
       {phase === "loading" && rows.length === 0 ? <HistorySkeleton /> : null}
-      {phase !== "ready" && phase !== "loading" && rows.length === 0 ? (
-        <StatePanel tone={phase} title={phaseCopy(phase)} action={phase === "error" || phase === "offline" ? <Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button> : null} />
+      {phase === "error" && rows.length === 0 ? (
+        <ErrorState title={t("history.error")} detail={t("shell.renderError")} onRetry={() => setAttempt((value) => value + 1)} />
+      ) : null}
+      {phase === "offline" && rows.length === 0 ? (
+        <StatePanel tone="offline" title={phaseCopy("offline")} action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("banner.retry")}</Button>} />
       ) : null}
       {saved ? <p role="status">{t("history.baseline")}</p> : null}
-      {phase === "ready" && rows.length === 0 ? <p className="text-sm text-muted-foreground">{t("history.empty")}</p> : null}
-      {phase === "ready" && rows.length > 0 ? <p className="text-sm text-muted-foreground">{t("history.trend")}</p> : null}
+      {phase === "ready" && rows.length === 0 ? <EmptyState title={t("history.empty")} body={t("results.emptyBody")} action={<Button asChild size="sm"><Link to="/skills/skill-research/tests">{t("history.emptyCta")}</Link></Button>} /> : null}
+      {phase === "empty" ? <EmptyState title={t("history.empty")} body={t("results.emptyBody")} action={<Button asChild size="sm"><Link to="/skills/skill-research/tests">{t("history.emptyCta")}</Link></Button>} /> : null}
       {alerts.length ? <p data-testid="history-alerts" className="rounded-md border border-warning/40 bg-warning-subtle px-3 py-2 text-sm text-warning-text">{t("history.alerts")}: {alerts.join("; ")}</p> : null}
       {rows.length > 0 ? (
-        <Panel title={t("history.trend")} className="min-w-0">
-          <svg viewBox="0 0 320 80" role="img" aria-label={t("history.trend")} className="h-24 w-full">
-            <line x1="10" y1="70" x2="310" y2="70" stroke="var(--color-border)" />
+        <Panel title={t("history.trend")} className="w-full min-w-0">
+          <div className="flex w-full min-w-0 items-stretch gap-2">
+            <div className="flex h-44 shrink-0 flex-col justify-between py-2 text-xs leading-none text-muted-foreground" aria-hidden="true">
+              <span>100%</span>
+              <span>50%</span>
+            </div>
+            <svg viewBox="0 0 640 180" preserveAspectRatio="none" role="img" aria-label={t("history.trend")} className="block h-44 min-w-0 flex-1">
+            <line x1="12" y1="156" x2="628" y2="156" stroke="var(--color-border)" />
+            <line x1="12" y1="16" x2="12" y2="156" stroke="var(--color-border)" />
             <polyline points={spark} fill="none" stroke="var(--color-chart-1)" strokeWidth="2.5" />
             {spark.split(" ").map((pair) => {
               const [x, y] = pair.split(",");
               return <circle key={pair} cx={x} cy={y} r="4" fill="var(--color-chart-1)" />;
             })}
-          </svg>
+            </svg>
+          </div>
         </Panel>
       ) : null}
-      {phase === "loading" && rows.length === 0 ? null : <div className="overflow-hidden rounded-md border border-border">
+      {phase === "ready" && rows.length > 0 ? <div className="overflow-hidden rounded-md border border-border">
         <Table>
           <TableCaption className="sr-only">{t("history.table")}</TableCaption>
           <TableHeader>
             <TableRow>
+              <TableHead />
+              <TableHead>{t("history.date")}</TableHead>
+              <TableHead>{t("history.skill")}</TableHead>
+              <TableHead>{t("history.agent")}</TableHead>
               <TableHead>{t("history.version")}</TableHead>
               <TableHead>{t("history.rate")}</TableHead>
+              <TableHead>{t("history.change")}</TableHead>
               <TableHead>{t("history.result")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
+            {rows.map((row, index) => {
+              const previous = index === 0 ? null : Number(rows[index - 1]?.rate);
+              const current = Number(row.rate);
+              const delta = previous === null || !Number.isFinite(previous) || !Number.isFinite(current) ? null : Math.round((current - previous) * 100);
+              return (
               <TableRow key={row.version} data-testid={`history-${row.version}`} className={row.best ? "bg-success-subtle" : "odd:bg-muted/30"}>
+                <TableCell>
+                  <input type="checkbox" aria-label={t("history.select", { version: row.version })} checked={picked.includes(row.version)} onChange={() => setPicked((currentIds) => currentIds.includes(row.version) ? currentIds.filter((item) => item !== row.version) : [...currentIds, row.version])} />
+                </TableCell>
+                <TableCell>2026-10-21</TableCell>
+                <TableCell>research-notes</TableCell>
+                <TableCell><AgentName agent="claude_code" /></TableCell>
                 <TableCell className="font-mono">{row.version}</TableCell>
-                <TableCell className="font-mono tabular-nums">{row.rate}</TableCell>
-                <TableCell>{row.best ? t("history.baseline") : row.result}</TableCell>
+                <TableCell className="tabular-nums">{Math.round(Number(row.rate) * 100)}%<span className="sr-only">{row.rate}</span></TableCell>
+                <TableCell>{delta === null ? "—" : `${delta > 0 ? "+" : ""}${delta}`}</TableCell>
+                <TableCell><VerdictChip kind={verdictFromDelta(delta)} /></TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
-      </div>}
+      </div> : null}
+      {phase === "ready" && rows.length > 0 ? (picked.length === 2 ? <Button asChild type="button" size="sm" className="w-fit self-start"><Link to="/compare/fixture">{t("history.compare")}</Link></Button> : <Button type="button" size="sm" variant="outline" className="w-fit self-start" disabled>{t("history.compare")}</Button>) : null}
     </Screen>
   );
 }

@@ -3,15 +3,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { installIpc, renderAt } from "@/test/render-app";
 
 const screens = [
-  ["/", "dashboard", "Good day", "dashboard"],
+  ["/", "dashboard", "Overview", "dashboard"],
   ["/my-skills", "library", "Library", "library"],
-  ["/agents", "agents", "Agents", "agents"],
-  ["/install", "install", "Install Skills", "install"],
+  ["/agents", "agents", "Agent profiles", "agents"],
+  ["/install", "install", "Add skills", "install"],
   ["/backup", "backup", "Backup", "backup"],
   ["/project/alpha", "project", "Project", "project"],
   ["/settings", "settings", "Settings", "settings"],
   ["/settings/endpoints", "endpoints", "Endpoints", "endpoints"],
-  ["/global-workspace", "global-workspace", "Global Workspace", "workspace"],
+  ["/global-workspace", "global-workspace", "Your agents", "workspace"],
   ["/effectiveness", "effectiveness", "Effectiveness", "effectiveness"],
   ["/compare/fixture", "compare", "Compare", "compare"],
   ["/runs/run-fixture", "results", "Run results", "results"],

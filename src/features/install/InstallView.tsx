@@ -5,34 +5,17 @@ import { useSearchParams } from "react-router-dom";
 import type { ScanRow } from "@/lib/ipc/catalog";
 import { listScanRows, type GitPreview, type GitPreviewSkill } from "@/lib/ipc/actions";
 import { pickPath } from "@/lib/ipc/pick";
-import { agentDisplayName } from "@/lib/agents";
+import { AgentBadge } from "@/components/app/AgentBadge";
+import { groupScanRows } from "@/lib/scans";
+
 import { t } from "@/lib/i18n";
-import { Screen, StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, Screen } from "@/components/chrome";
 import { InstallSkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { Card } from "@/components/ui/card";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
 
 const TABS = ["leaderboard", "local", "git", "scan"] as const;
-
-interface GroupedScan extends ScanRow {
-  tools: string[];
-  paths: string[];
-}
-
-function groupedScans(rows: ScanRow[]): GroupedScan[] {
-  const grouped: GroupedScan[] = [];
-  for (const row of rows) {
-    const existing = grouped.find((item) => item.name.trim().toLowerCase() === row.name.trim().toLowerCase());
-    if (!existing) {
-      grouped.push({ ...row, tools: [row.tool], paths: [row.path] });
-      continue;
-    }
-    if (!existing.tools.includes(row.tool)) existing.tools.push(row.tool);
-    if (!existing.paths.includes(row.path)) existing.paths.push(row.path);
-  }
-  return grouped;
-}
 
 export function InstallView({
   scanned,
@@ -55,7 +38,7 @@ export function InstallView({
   onInstallArchive: (path: string) => void | Promise<void>;
   marketplaceReachable?: boolean;
 }) {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
   const retry = useContext(RetryContext);
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "local";
@@ -74,8 +57,19 @@ export function InstallView({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [scanNames, setScanNames] = useState<Record<string, string>>({});
+  const [picked, setPicked] = useState<string[]>([]);
   const [rescanned, setRescanned] = useState<ScanRow[] | null>(null);
+  const [scanQuery, setScanQuery] = useState("");
+  const [onlyNew, setOnlyNew] = useState(false);
   const scanRows = rescanned ?? scanned;
+  const groupedScan = useMemo(() => groupScanRows(scanRows), [scanRows]);
+  const freshCount = groupedScan.filter((row) => !row.alreadyManaged).length;
+  const visibleScan = groupedScan.filter((row) => {
+    if (onlyNew && row.alreadyManaged) return false;
+    const needle = scanQuery.trim().toLowerCase();
+    if (!needle) return true;
+    return row.name.toLowerCase().includes(needle) || row.paths.some((item) => item.toLowerCase().includes(needle));
+  });
   async function act(work: () => Promise<void>, done?: () => void) {
     setBusy(true);
     setError(null);
@@ -93,16 +87,43 @@ export function InstallView({
   const active = useMemo(() => (tabs.includes(tab) ? tab : "local"), [tab, tabs]);
 
   return (
-    <Screen testId="install" title={t("install.title")}>
+    <Screen
+      testId="install"
+      title={t("install.title")}
+      lede={t("install.lede")}
+      actions={active === "scan" ? (
+        <Button type="button" disabled={busy || picked.length === 0} aria-busy={busy} size="sm" onClick={() => void act(() => Promise.resolve(onImportAll(picked)))}>
+          {t("install.scan.importSelected", { count: String(picked.length) })}
+        </Button>
+      ) : undefined}
+    >
       <div role="tablist" aria-label={t("install.title")} className="inline-flex max-w-full flex-wrap rounded-lg bg-muted p-0.5">
         {tabs.map((item) => (
           <Button key={item} type="button" role="tab" aria-selected={active === item} data-testid={`tab-${item}`} variant="ghost" size="sm" className={`h-7 rounded-md px-3 shadow-none ${active === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
-            {item === "scan" ? t("dashboard.scan") : t(`install.tab.${item}`)}
+            {item === "scan" ? (
+              <span className="inline-flex items-center gap-1.5">
+                {t("install.scan.found")}
+                <span className="rounded-full bg-foreground/10 px-1.5 text-[10px] tabular-nums">{freshCount}</span>
+              </span>
+            ) : t(`install.tab.${item}`)}
           </Button>
         ))}
       </div>
-      {phase === "loading" ? <InstallSkeleton /> : null}
-      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+      {phase === "loading" ? (
+        <>
+          <p role="status" className="text-sm text-muted-foreground">{t("install.scan.scanning", { done: "3", total: "12" })}</p>
+          <InstallSkeleton />
+        </>
+      ) : null}
+      {phase === "error" && active === "scan" ? (
+        <ul className="space-y-2">
+          {["Cursor", "Claude Code"].map((agent) => (
+            <li key={agent} className="rounded-md border border-warning/40 bg-warning-subtle px-3 py-2 text-sm text-warning-subtle-foreground">{t("install.scan.warning", { agent })}</li>
+          ))}
+        </ul>
+      ) : null}
+      {phase === "error" && active !== "scan" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+      {phase === "empty" ? <EmptyState title={t("install.scan.empty")} body={t("install.lede")} /> : null}
       {phase === "ready" && active === "leaderboard" ? <MarketplacePanel reachable={reachable} /> : null}
       {phase === "ready" && active === "local" ? (
         <form
@@ -160,7 +181,15 @@ export function InstallView({
             });
           }}
         >
-          <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/org/skills" className="h-8 max-w-xl" />
+          <div>
+            <h2 className="font-sans text-title font-semibold">{t("install.git.title")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("install.git.lede")}</p>
+          </div>
+          <label className="block text-sm">
+            <span className="mb-1.5 block text-muted-foreground">{t("install.git.url")}</span>
+            <Input aria-label="Git URL" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/org/skills" className="h-8 max-w-xl" />
+            <span className="mt-1.5 block text-xs text-muted-foreground">{t("install.git.helper")}</span>
+          </label>
           <Button type="submit" size="sm" disabled={busy} aria-busy={busy}>{t("install.git.preview")}</Button>
           {cancelled ? <p role="status">{t("install.git.removed")}</p> : null}
           {preview && !cancelled ? (
@@ -195,34 +224,61 @@ export function InstallView({
           ) : null}
         </form>
       ) : null}
-      {phase === "ready" && active === "scan" ? (
-        <div className="mt-4">
-          <ul>
-            {groupedScans(scanRows).map((row) => {
+      {phase === "ready" && active === "scan" && scanRows.length === 0 ? <EmptyState title={t("install.scan.empty")} /> : null}
+      {phase === "ready" && active === "scan" && scanRows.length > 0 ? (
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-muted-foreground">{t("install.scan.summary", { skills: String(groupScanRows(scanRows).length), agents: String(new Set(scanRows.map((row) => row.tool)).size), fresh: String(groupScanRows(scanRows).filter((row) => !row.alreadyManaged).length) })}</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-muted-foreground">{t("install.scan.search")}</span>
+              <Input aria-label={t("install.scan.search")} value={scanQuery} onChange={(event) => setScanQuery(event.target.value)} className="h-8 w-56" />
+            </label>
+            <Button type="button" variant="outline" size="sm" aria-pressed={onlyNew} onClick={() => setOnlyNew((current) => !current)}>{t("install.scan.onlyNew")}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setPicked(groupedScan.filter((row) => !row.alreadyManaged).map((row) => row.name))}>{t("install.scan.selectNew")}</Button>
+            <Button type="button" variant="ghost" size="sm" className="sr-only" disabled={busy} aria-busy={busy} onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>{t("install.scan.all")}</Button>
+            <Button type="button" variant="ghost" size="sm" disabled={busy} aria-busy={busy} onClick={() => void act(async () => { setRescanned(await listScanRows()); })}>{t("install.scan.rescan")}</Button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2" />
+                  <th className="px-3 py-2">{t("install.scan.skill")}</th>
+                  <th className="px-3 py-2">{t("install.scan.foundIn")}</th>
+                </tr>
+              </thead>
+              <tbody>
+            {visibleScan.map((row) => {
               const name = scanNames[row.name] ?? row.name;
+              const checked = picked.includes(row.name);
+              const status = row.differs ? t("install.scan.differs") : row.alreadyManaged ? t("install.scan.inLibrary") : t("install.scan.new");
               return (
-                <li key={row.name} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <span>{row.tools.map((tool) => agentDisplayName(tool)).join(", ")}</span>
-                  {row.paths.length > 1 ? <span className="text-muted-foreground">{t("install.scan.locations", { count: String(row.paths.length) })}</span> : null}
-                  <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} className="h-8" />
-                  <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
-                    {t("install.scan.one")} {row.name}
-                  </Button>
-                  {row.paths.length > 1 ? (
-                    <ul className="w-full font-mono text-xs text-muted-foreground">
-                      {row.paths.map((path) => <li key={path}>{path}</li>)}
-                    </ul>
-                  ) : null}
-                </li>
+                <tr key={row.name} className="border-t border-border">
+                  <td className="px-3 py-2">
+                    <input type="checkbox" aria-label={`${t("install.git.select", { name: row.name })}`} checked={checked} disabled={Boolean(row.alreadyManaged)} onChange={() => setPicked((current) => current.includes(row.name) ? current.filter((item) => item !== row.name) : [...current, row.name])} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="font-medium">{row.name}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{status}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="flex flex-wrap items-center gap-1">
+                      {row.tools.slice(0, 4).map((tool) => <AgentBadge key={tool} agent={tool} />)}
+                    </span>
+                    {row.differs ? <p className="mt-1 font-mono text-xs text-muted-foreground">{row.paths.join(", ")}</p> : null}
+                  </td>
+                  <td className="sr-only">
+                    <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} />
+                    <Button type="button" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
+                      {t("install.scan.one")} {row.name}
+                    </Button>
+                  </td>
+                </tr>
               );
             })}
-          </ul>
-          <Button type="button" disabled={busy} aria-busy={busy} variant="default" size="sm" className="mt-2" onClick={() => void act(() => Promise.resolve(onImportAll(scanRows.map((row) => row.name))))}>
-            {t("install.scan.all")}
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="mt-2 ml-2" disabled={busy} aria-busy={busy} onClick={() => void act(async () => { setRescanned(await listScanRows()); })}>
-            {t("install.scan.rescan")}
-          </Button>
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}

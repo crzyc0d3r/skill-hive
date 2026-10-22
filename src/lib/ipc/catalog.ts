@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { DEMO, demoEnabled } from "../demo";
 import { previewAgents, previewAgentsEnabled } from "../agents";
 import { crowdEnabled, crowdSkills, previewLibrary } from "../crowd";
+import { readAgentCache, readLibraryIndex, writeAgentCache, writeLibraryIndex } from "../library-cache";
 import type { SkillCard } from "@/features/library/model";
 
 export interface PresetRow {
@@ -25,6 +26,9 @@ export interface ScanRow {
   name: string;
   tool: string;
   path: string;
+  alreadyManaged?: boolean;
+  differs?: boolean;
+  fingerprint?: string;
 }
 
 const inflight = new Map<string, Promise<unknown>>();
@@ -46,7 +50,12 @@ async function call<T>(command: string, args: Record<string, unknown>, fallback:
 
 export function listSkills(): Promise<SkillCard[]> {
   const demoSkills = crowdEnabled() ? crowdSkills() : previewAgentsEnabled() ? previewLibrary() : DEMO.skills;
-  return call("get_managed_skills", {}, demoEnabled() ? demoSkills : []);
+  if (demoEnabled()) return Promise.resolve(demoSkills);
+  const cached = readLibraryIndex();
+  return call("get_managed_skills", {}, cached ?? []).then((rows) => {
+    if (rows !== cached) writeLibraryIndex(rows);
+    return rows;
+  });
 }
 
 export function listPresets(): Promise<PresetRow[]> {
@@ -62,14 +71,16 @@ export function listAgents(): Promise<AgentRow[]> {
       ? previewAgents()
       : DEMO.agents.map((agent) => ({ ...agent, projectPath: ".agents/skills", custom: false }))
     : [];
-  return call("get_tool_status", {}, fallback);
+  if (demoEnabled()) return Promise.resolve(fallback);
+  const cached = readAgentCache<AgentRow>();
+  return call("get_tool_status", {}, cached ?? fallback).then((rows) => (rows.length > 0 ? writeAgentCache(rows) : cached ?? rows));
 }
 
 export function listScanned(): Promise<ScanRow[]> {
   const previewScans = [
-    { name: "autopilot", tool: "claude_code", path: "~/.claude/skills/autopilot" },
-    { name: "autopilot", tool: "codex", path: "~/.codex/skills/autopilot" },
-    { name: "autopilot", tool: "cursor", path: "~/.cursor/skills/autopilot" },
+    { name: "autopilot", tool: "claude_code", path: "~/.claude/skills/autopilot", fingerprint: "copy-a" },
+    { name: "autopilot", tool: "codex", path: "~/.codex/skills/autopilot", fingerprint: "copy-a" },
+    { name: "autopilot", tool: "cursor", path: "~/.cursor/skills/autopilot", fingerprint: "copy-b" },
   ];
   const fallback = demoEnabled()
     ? previewAgentsEnabled()

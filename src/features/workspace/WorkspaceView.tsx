@@ -1,20 +1,21 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { SearchIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { useContext, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { lcsDiff, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
-import { useVirtualGrid } from "@/lib/virtual-grid";
+import { Link, useSearchParams } from "react-router-dom";
+import { lcsDiff, moveById, presetFill, presetLabel, type SkillCard } from "@/features/library/model";
+import { useShellBand } from "@/lib/shell-width";
+import { GripVerticalIcon, MoreHorizontalIcon } from "lucide-react";
 import type { AgentRow, PresetRow } from "@/lib/ipc/catalog";
 import { deleteManagedSkills, silent, syncSkillToTool, unsyncSkillFromTool } from "@/lib/ipc/actions";
 import { useDebounced } from "@/lib/use-debounced";
 import { t } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, Screen, SearchField } from "@/components/chrome";
 import { WorkspaceSkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
+import { AgentName } from "@/components/app/AgentBadge";
+import { agentDisplayName } from "@/lib/agents";
 
 export interface WorkspaceCard {
   id: string;
@@ -44,7 +45,10 @@ export function WorkspaceView({
   onApply: (id: string) => void | Promise<void>;
   onCreate: (name: string) => void | Promise<void>;
 }) {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
+  const [params] = useSearchParams();
+  const [creating, setCreating] = useState(false);
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const retry = useContext(RetryContext);
   const [applied, setApplied] = useState<string | null>(null);
   const [name, setName] = useState("Research");
@@ -54,7 +58,8 @@ export function WorkspaceView({
   }, [cards]);
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
-  const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const band = useShellBand();
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState<{ ids: string[]; kind: "upload" | "pull" | "remove" | "delete" } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -76,6 +81,16 @@ export function WorkspaceView({
     });
   }, []);
   const shownPresets = loadedPresets ?? presets;
+  const [presetOrder, setPresetOrder] = useState<string[] | null>(null);
+  const [presetDrag, setPresetDrag] = useState<string | null>(null);
+  const orderedPresets = useMemo(() => {
+    const ids = presetOrder ?? shownPresets.map((preset) => preset.id);
+    return [...shownPresets].sort((left, right) => ids.indexOf(left.id) - ids.indexOf(right.id));
+  }, [presetOrder, shownPresets]);
+
+  function skillCount(count: number) {
+    return count === 1 ? t("workspace.skillCount.one") : t("workspace.skillsCount", { count: String(count) });
+  }
 
   const debouncedQuery = useDebounced(query, 150);
   const debouncedPicker = useDebounced(pickerQuery, 150);
@@ -85,8 +100,18 @@ export function WorkspaceView({
     if (!debouncedQuery.trim()) return true;
     return row.name.toLowerCase().includes(debouncedQuery.trim().toLowerCase());
   });
-  const grid = useVirtualGrid(visible, layout);
   const open = rows.find((row) => row.id === openId) ?? null;
+  useEffect(() => {
+    if (!openId || sheet !== "center") return;
+    let live = true;
+    void silent<{ body?: string }>("get_skill_document", { skillId: openId }).then((doc) => {
+      if (!live || !doc?.body) return;
+      setRows((current) => current.map((row) => (row.id === openId && !row.center ? { ...row, center: doc.body ?? "" } : row)));
+    });
+    return () => {
+      live = false;
+    };
+  }, [openId, sheet]);
 
   function applyPending() {
     if (!pending) return;
@@ -127,22 +152,77 @@ export function WorkspaceView({
     setPending(null);
   }
 
+  if (!agentKey && params.get("view") === "presets") {
+    return (
+      <Screen testId="global-workspace" title={t("workspace.presets")} lede={t("workspace.presets.lede")}>
+        {phase === "loading" ? <WorkspaceSkeleton /> : null}
+        {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+        {phase === "empty" ? <EmptyState title={t("workspace.presets")} body={t("workspace.presets.lede")} /> : null}
+        {phase === "ready" ? (
+          <ol className="space-y-3">
+            {orderedPresets.map((preset) => (
+              <li
+                key={preset.id}
+                draggable
+                onDragStart={() => setPresetDrag(preset.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (!presetDrag) return;
+                  const ids = presetOrder ?? orderedPresets.map((item) => item.id);
+                  setPresetOrder(moveById(ids, presetDrag, preset.id, (id) => id));
+                  setPresetDrag(null);
+                }}
+                className="rounded-lg border border-border bg-card p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <button type="button" aria-label={t("workspace.drag")} className="mt-0.5 cursor-grab text-muted-foreground">
+                    <GripVerticalIcon className="size-4" aria-hidden="true" />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{preset.name}</p>
+                    <p className="text-xs text-muted-foreground">{skillCount(preset.skillIds.length)}</p>
+                    <ol className="mt-2 space-y-1">
+                      {preset.skillIds.map((id) => (
+                        <li key={id} className="flex items-center gap-2 text-sm">
+                          <GripVerticalIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                          <span>{coverageSkills.find((skill) => skill.id === id)?.name ?? id}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </Screen>
+    );
+  }
+
   if (!agentKey) {
     return (
-      <section data-testid="global-workspace">
-        <h1 className="font-mono text-[22px] font-semibold">{t("workspace.title")}</h1>
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onCreate(name);
-          }}
-        >
-          <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8 w-56" />
-          <Button type="submit" variant="outline" size="sm">{t("preset.new")}</Button>
-        </form>
+      <Screen testId="global-workspace" title={t("workspace.title")} lede={t("workspace.lede")} actions={phase === "empty" ? undefined : <Button type="button" size="sm" onClick={() => setCreating(true)}>{t("preset.new")}</Button>}>
+        {creating ? (
+          <form
+            role="dialog"
+            aria-label={t("preset.new")}
+            className="mt-3 max-w-md space-y-3 rounded-lg border border-border bg-card p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onCreate(name);
+              setCreating(false);
+            }}
+          >
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-muted-foreground">{t("workspace.preset.hint")}</span>
+              <Input aria-label={t("preset.create")} value={name} onChange={(event) => setName(event.target.value)} className="h-8" />
+            </label>
+            <Button type="submit" size="sm">{t("preset.new")}</Button>
+          </form>
+        ) : null}
         {phase === "loading" ? <WorkspaceSkeleton /> : null}
-        {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
+        {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+        {phase === "empty" ? <EmptyState title={t("workspace.emptyAgents")} body={t("workspace.emptyAgentsBody")} action={<Button type="button" size="sm" onClick={() => setCreating(true)}>{t("preset.new")}</Button>} /> : null}
         {phase === "ready" ? <>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="preset-bar">
           {shownPresets.map((preset) => {
@@ -154,49 +234,70 @@ export function WorkspaceView({
             }).length;
             const fill = presetFill(synced, total);
             return (
-              <Button key={preset.id} type="button" data-fill={fill} aria-pressed={applied === preset.id} variant="outline" size="sm" onClick={() => {
-                const tool = agents[0]?.key ?? "claude_code";
-                setCoverageSkills((current) => current.map((skill) => {
-                  if (!preset.skillIds.includes(skill.id) || skill.agents.includes(tool)) return skill;
-                  return { ...skill, agents: [...skill.agents, tool] };
-                }));
-                setApplied(preset.id);
-                void onApply(preset.id);
-                void silent("switch_preset", { presetId: preset.id });
-                void silent("apply_preset_to_coding_agents", { presetId: preset.id });
-                void silent<string[]>("get_preset_skill_order", { presetId: preset.id });
-              }}>
-                {presetLabel(preset.name, synced, total)}
-              </Button>
+              <span key={preset.id} className="inline-flex items-center gap-1.5">
+                <Button type="button" data-fill={fill} aria-pressed={applied === preset.id} variant="outline" size="sm" onClick={() => {
+                  const tool = agents[0]?.key ?? "claude_code";
+                  setCoverageSkills((current) => current.map((skill) => {
+                    if (!preset.skillIds.includes(skill.id) || skill.agents.includes(tool)) return skill;
+                    return { ...skill, agents: [...skill.agents, tool] };
+                  }));
+                  setApplied(preset.id);
+                  void onApply(preset.id);
+                  void silent("switch_preset", { presetId: preset.id });
+                  void silent("apply_preset_to_coding_agents", { presetId: preset.id });
+                  void silent<string[]>("get_preset_skill_order", { presetId: preset.id });
+                }}>
+                  {fill === "partial" ? preset.name : presetLabel(preset.name, synced, total)}
+                </Button>
+                {fill === "partial" ? <span className="text-xs text-muted-foreground">{t("workspace.presetProgress", { synced: String(synced), total: String(total) })}</span> : null}
+              </span>
             );
           })}
         </div>
-        <ul className="mt-4 grid grid-cols-2 gap-3" data-testid="agent-catalog">
-          {agents.map((agent) => (
-            <li key={agent.key} className="rounded-lg border border-border bg-card p-3 text-sm shadow-none">
-              <Link to={`/global-workspace/${agent.key}`}>{agent.name}</Link>
-              <div className="text-muted-foreground">{agent.path}</div>
+        <ul className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]" data-testid="agent-catalog">
+          {(showAllAgents ? agents : agents.filter((agent) => agent.installed).slice(0, 8).concat(agents.filter((agent) => agent.installed).length ? [] : agents.slice(0, 4))).map((agent) => {
+            const count = coverageSkills.filter((skill) => skill.agents.includes(agent.key)).length;
+            return (
+            <li key={agent.key} className="flex h-full flex-col rounded-lg border border-border bg-card p-3 text-sm shadow-sm">
+              <Link to={`/global-workspace/${agent.key}`} className="font-medium"><AgentName agent={agent.key} displayName={agent.name} /></Link>
+              <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{agent.path}</div>
+              <p className="mt-2 text-sm">{skillCount(count)}</p>
+              <Button asChild type="button" variant="outline" size="sm" className="mt-3 w-fit"><Link to={`/global-workspace/${agent.key}`}>{t("workspace.open")}</Link></Button>
             </li>
-          ))}
+            );
+          })}
         </ul>
+        {showAllAgents ? null : <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => setShowAllAgents(true)}>{t("workspace.showAll")}</Button>}
         </> : null}
-      </section>
+      </Screen>
+    );
+  }
+
+  const agent = agents.find((item) => item.key === agentKey);
+  if (phase !== "ready") {
+    return (
+      <Screen testId="global-workspace" title={agentDisplayName(agentKey, agents)} lede={agent?.path ? <span className="font-mono text-xs">{agent.path}</span> : undefined}>
+        {phase === "loading" ? <WorkspaceSkeleton /> : null}
+        {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+        {phase === "empty" ? <EmptyState title={t("workspace.emptyTitle")} body={t("workspace.emptyBody")} action={<Button type="button" size="sm" onClick={() => setAdding(false)}>{t("workspace.add")}</Button>} /> : null}
+      </Screen>
     );
   }
 
   return (
-    <section data-testid="global-workspace">
+    <Screen testId="global-workspace" title={agentDisplayName(agentKey, agents)} lede={agent?.path ? <span className="font-mono text-xs">{agent.path}</span> : undefined} actions={<Button type="button" size="sm" onClick={() => setAdding(true)}>{t("workspace.add")}</Button>}>
       <div data-testid="agent-page">
-        <h1 className="font-mono text-[22px] font-semibold">{agentKey}</h1>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input aria-label={t("workspace.search")} data-search value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("workspace.search")} className="h-8 w-56 pl-8" />
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setLayout(layout === "grid" ? "list" : "grid")}>
-            {layout === "grid" ? t("workspace.view.list") : t("workspace.view.grid")}
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setAdding(true)}>{t("workspace.add")}</Button>
+        <div className="flex flex-wrap items-center gap-2" data-testid="apply-preset">
+          <span className="text-sm text-muted-foreground">{t("workspace.apply")}</span>
+          {orderedPresets.map((preset) => (
+            <Button key={preset.id} type="button" variant="outline" size="sm" aria-pressed={applied === preset.id} onClick={() => { setApplied(preset.id); void onApply(preset.id); }}>
+              {preset.name}
+            </Button>
+          ))}
+        </div>
+        <p className="mt-3 mb-4 max-w-prose text-sm text-muted-foreground">{t("workspace.centerChangedHelp")}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField aria-label={t("workspace.search")} data-search value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("workspace.search")} />
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {tags.map((item) => (
@@ -212,42 +313,49 @@ export function WorkspaceView({
           </div>
         ) : null}
         {notice ? <p role="status">{notice}</p> : null}
-        <div ref={grid.ref} className="max-h-[36rem] overflow-auto">
-        <ul
-          data-testid="workspace-cards"
-          data-layout={layout}
-          data-columns={grid.columns}
-          className={layout === "grid" ? "mt-4 grid gap-3" : "mt-4 space-y-2"}
-          style={layout === "grid" ? { gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))` } : undefined}
-        >
-          {grid.rendered.map((card) => (
-            <li key={card.id} data-virtual-card="">
-              <Card className="group/card gap-2 rounded-lg border-border px-3 py-3 shadow-none">
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" className={`size-4 rounded border-input ${selected.length > 0 ? "opacity-100" : "opacity-0 group-hover/card:opacity-100"}`} aria-label={`Select ${card.name}`} checked={selected.includes(card.id)} onChange={() => setSelected((current) => current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id])} />
-                  <button type="button" className="font-medium" onClick={() => { setOpenId(card.id); setSheet("local"); if (agentKey) void silent<{ body: string; description: string }>("get_global_local_skill_document", { tool: agentKey, name: card.name }).then((doc) => { if (doc?.body) setRows((current) => current.map((row) => row.id === card.id ? { ...row, body: doc.body } : row)); }); }}>{card.name}</button>
-                  <Badge variant="outline" className="ml-auto font-normal">
-                    {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
-                  </Badge>
-                </div>
+        <div className="mt-4 rounded-lg border border-border">
+        <table data-testid="workspace-cards" data-layout="table" className="w-full text-sm">
+          <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="w-10 px-3 py-2" />
+              <th className="px-3 py-2">{t("workspace.col.skill")}</th>
+              {band === 800 ? null : <th className="px-3 py-2">{t("workspace.from")}</th>}
+              <th className="w-12 px-3 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+          {visible.map((card) => (
+            <tr key={card.id} className="border-t border-border">
+              <td className="px-3 py-2">
+                <input type="checkbox" className="size-4 rounded border-input" aria-label={`Select ${card.name}`} checked={selected.includes(card.id)} onChange={() => setSelected((current) => current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id])} />
+              </td>
+              <td className="px-3 py-2">
+                <button type="button" className="font-medium" onClick={() => { setOpenId(card.id); setSheet("local"); if (agentKey) void silent<{ body: string; description: string }>("get_global_local_skill_document", { tool: agentKey, name: card.name }).then((doc) => { if (doc?.body) setRows((current) => current.map((row) => row.id === card.id ? { ...row, body: doc.body } : row)); }); }}>{card.name}</button>
+                <Badge variant="outline" className="ml-2 font-normal" title={card.status === "center_changed" ? t("workspace.centerChangedHelp") : undefined}>
+                  {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
+                </Badge>
                 {(card.locations?.length ?? 0) > 1 ? (
-                  <details className="text-xs text-muted-foreground">
-                    <summary>{t("library.locations", { count: String(card.locations?.length ?? 0) })}</summary>
-                    <ul className="mt-1 space-y-1 font-mono">
-                      {card.locations?.map((path) => <li key={path}>{path}</li>)}
-                    </ul>
-                  </details>
+                  <p className="text-xs text-muted-foreground">{t("library.locations", { count: String(card.locations?.length ?? 0) })}</p>
                 ) : null}
-                <div className="flex flex-wrap gap-1">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "upload" })}>{t("workspace.upload")}</Button>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "pull" })}>{t("workspace.pull")}</Button>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setPending({ ids: [card.id], kind: "remove" })}>{t("workspace.remove")}</Button>
-                  <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setPending({ ids: [card.id], kind: "delete" })}>{t("workspace.delete")}</Button>
-                </div>
-              </Card>
-            </li>
+              </td>
+              {band === 800 ? null : <td className="px-3 py-2 text-muted-foreground">{card.status === "local_only" ? t("workspace.foundHere") : t("workspace.fromLibrary")}</td>}
+              <td className="relative px-3 py-2 text-right">
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`${t("shell.more")} ${card.name}`} aria-expanded={menuId === card.id} onClick={() => setMenuId(menuId === card.id ? null : card.id)}>
+                  <MoreHorizontalIcon aria-hidden="true" />
+                </Button>
+                {menuId === card.id ? (
+                  <div role="menu" className="absolute right-3 z-20 mt-1 w-44 rounded-md border border-border bg-popover p-1 text-left shadow-md">
+                    <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); setPending({ ids: [card.id], kind: "upload" }); }}>{t("workspace.upload")}</button>
+                    <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); setPending({ ids: [card.id], kind: "pull" }); }}>{t("workspace.pull")}</button>
+                    <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setMenuId(null); setPending({ ids: [card.id], kind: "remove" }); }}>{t("workspace.remove")}</button>
+                    <button type="button" role="menuitem" className="block w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent" onClick={() => { setMenuId(null); setPending({ ids: [card.id], kind: "delete" }); }}>{t("workspace.delete")}</button>
+                  </div>
+                ) : null}
+              </td>
+            </tr>
           ))}
-        </ul>
+          </tbody>
+        </table>
         </div>
         {pending ? (
           <ConfirmDialog
@@ -258,7 +366,7 @@ export function WorkspaceView({
           />
         ) : null}
         {adding ? (
-          <div data-testid="add-sheet" className="mt-3 rounded-md border border-border p-3">
+          <div data-testid="add-sheet" className="mt-3 rounded-lg border border-border bg-card p-3">
             <Input aria-label={t("workspace.picker.search")} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="mb-2 h-8" />
             {library.filter((skill) => skill.name.toLowerCase().includes(debouncedPicker.trim().toLowerCase())).map((skill) => (
               <button key={skill.id} type="button" className="mr-2 text-sm" onClick={() => { setRows((current) => current.some((row) => row.id === skill.id) ? current : [...current, { id: skill.id, name: skill.name, status: "in_sync", tags: skill.tags, body: skill.body, center: skill.sourceBody, managed: true }]); if (agentKey) void syncSkillToTool(skill.id, agentKey); setAdding(false); }}>
@@ -268,7 +376,7 @@ export function WorkspaceView({
           </div>
         ) : null}
         {open ? (
-          <aside data-testid="workspace-detail" className="mt-3 rounded-md border border-border p-3">
+          <aside data-testid="workspace-detail" className="mt-3 rounded-lg border border-border bg-card p-4">
             <div className="flex gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setSheet("local")}>{t("library.detail.local")}</Button>
               <Button type="button" variant="outline" size="sm" onClick={() => setSheet("diff")}>{t("library.detail.diff")}</Button>
@@ -286,6 +394,6 @@ export function WorkspaceView({
           </aside>
         ) : null}
       </div>
-    </section>
+    </Screen>
   );
 }

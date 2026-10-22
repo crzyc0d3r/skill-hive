@@ -24,6 +24,9 @@ struct TauriNotifier(tauri::AppHandle);
 
 impl Notifier for TauriNotifier {
     fn emit(&self, event: &str, payload: &str) {
+        if event == "app-files-changed" || event == "skills-auto-updated" {
+            commands::invalidate_library_index();
+        }
         if let Err(err) = self.0.emit(event, payload) {
             log::debug!("emit {event} failed: {err}");
         }

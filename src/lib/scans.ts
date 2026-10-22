@@ -1,0 +1,40 @@
+export interface ScanCopy {
+  name: string;
+  tool: string;
+  path: string;
+  alreadyManaged?: boolean;
+  differs?: boolean;
+  fingerprint?: string;
+}
+
+export interface GroupedScan extends ScanCopy {
+  tools: string[];
+  paths: string[];
+  fingerprints: string[];
+  differs: boolean;
+}
+
+/** One row per skill name. Copies differ when their content fingerprints do. */
+export function groupScanRows(rows: ScanCopy[]): GroupedScan[] {
+  const grouped: GroupedScan[] = [];
+  for (const row of rows) {
+    const existing = grouped.find((item) => item.name.trim().toLowerCase() === row.name.trim().toLowerCase());
+    const fingerprint = row.fingerprint ?? "";
+    if (!existing) {
+      grouped.push({
+        ...row,
+        tools: [row.tool],
+        paths: [row.path],
+        fingerprints: fingerprint ? [fingerprint] : [],
+        differs: Boolean(row.differs),
+      });
+      continue;
+    }
+    if (!existing.tools.includes(row.tool)) existing.tools.push(row.tool);
+    if (!existing.paths.includes(row.path)) existing.paths.push(row.path);
+    if (fingerprint && !existing.fingerprints.includes(fingerprint)) existing.fingerprints.push(fingerprint);
+    if (row.differs || existing.fingerprints.length > 1) existing.differs = true;
+    if (row.alreadyManaged) existing.alreadyManaged = true;
+  }
+  return grouped;
+}

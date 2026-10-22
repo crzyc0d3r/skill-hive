@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use hive_core::analytics::{apply_optimized, store_verdict, write_history, HistoryEntry};
@@ -31,7 +31,7 @@ use hive_core::providers::{
 use hive_core::testing::{save_suite, CheckSpec, Suite, SuiteCase, TriggerRow};
 use hive_core::util::error::AppError;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 fn db(err: impl std::fmt::Display) -> AppError {
     AppError::db(err.to_string())
@@ -71,7 +71,7 @@ fn report(job: &str, current: u32, total: u32, message: &str) -> Result<(), AppE
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManagedSkill {
     pub id: String,
@@ -89,7 +89,7 @@ pub struct ManagedSkill {
     pub locations: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillFile {
     pub path: String,
@@ -106,7 +106,7 @@ pub struct PresetDto {
     pub synced: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentDto {
     pub key: String,
@@ -126,6 +126,8 @@ pub struct ScanDto {
     pub tool: String,
     pub path: String,
     pub already_managed: bool,
+    pub differs: bool,
+    pub fingerprint: String,
 }
 
 #[derive(Serialize)]
@@ -174,7 +176,109 @@ pub struct BackupStatusDto {
     pub head: String,
 }
 
+struct CachedLibrary {
+    path: String,
+    rows: Vec<ManagedSkill>,
+}
+
+static LIBRARY_INDEX: Mutex<Option<CachedLibrary>> = Mutex::new(None);
+static LIBRARY_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+struct CachedTools {
+    at_ms: u64,
+    rows: Vec<AgentDto>,
+}
+
+static TOOL_STATUS: Mutex<Option<CachedTools>> = Mutex::new(None);
+const TOOL_STATUS_TTL_MS: u64 = 60_000;
+
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn cached_tool_status() -> Option<Vec<AgentDto>> {
+    let guard = TOOL_STATUS.lock().ok()?;
+    let cached = guard.as_ref()?;
+    if unix_ms().saturating_sub(cached.at_ms) > TOOL_STATUS_TTL_MS {
+        return None;
+    }
+    Some(cached.rows.clone())
+}
+
+fn remember_tool_status(rows: &[AgentDto]) {
+    if let Ok(mut guard) = TOOL_STATUS.lock() {
+        *guard = Some(CachedTools {
+            at_ms: unix_ms(),
+            rows: rows.to_vec(),
+        });
+    }
+}
+
+fn invalidate_tool_status() {
+    if let Ok(mut guard) = TOOL_STATUS.lock() {
+        *guard = None;
+    }
+}
+
+fn library_index_path() -> PathBuf {
+    root().join(".skill-hive").join("library-index.json")
+}
+
+pub fn invalidate_library_index() {
+    LIBRARY_GENERATION.fetch_add(1, Ordering::AcqRel);
+    if let Ok(mut guard) = LIBRARY_INDEX.lock() {
+        *guard = None;
+    }
+    let _ = std::fs::remove_file(library_index_path());
+}
+
+fn memory_index(path: &str) -> Option<Vec<ManagedSkill>> {
+    let guard = LIBRARY_INDEX.lock().ok()?;
+    let cached = guard.as_ref()?;
+    if cached.path != path {
+        return None;
+    }
+    Some(cached.rows.clone())
+}
+
+fn remember_index(path: &str, skills: &[ManagedSkill]) {
+    if let Ok(mut guard) = LIBRARY_INDEX.lock() {
+        *guard = Some(CachedLibrary {
+            path: path.to_string(),
+            rows: skills.to_vec(),
+        });
+    }
+}
+
+fn read_disk_index() -> Option<Vec<ManagedSkill>> {
+    let text = std::fs::read_to_string(library_index_path()).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn write_library_index(store: &SkillStore, skills: &[ManagedSkill]) {
+    remember_index(&store.db_file(), skills);
+    let path = library_index_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    hive_core::util::file_watcher::mute_self_writes(&path);
+    if let Ok(text) = serde_json::to_string(skills) {
+        let _ = std::fs::write(path, text);
+    }
+}
+
 fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
+    if let Some(cached) = memory_index(&store.db_file()) {
+        return Ok(cached);
+    }
+    rebuild_library(store)
+}
+
+fn rebuild_library(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
+    let generation = LIBRARY_GENERATION.load(Ordering::Acquire);
     crate::progress::emit("library", 0, 1, "Reading the library", false);
     let tags = store.get_tags_map().map_err(db)?;
     let targets = store.get_all_targets().map_err(db)?;
@@ -205,17 +309,32 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
     }
     let mut skills = collapse_managed(skills);
     skills.sort_by(|left, right| left.name.cmp(&right.name));
+    for skill in &mut skills {
+        skill.body.clear();
+        skill.source_body.clear();
+        skill.files.clear();
+        skill.description = skill
+            .description
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if skill.description.chars().count() > 180 {
+            skill.description = skill.description.chars().take(180).collect();
+        }
+    }
+    if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
+        write_library_index(store, &skills);
+    }
     crate::progress::emit("library", 1, 1, "Library ready", true);
     Ok(skills)
 }
 
 fn collapse_managed(skills: Vec<ManagedSkill>) -> Vec<ManagedSkill> {
-    let mut grouped = Vec::new();
+    let mut order = Vec::new();
+    let mut grouped = std::collections::HashMap::<String, ManagedSkill>::new();
     for skill in skills {
-        if let Some(existing) = grouped
-            .iter_mut()
-            .find(|row: &&mut ManagedSkill| row.name.eq_ignore_ascii_case(&skill.name))
-        {
+        let key = skill.name.to_ascii_lowercase();
+        if let Some(existing) = grouped.get_mut(&key) {
             for agent in skill.agents {
                 if !existing.agents.contains(&agent) {
                     existing.agents.push(agent);
@@ -229,9 +348,13 @@ fn collapse_managed(skills: Vec<ManagedSkill>) -> Vec<ManagedSkill> {
             }
             continue;
         }
-        grouped.push(skill);
+        order.push(key.clone());
+        grouped.insert(key, skill);
     }
-    grouped
+    order
+        .into_iter()
+        .filter_map(|key| grouped.remove(&key))
+        .collect()
 }
 
 fn skill_tree_files(central: &Path, source: Option<&Path>) -> Vec<SkillFile> {
@@ -336,6 +459,8 @@ fn to_scan(rows: Vec<ScannedSkill>) -> Vec<ScanDto> {
             tool: row.tool,
             path: row.path,
             already_managed: row.already_managed,
+            differs: row.differs,
+            fingerprint: row.fingerprint,
         })
         .collect()
 }
@@ -410,10 +535,24 @@ fn persist_install(
             last_check_error: None,
         })
         .map_err(db)?;
+    invalidate_library_index();
     Ok(installed_dto(installed.name.clone(), id))
 }
 
 fn sync_skill(store: &SkillStore, skill_id: &str, tool: &str, add: bool) -> Result<(), AppError> {
+    let result = sync_skill_now(store, skill_id, tool, add);
+    if result.is_ok() {
+        invalidate_library_index();
+    }
+    result
+}
+
+fn sync_skill_now(
+    store: &SkillStore,
+    skill_id: &str,
+    tool: &str,
+    add: bool,
+) -> Result<(), AppError> {
     let skill = store
         .get_skill_by_id(skill_id)
         .map_err(db)?
@@ -584,9 +723,29 @@ fn encode_query(input: &str) -> String {
 
 #[tauri::command]
 pub async fn get_managed_skills(
+    app: AppHandle,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<ManagedSkill>, AppError> {
     let store = store.inner().clone();
+    let path = store.db_file();
+    if let Some(cached) = memory_index(&path) {
+        return Ok(cached);
+    }
+    if let Some(cached) = read_disk_index() {
+        let generation = LIBRARY_GENERATION.load(Ordering::Acquire);
+        remember_index(&path, &cached);
+        let refreshing = store.clone();
+        tauri::async_runtime::spawn(async move {
+            let rebuilt =
+                crate::offload::offload(move || rebuild_library(refreshing.as_ref())).await;
+            if let Ok(rows) = rebuilt {
+                if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
+                    let _ = app.emit("library-index", &rows);
+                }
+            }
+        });
+        return Ok(cached);
+    }
     crate::offload::offload(move || managed(store.as_ref())).await
 }
 
@@ -641,8 +800,11 @@ pub async fn list_presets(store: State<'_, Arc<SkillStore>>) -> Result<Vec<Prese
 
 #[tauri::command]
 pub async fn get_tool_status(store: State<'_, Arc<SkillStore>>) -> Result<Vec<AgentDto>, AppError> {
+    if let Some(cached) = cached_tool_status() {
+        return Ok(cached);
+    }
     let store = store.inner().clone();
-    crate::offload::offload(move || {
+    let rows = crate::offload::offload(move || -> Result<Vec<AgentDto>, AppError> {
         let home = home_dir().ok_or_else(|| AppError::io("home directory is not set"))?;
         let rows = tool_service::tool_statuses(store.as_ref(), &home).map_err(db)?;
         Ok(rows
@@ -657,9 +819,11 @@ pub async fn get_tool_status(store: State<'_, Arc<SkillStore>>) -> Result<Vec<Ag
                 custom: row.is_custom,
                 category: row.category,
             })
-            .collect())
+            .collect::<Vec<_>>())
     })
-    .await
+    .await?;
+    remember_tool_status(&rows);
+    Ok(rows)
 }
 
 #[tauri::command]
@@ -930,6 +1094,7 @@ pub async fn delete_managed_skills(
             }
             store.delete_skill(&id).map_err(db)?;
         }
+        invalidate_library_index();
         Ok(())
     })
     .await
@@ -946,6 +1111,7 @@ pub async fn set_skills_enabled(
         for id in ids {
             store.update_skill_enabled(&id, enabled).map_err(db)?;
         }
+        invalidate_library_index();
         Ok(())
     })
     .await
@@ -958,7 +1124,12 @@ pub async fn set_skill_tags(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
     let store = store.inner().clone();
-    crate::offload::offload(move || store.set_tags_for_skill(&skill_id, &tags).map_err(db)).await
+    crate::offload::offload(move || {
+        store.set_tags_for_skill(&skill_id, &tags).map_err(db)?;
+        invalidate_library_index();
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -968,7 +1139,12 @@ pub async fn rename_tag(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<String>, AppError> {
     let store = store.inner().clone();
-    crate::offload::offload(move || store.as_ref().rename_tag(&from, &to).map_err(db)).await
+    crate::offload::offload(move || {
+        let names = store.as_ref().rename_tag(&from, &to).map_err(db)?;
+        invalidate_library_index();
+        Ok(names)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -977,7 +1153,12 @@ pub async fn delete_tag(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<String>, AppError> {
     let store = store.inner().clone();
-    crate::offload::offload(move || store.as_ref().delete_tag(&tag).map_err(db)).await
+    crate::offload::offload(move || {
+        let names = store.as_ref().delete_tag(&tag).map_err(db)?;
+        invalidate_library_index();
+        Ok(names)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1177,6 +1358,7 @@ pub async fn add_custom_tool(
         if added == CustomAdd::SkippedCollision {
             return Err(AppError::invalid_input(format!("{name} already exists")));
         }
+        invalidate_tool_status();
         Ok(AgentDto {
             key,
             name: name.to_string(),
@@ -1198,7 +1380,9 @@ pub async fn remove_custom_tool(
 ) -> Result<(), AppError> {
     let store = store.inner().clone();
     crate::offload::offload(move || {
-        tool_service::remove_custom_tool(store.as_ref(), &key).map_err(db)
+        tool_service::remove_custom_tool(store.as_ref(), &key).map_err(db)?;
+        invalidate_tool_status();
+        Ok(())
     })
     .await
 }
@@ -1211,7 +1395,9 @@ pub async fn set_tool_enabled(
 ) -> Result<(), AppError> {
     let store = store.inner().clone();
     crate::offload::offload(move || {
-        tool_service::set_tool_enabled(store.as_ref(), &key, enabled).map_err(db)
+        tool_service::set_tool_enabled(store.as_ref(), &key, enabled).map_err(db)?;
+        invalidate_tool_status();
+        Ok(())
     })
     .await
 }
@@ -1224,10 +1410,12 @@ pub async fn set_all_tools_enabled(
     let store = store.inner().clone();
     crate::offload::offload(move || {
         if enabled {
-            tool_service::enable_all(store.as_ref()).map_err(db)
+            tool_service::enable_all(store.as_ref()).map_err(db)?;
         } else {
-            tool_service::disable_all(store.as_ref()).map_err(db)
+            tool_service::disable_all(store.as_ref()).map_err(db)?;
         }
+        invalidate_tool_status();
+        Ok(())
     })
     .await
 }
@@ -1238,8 +1426,12 @@ pub async fn set_tool_order_cmd(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
     let store = store.inner().clone();
-    crate::offload::offload(move || tool_service::reorder_tools(store.as_ref(), &keys).map_err(db))
-        .await
+    crate::offload::offload(move || {
+        tool_service::reorder_tools(store.as_ref(), &keys).map_err(db)?;
+        invalidate_tool_status();
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1250,7 +1442,9 @@ pub async fn set_custom_tool_path(
 ) -> Result<(), AppError> {
     let store = store.inner().clone();
     crate::offload::offload(move || {
-        tool_service::set_tool_path(store.as_ref(), &key, path.trim()).map_err(db)
+        tool_service::set_tool_path(store.as_ref(), &key, path.trim()).map_err(db)?;
+        invalidate_tool_status();
+        Ok(())
     })
     .await
 }
@@ -1264,6 +1458,7 @@ pub async fn reset_custom_tool_path(
     crate::offload::offload(move || {
         let store = store.as_ref();
         tool_service::reset_tool_path(store, &key).map_err(db)?;
+        invalidate_tool_status();
         tool_dir(store, &key).map(|path| path.to_string_lossy().to_string())
     })
     .await
@@ -1277,7 +1472,9 @@ pub async fn set_custom_tool_project_path(
 ) -> Result<(), AppError> {
     let store = store.inner().clone();
     crate::offload::offload(move || {
-        tool_service::set_project_path(store.as_ref(), &key, path.trim()).map_err(db)
+        tool_service::set_project_path(store.as_ref(), &key, path.trim()).map_err(db)?;
+        invalidate_tool_status();
+        Ok(())
     })
     .await
 }
@@ -1318,25 +1515,21 @@ fn source_dir(skill: &SkillRecord) -> Option<PathBuf> {
 }
 
 fn check_ttl_ms(store: &SkillStore) -> i64 {
-    store
+    match store
         .get_setting("update_check_ttl_minutes")
         .ok()
         .flatten()
         .and_then(|value| value.trim().parse::<i64>().ok())
-        .filter(|minutes| *minutes > 0)
-        .map(|minutes| minutes.saturating_mul(60_000))
-        .unwrap_or(0)
+    {
+        Some(minutes) if minutes <= 0 => 0,
+        Some(minutes) => minutes.saturating_mul(60_000),
+        None => 60 * 60_000,
+    }
 }
 
 fn remember_check(store: &SkillStore, skill: &SkillRecord) -> Result<String, AppError> {
-    let ttl = check_ttl_ms(store);
-    if ttl > 0 {
-        if let Some(checked) = skill.last_checked_at {
-            let status = skill.update_status.trim();
-            if now().saturating_sub(checked) < ttl && !status.is_empty() && status != "unknown" {
-                return Ok(status.to_string());
-            }
-        }
+    if let Some(status) = fresh_enough(skill, check_ttl_ms(store)) {
+        return Ok(status);
     }
     let (status, detail) =
         skill_check::classify_dirs(Path::new(&skill.central_path), source_dir(skill).as_deref());
@@ -1388,16 +1581,47 @@ pub fn maybe_run_auto_update(store: &SkillStore, now_ms: i64) -> Result<u32, App
 pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
     let skills = store.get_all_skills().map_err(db)?;
     let total = skills.len() as u32;
+    let ttl = check_ttl_ms(store);
     let mut available = 0u32;
-    for (index, skill) in skills.iter().enumerate() {
-        report("scan", index as u32, total.max(1), "Checking for updates")?;
-        let status = remember_check(store, skill)?;
+    let mut pending = Vec::new();
+    report("scan", 0, total.max(1), "Checking for updates")?;
+    for skill in &skills {
+        if crate::progress::cancelled() {
+            return Err(AppError::invalid_input("cancelled"));
+        }
+        if let Some(status) = fresh_enough(skill, ttl) {
+            if status == "update_available" || status == "pending_removals" {
+                available += 1;
+            }
+            continue;
+        }
+        let (status, detail) = skill_check::classify_dirs(
+            Path::new(&skill.central_path),
+            source_dir(skill).as_deref(),
+        );
         if status == "update_available" || status == "pending_removals" {
             available += 1;
         }
+        pending.push((skill.id.clone(), status, detail));
+    }
+    if !pending.is_empty() {
+        store.update_skill_check_states(&pending).map_err(db)?;
     }
     crate::progress::finish("scan", "Update check finished");
     Ok(available)
+}
+
+fn fresh_enough(skill: &SkillRecord, ttl: i64) -> Option<String> {
+    if ttl <= 0 {
+        return None;
+    }
+    let checked = skill.last_checked_at?;
+    let status = skill.update_status.trim();
+    if now().saturating_sub(checked) < ttl && !status.is_empty() && status != "unknown" {
+        Some(status.to_string())
+    } else {
+        None
+    }
 }
 
 #[tauri::command]
@@ -3482,6 +3706,7 @@ mod tests {
         fs::write(central.join("SKILL.md"), "---\nname: notes\n---\nold\n").unwrap();
         fs::write(source.join("SKILL.md"), "---\nname: notes\n---\nnew\n").unwrap();
         let store = SkillStore::new(&root.join("hive.db")).unwrap();
+        store.set_setting("update_check_ttl_minutes", "0").unwrap();
         store
             .insert_skill(&SkillRecord {
                 id: "notes".into(),

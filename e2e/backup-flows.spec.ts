@@ -9,12 +9,14 @@ test.beforeEach(async ({ page }) => {
 });
 test("held-back removal then backup restore", async ({ page }) => {
   await page.goto("/my-skills");
+  await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("button", { name: "Check All" }).click();
   await expect(page.getByRole("dialog", { name: "This update removes files" })).toBeVisible();
   await page.getByRole("button", { name: "Update anyway" }).click();
   await expect(page.getByText("Update All")).toBeVisible();
   await page.goto("/backup");
   await page.getByRole("button", { name: "Back Up Now" }).click();
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: /Snapshot actions/ }).first().click();
+  await page.getByRole("menuitem", { name: "Restore" }).click();
   await expect(page.getByText(/safety-snap-1/)).toBeVisible();
 });

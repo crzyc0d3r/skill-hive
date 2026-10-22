@@ -7,7 +7,8 @@ describe("settings", () => {
     installIpc();
     const user = userEvent.setup();
     renderAt("/settings?tab=agents");
-    await user.type(await screen.findByRole("textbox", { name: "Agent name" }), "Field Notes");
+    await user.click(await screen.findByRole("button", { name: "Add agent" }));
+    await user.type(screen.getByRole("textbox", { name: "Agent name" }), "Field Notes");
     await user.type(screen.getByRole("textbox", { name: "Agent path" }), "~/.field-notes/skills");
     await user.click(screen.getByRole("button", { name: "New Agent" }));
     expect(screen.getByText("Field Notes")).toBeInTheDocument();
@@ -27,6 +28,7 @@ describe("settings", () => {
     expect(screen.getByText("Enabled")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     expect(screen.getByText("Agents refreshed")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Change folders for Claude Code" }));
     const path = screen.getByRole("textbox", { name: "Global path Claude Code" });
     await user.clear(path);
     await user.type(path, "/tmp/claude");
@@ -35,6 +37,7 @@ describe("settings", () => {
     await user.clear(screen.getByRole("textbox", { name: "Project path Claude Code" }));
     await user.type(screen.getByRole("textbox", { name: "Project path Claude Code" }), "custom/skills");
     expect(screen.getByRole("textbox", { name: "Project path Claude Code" })).toHaveValue("custom/skills");
+    await user.click(screen.getByRole("button", { name: "Add agent" }));
     await user.type(screen.getByRole("textbox", { name: "Agent name" }), "Field Notes");
     await user.type(screen.getByRole("textbox", { name: "Agent path" }), "~/.field-notes/skills");
     await user.click(screen.getByRole("button", { name: "New Agent" }));

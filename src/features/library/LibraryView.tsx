@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckIcon, GripVerticalIcon, LayoutGridIcon, ListIcon, MoreHorizontalIcon, PlusIcon, XIcon } from "lucide-react";
@@ -9,15 +10,21 @@ import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
 import { applyAvailableSkillUpdates, checkSkillUpdate, silent } from "@/lib/ipc/actions";
 import { listAgents, type AgentRow } from "@/lib/ipc/catalog";
-import { agentDisplayName, agentIcon, detectedAgents } from "@/lib/agents";
+import { readAgentCache } from "@/lib/library-cache";
+import { agentDisplayName, detectedAgents } from "@/lib/agents";
+import { AgentMark } from "@/components/app/AgentBadge";
+import { SourceBadge } from "@/components/app/SourceBadge";
+import { sourceLabel } from "@/lib/source";
+import { useShellBand } from "@/lib/shell-width";
+import { toast } from "sonner";
 import { useVirtualGrid } from "@/lib/virtual-grid";
 import { t } from "@/lib/i18n";
 import { cn } from "cn";
 import { GitStatusButton } from "@/features/library/GitStatusButton";
 import { UpdateFlow } from "@/features/library/UpdateFlow";
-import { EmptyState, Screen, SearchField, StatePanel } from "@/components/chrome";
+import { EmptyState, ErrorState, PrimaryLink, Screen, SearchField } from "@/components/chrome";
 import { LibrarySkeleton } from "@/components/skeletons";
-import { RetryContext, useShellPhase } from "@/lib/view-state";
+import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -61,12 +68,14 @@ function AgentPlacement({
         {installed.length === 0 ? <p className="mt-1 text-sm text-muted-foreground">{t("library.installedNone")}</p> : null}
         <ul className="mt-2 space-y-2">
           {installed.map((agent) => {
-            const Icon = agentIcon(agent.key);
             return (
               <li key={agent.key} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm">
-                <Icon className="size-4 shrink-0" aria-hidden="true" />
-                <span className="font-medium">{agent.name}</span>
-                <span className="text-muted-foreground">{t("install.installed")}</span>
+                <AgentMark agent={agent.key} name={agent.name} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{agent.name}</span>
+                  <span className="block truncate font-mono text-xs text-muted-foreground" title={`~/.agents/${agent.key}/skills/${skill.name}`}>{`~/.agents/${agent.key}/skills/${skill.name}`}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">{skill.updateStatus && skill.updateStatus !== "clean" ? t("library.outOfDate") : t("library.synced")}</span>
                 <Button type="button" variant="ghost" size="sm" className="ml-auto" aria-label={`${t("library.removeAgent")} ${agent.name}`} onClick={() => onToggle(agent.key)}>
                   {t("library.removeAgent")}
                 </Button>
@@ -92,17 +101,14 @@ function AgentPlacement({
         <PopoverContent className="w-72 p-2" align="start">
           <Input aria-label={t("library.addAgent.search")} value={query} onChange={(event) => onQuery(event.target.value)} className="h-8" />
           <ul className="mt-2 max-h-56 space-y-1 overflow-auto">
-            {choices.map((agent) => {
-              const Icon = agentIcon(agent.key);
-              return (
+            {choices.map((agent) => (
                 <li key={agent.key}>
                   <button type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => onToggle(agent.key)}>
-                    <Icon className="size-4" aria-hidden="true" />
+                    <AgentMark agent={agent.key} name={agent.name} />
                     {agent.name}
                   </button>
                 </li>
-              );
-            })}
+            ))}
           </ul>
           <Button type="button" variant="ghost" size="sm" className="mt-1" aria-pressed={showAll} onClick={onShowAll}>
             {t("library.showAllAgents")}
@@ -113,12 +119,6 @@ function AgentPlacement({
   );
 }
 
-function letterHue(key: string): number {
-  let hash = 0;
-  for (const char of key) hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
-  return hash % 360;
-}
-
 function InstalledTiles({ skill, agents }: { skill: SkillCard; agents: AgentRow[] }) {
   const installed = skill.agents.map((key) => ({ key, name: agentDisplayName(key, agents) }));
   const shown = installed.slice(0, 3);
@@ -127,15 +127,8 @@ function InstalledTiles({ skill, agents }: { skill: SkillCard; agents: AgentRow[
   return (
     <div className="flex items-center justify-end gap-1" data-testid={`sync-dots-${skill.id}`} title={names}>
       {shown.map((agent) => (
-        <span
-          key={agent.key}
-          data-filled="true"
-          title={agent.name}
-          aria-label={agent.name}
-          className="inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-semibold leading-none text-white"
-          style={{ backgroundColor: `oklch(0.58 0.14 ${letterHue(agent.key)})` }}
-        >
-          {agent.name.trim().slice(0, 1).toUpperCase() || "?"}
+        <span key={agent.key} data-filled="true" title={agent.name} aria-label={agent.name}>
+          <AgentMark agent={agent.key} name={agent.name} />
         </span>
       ))}
       {extra > 0 ? <span className="text-xs text-muted-foreground" title={names}>+{extra}</span> : null}
@@ -147,6 +140,7 @@ export function LibraryView({
   skills,
   initialId,
   memberIds = [],
+  agents = [],
   presetName = "Research",
   onRenameTag,
   onAddTag,
@@ -163,6 +157,7 @@ export function LibraryView({
   skills: SkillCard[];
   initialId?: string | null;
   memberIds?: string[];
+  agents?: AgentRow[];
   presetName?: string;
   onRenameTag: (from: string, to: string) => void | Promise<void>;
   onAddTag: (skillId: string, tag: string) => void | Promise<void>;
@@ -176,7 +171,10 @@ export function LibraryView({
   onBatchTag: (ids: string[], tag: string) => void | Promise<void>;
   onToggleAgent: (skillId: string, agent: string) => void | Promise<void>;
 }) {
-  const phase = useShellPhase();
+  const phase = useViewPhase();
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const band = useShellBand();
   const retry = useContext(RetryContext);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<LibraryFilter>("all");
@@ -200,16 +198,26 @@ export function LibraryView({
   const [dragId, setDragId] = useState<string | null>(null);
   const [batchTag, setBatchTag] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
-  const [catalogAgents, setCatalogAgents] = useState<AgentRow[]>([]);
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [agentQuery, setAgentQuery] = useState("");
   const [sourceRef, setSourceRef] = useState<string | null>(null);
   const { seed } = useGenerate();
+  const queryClient = useQueryClient();
+  const [fullAgents, setFullAgents] = useState<AgentRow[] | null>(null);
   useEffect(() => {
+    if (!showAllAgents) return;
+    const cached = readAgentCache<AgentRow>();
+    if (cached?.length) setFullAgents(cached);
+    let live = true;
     void listAgents().then((rows) => {
-      if (Array.isArray(rows)) setCatalogAgents(rows);
+      if (live && Array.isArray(rows) && rows.length > 0) setFullAgents(rows);
     });
-  }, []);
+    return () => {
+      live = false;
+    };
+  }, [showAllAgents]);
+  const queried = queryClient.getQueryData<AgentRow[]>(["agents"]);
+  const catalogAgents = fullAgents ?? (queried && queried.length > 0 ? queried : agents);
   useEffect(() => {
     if (!openId) return;
     void silent<{ path?: string }>("get_source_skill_document", { skillId: openId }).then((doc) => {
@@ -217,6 +225,7 @@ export function LibraryView({
     });
   }, [openId]);
   const [detail, setDetail] = useState<{ id: string; body: string } | null>(null);
+  const [sourceDetail, setSourceDetail] = useState<{ id: string; body: string } | null>(null);
   useEffect(() => {
     if (!openId) return;
     const card = skills.find((skill) => skill.id === openId);
@@ -233,6 +242,21 @@ export function LibraryView({
       live = false;
     };
   }, [openId, skills]);
+  useEffect(() => {
+    if (!openId || tab !== "diff") return;
+    const card = skills.find((skill) => skill.id === openId);
+    if (!card || card.sourceBody) {
+      setSourceDetail(null);
+      return;
+    }
+    let live = true;
+    void silent<{ body?: string }>("get_source_skill_document", { skillId: openId }).then((doc) => {
+      if (live) setSourceDetail({ id: openId, body: doc?.body ?? "" });
+    });
+    return () => {
+      live = false;
+    };
+  }, [openId, tab, skills]);
 
   const [fileMap, setFileMap] = useState<Record<string, SkillFile[]>>({});
   useEffect(() => {
@@ -256,6 +280,7 @@ export function LibraryView({
   const grid = useVirtualGrid(visible, layout);
   const open = grouped.find((skill) => skill.id === openId) ?? null;
   const openBody = open && !open.body && detail?.id === open.id ? detail.body : (open?.body ?? "");
+  const openSource = open && !open.sourceBody && sourceDetail?.id === open.id ? sourceDetail.body : (open?.sourceBody ?? "");
   const rendered = grid.rendered;
   const members = memberIds.map((id) => skills.find((skill) => skill.id === id)?.name ?? id);
   const showChecks = selecting || selected.length > 0;
@@ -268,8 +293,14 @@ export function LibraryView({
     });
   }
 
+  const missingDetail = phase === "empty" && Boolean(initialId);
+  const detailClass = cn(
+    "rounded-lg border border-border bg-card p-3",
+    band < 1440 && "fixed inset-y-0 right-0 z-30 w-[min(560px,100%)] overflow-auto shadow-lg",
+    band >= 1920 ? "w-[520px] shrink-0" : band >= 1440 ? "w-[440px] shrink-0" : undefined,
+  );
   return (
-    <Screen testId="library" title={t("library.title")}>
+    <Screen testId="library" title={t("library.title")} lede={missingDetail ? t("library.detailMissingBody") : t("library.emptyBody")} actions={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
       <div className="flex flex-wrap items-center gap-2">
         <SearchField
           aria-label={t("library.search")}
@@ -293,9 +324,15 @@ export function LibraryView({
             </Button>
           ))}
         </div>
+        <Button type="button" variant="outline" size="sm" aria-pressed={tagsOpen} onClick={() => setTagsOpen((current) => !current)}>{t("library.filterTags")}</Button>
         <div className="ml-auto flex items-center gap-1">
-          <GitStatusButton />
-          <UpdateFlow skills={skills} />
+          <div>
+            <Button type="button" variant="outline" size="sm" aria-expanded={moreOpen} onClick={() => setMoreOpen((current) => !current)}>{t("shell.more")}</Button>
+            <div className={moreOpen ? "mt-2 flex flex-col gap-1" : "sr-only"}>
+              <GitStatusButton />
+              <UpdateFlow skills={skills} />
+            </div>
+          </div>
           <Button type="button" size="icon-sm" variant={layout === "grid" ? "secondary" : "ghost"} aria-label={t("library.view.grid")} title={t("library.view.grid")} onClick={() => setLayout("grid")}>
             <LayoutGridIcon aria-hidden="true" />
           </Button>
@@ -322,20 +359,20 @@ export function LibraryView({
           </Button>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className={tagsOpen ? "flex flex-wrap items-center gap-1.5" : "sr-only"}>
         {sources.map((item) => (
-          <Button key={item} type="button" variant={source === item ? "default" : "secondary"} size="xs" className="rounded-full shadow-none" onClick={() => setSource(source === item ? null : item)}>
-            {item}
+          <Button key={item} type="button" variant={source === item ? "secondary" : "outline"} size="xs" className="rounded-full shadow-none" onClick={() => setSource(source === item ? null : item)}>
+            {sourceLabel(item)}
           </Button>
         ))}
-        <Button type="button" variant={tag === "untagged" ? "default" : "secondary"} size="xs" className="rounded-full shadow-none" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
+        <Button type="button" variant={tag === "untagged" ? "secondary" : "outline"} size="xs" className="rounded-full shadow-none" onClick={() => setTag(tag === "untagged" ? null : "untagged")}>
           Untagged
         </Button>
         {tags.map((item) => (
           <Button
             key={item}
             type="button"
-            variant={tag === item ? "default" : "secondary"}
+            variant={tag === item ? "secondary" : "outline"}
             size="xs"
             className="rounded-full shadow-none"
             onClick={() => setTag(tag === item ? null : item)}
@@ -361,7 +398,9 @@ export function LibraryView({
           </Button>
         </form>
       ) : null}
-      <ol data-testid="preset-order" className="flex flex-wrap items-center gap-1.5">
+      <details className="sr-only">
+        <summary className="cursor-pointer text-sm font-medium">{t("library.presetOrder")}</summary>
+      <ol data-testid="preset-order" className="mt-2 space-y-1">
         {memberIds.map((id) => {
           const name = skills.find((skill) => skill.id === id)?.name ?? id;
           return (
@@ -376,7 +415,7 @@ export function LibraryView({
                 onReorderMembers(moveById(memberIds, dragId, id, (item) => item));
                 setDragId(null);
               }}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-xs"
+              className="flex items-center gap-2 rounded-md px-1 py-1 text-sm"
             >
               <button type="button" className="text-muted-foreground" title={t("library.reorder")} aria-label={t("library.reorder")}>
                 <GripVerticalIcon className="size-3" aria-hidden="true" />
@@ -386,6 +425,7 @@ export function LibraryView({
           );
         })}
       </ol>
+      </details>
       <p className="sr-only">{presetName}: {members.join(", ")}</p>
       {checked ? (
         <p role="status">
@@ -394,12 +434,13 @@ export function LibraryView({
         </p>
       ) : null}
       {selected.length > 0 ? (
-        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
-          <span className="font-mono text-xs text-muted-foreground">{selected.length}</span>
-          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, true)}>{t("library.batch.enable")}</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => onSetEnabled(selected, false)}>{t("library.batch.disable")}</Button>
+        <div data-testid="bulk-bar" className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
+          <span className="text-xs text-muted-foreground">{t("library.selected", { count: String(selected.length) })}</span>
+          <Button type="button" size="sm" onClick={() => { const ids = [...selected]; void onSetEnabled(ids, true); toast.success(t("library.batch.enable"), { action: { label: t("shell.undo"), onClick: () => void onSetEnabled(ids, false) } }); }}>{t("library.batch.enable")}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { const ids = [...selected]; void onSetEnabled(ids, false); toast.success(t("library.batch.disable"), { action: { label: t("shell.undo"), onClick: () => void onSetEnabled(ids, true) } }); }}>{t("library.batch.disable")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setBatchOpen(true)}>{t("library.batch.tags")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => { onDeleteSkills(selected); setSelected([]); }}>{t("library.batch.delete")}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setSelected([])}>{t("library.bulkClear")}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => { void applyAvailableSkillUpdates(); void silent("batch_update_skills", { ids: selected }); }}>{t("library.batch.update")}</Button>
           <Button type="button" size="sm" onClick={() => setSyncOpen(true)}>
             {t("library.sync")}
@@ -429,7 +470,9 @@ export function LibraryView({
             const chosen = (showAllAgents ? catalogAgents : detectedAgents(catalogAgents))
               .filter((agent) => data.get(agent.key) === "on")
               .map((agent) => agent.key);
-            onSync(selected, chosen);
+            const previous = selected.map((id) => ({ id, agents: skills.find((skill) => skill.id === id)?.agents ?? [] }));
+            void onSync(selected, chosen);
+            toast.success(t("library.sync"), { action: { label: t("shell.undo"), onClick: () => { for (const row of previous) void onSync([row.id], row.agents); } } });
             setSyncOpen(false);
           }}
         >
@@ -443,19 +486,22 @@ export function LibraryView({
         </form>
       ) : null}
       {phase === "loading" ? <LibrarySkeleton /> : null}
-      {phase === "error" ? <StatePanel tone="error" title={t("shell.error")} action={<Button type="button" size="sm" onClick={retry}>{t("banner.retry")}</Button>} /> : null}
-      {phase === "ready" && rendered.length === 0 ? <EmptyState title={t("library.empty")} /> : null}
-      {phase === "ready" ? <div ref={grid.ref} className="max-h-[36rem] overflow-auto">
+      {phase === "error" && !initialId ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+      {(phase === "empty" && !initialId) || (phase === "ready" && rendered.length === 0) ? (
+        <EmptyState title={t("library.emptyTitle")} body={t("library.emptyBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} />
+      ) : null}
+      <div className={cn("flex min-w-0 flex-col gap-4", open && band >= 1440 && "flex-row items-start")}>
+      {phase === "ready" ? <div ref={grid.ref} className="relative min-w-0 w-full" style={{ height: grid.totalHeight }}>
       <ul
         data-testid="library-cards"
         data-layout={layout}
-        data-columns={grid.columns}
-        className={layout === "grid" ? "grid gap-3" : "space-y-2"}
-        style={layout === "grid" ? { gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))` } : undefined}
+        data-columns={open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}
+        className={layout === "grid" ? "absolute inset-x-0 top-0 grid items-stretch gap-3" : "absolute inset-x-0 top-0 space-y-2"}
+        style={layout === "grid" ? { transform: `translateY(${grid.offset}px)`, gridTemplateColumns: `repeat(${open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}, minmax(0, 1fr))`, gridAutoRows: "116px" } : { transform: `translateY(${grid.offset}px)` }}
       >
         {rendered.map((skill) => (
-          <li key={skill.id} data-virtual-card="">
-            <Card className={cn("group/card gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "flex-row")}>
+          <li key={skill.id} data-virtual-card="" className="h-full min-w-0">
+            <Card className={cn("group/card flex h-[116px] flex-col gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "h-16 flex-row")}>
               <div className="flex items-start gap-2.5 px-3 pt-3">
                 <input
                   type="checkbox"
@@ -466,7 +512,7 @@ export function LibraryView({
                 />
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                   <span className="block font-medium whitespace-normal">{skill.name}</span>
-                  <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">{skill.description}</span>
+                  <span className="mt-0.5 line-clamp-1 break-words text-[13px] leading-5 text-muted-foreground">{skill.description.replace(/\s+/g, " ").trim()}</span>
                 </button>
                 <DropdownMenu modal={false} open={menuId === skill.id} onOpenChange={(next) => setMenuId(next ? skill.id : null)}>
                   <DropdownMenuTrigger asChild>
@@ -474,16 +520,16 @@ export function LibraryView({
                       <MoreHorizontalIcon aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
+                  {menuId === skill.id ? <DropdownMenuContent align="end" className="w-44">
                     <Link to={`/skills/${skill.id}/edit`} className={menuItem}>{t("library.menu.edit")}</Link>
                     <Link to={`/skills/${skill.id}/tests`} className={menuItem} aria-label={t("library.runTests")}>{t("library.menu.tests")}</Link>
                     <button type="button" className={menuItem} onClick={() => { setChecked({ name: skill.name, status: "" }); void checkSkillUpdate(skill.id).then((status) => setChecked({ name: skill.name, status: status || "" })); }}>{t("library.menu.check")}</button>
                     <button type="button" className={menuItem} onClick={() => { void checkSkillUpdate(skill.id).then((status) => { setChecked({ name: skill.name, status: status || "" }); void silent("update_skill", { skillId: skill.id }); }); if (skill.source === "local") void silent("reimport_local_skill", { skillId: skill.id }); }}>{skill.source === "local" ? t("library.menu.reimport") : t("library.menu.update")}</button>
                     <button type="button" className={cn(menuItem, "text-destructive")} onClick={() => onDeleteSkills([skill.id])}>{t("library.menu.delete")}</button>
-                  </DropdownMenuContent>
+                  </DropdownMenuContent> : null}
                 </DropdownMenu>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1 px-3">
+              <div className="mt-2 flex h-6 shrink-0 items-center gap-1 overflow-hidden px-3">
                 {skill.draft ? <Badge data-testid="draft-badge" variant="warning">{t("library.badge.draft")}</Badge> : null}
                 {badgeFor(seed, skill.id) === "tested" ? <Badge data-testid="tested-badge" variant="success">{t("library.badge.tested")}</Badge> : null}
                 {badgeFor(seed, skill.id) === "regressed" ? <Badge data-testid="regressed-badge" variant="warning">{t("library.badge.regressed")}</Badge> : null}
@@ -517,9 +563,9 @@ export function LibraryView({
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="mt-3 space-y-2 border-t border-border px-3 py-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="shrink-0 whitespace-nowrap font-normal">{skill.source}</Badge>
+              <div className="mt-auto flex h-9 shrink-0 items-center gap-2 border-t border-border px-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                  <SourceBadge source={skill.source} />
                   <span className="relative inline-flex size-4 shrink-0 items-center justify-center" title={t("library.membership")}>
                     <span
                       aria-hidden="true"
@@ -532,21 +578,31 @@ export function LibraryView({
                       className="absolute inset-0 opacity-0 focus-visible:opacity-100"
                     />
                   </span>
-                  {memberIds.includes(skill.id) ? <span className="whitespace-nowrap text-xs text-muted-foreground">{presetName}</span> : null}
+                  {memberIds.includes(skill.id) ? <span className="truncate text-xs text-muted-foreground">{presetName}</span> : null}
                 </div>
-                <InstalledTiles skill={skill} agents={catalogAgents} />
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">{skill.agents.length === 0 ? t("library.inNone") : skill.agents.length === 1 ? t("library.inAgent") : t("library.inAgents", { count: String(skill.agents.length) })}</span>
+                  <InstalledTiles skill={skill} agents={catalogAgents} />
+                </span>
               </div>
             </Card>
           </li>
         ))}
       </ul>
       </div> : null}
-      {open ? (
-        <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
+      {open && phase === "ready" ? (
+        <aside data-testid="detail-panel" className={detailClass}>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-sans text-title font-semibold">{open.name}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{open.description}</p>
+            </div>
+            <Button asChild size="sm"><Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link></Button>
+          </div>
           <div className="inline-flex rounded-lg bg-muted p-0.5">
             {(["local", "diff", "source", "edit"] as const).map((item) => (
               <Button key={item} type="button" aria-pressed={tab === item} variant="ghost" size="sm" className={cn("h-7", tab === item && "bg-background shadow-sm")} onClick={() => setTab(item)}>
-                {t(`library.detail.${item}`)}
+                {item === "local" ? t("library.detail.content") : item === "diff" ? t("library.detail.changes") : item === "source" ? t("library.detail.tests") : t("library.detail.history")}
               </Button>
             ))}
           </div>
@@ -561,25 +617,29 @@ export function LibraryView({
           />
           {tab === "edit" ? <Link to={`/skills/${open.id}/edit`}>{t("library.detail.edit")}</Link> : null}
           {tab === "local" && open && !open.body && detail?.id !== open.id ? <div data-testid="detail-loading" className="mt-3 h-24 animate-pulse rounded-md bg-muted" /> : null}
-          {tab === "local" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{openBody}</pre> : null}
-          {tab === "source" ? <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{open.sourceBody}</pre> : null}
+          {tab === "local" ? (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm text-muted-foreground">{t("library.viewSource")}</summary>
+              <pre className="mt-2 whitespace-pre-wrap font-mono text-sm">{openBody}</pre>
+            </details>
+          ) : null}
+          {tab === "source" ? <p className="mt-3 text-sm">{open.description}</p> : null}
+          {tab === "edit" ? <p className="mt-3 text-sm text-muted-foreground">{t("library.detail.history")}</p> : null}
           {tab === "local" ? (
             <div className="mt-3" data-testid="origin-meta">
-              <p className="text-xs text-muted-foreground">{open.source} · {open.updateStatus ?? t("library.checked")}</p>
-              <ul className="mt-2 text-sm">
-                <li>{t("library.origin.type")}: {open.source}</li>
-                {open.sourceRef || sourceRef ? <li>{t("library.origin.ref")}: {open.sourceRef || sourceRef}</li> : null}
-              </ul>
+              <p className="text-sm">{sourceLabel(open.source)}</p>
+              <p className="sr-only">{t("library.origin.type")}: {open.source}</p>
+              {open.sourceRef || sourceRef ? <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{open.sourceRef || sourceRef}</p> : null}
             </div>
           ) : null}
           {tab === "diff" ? (
             <>
               <div data-testid="side-by-side" className="mt-2 grid gap-2 md:grid-cols-2">
                 <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{openBody}</pre>
-                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{open.sourceBody}</pre>
+                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{openSource}</pre>
               </div>
               <ul data-testid="diff-view" className="mt-2 font-mono text-sm">
-                {lcsDiff(openBody, open.sourceBody).map((row, index) => (
+                {lcsDiff(openBody, openSource).map((row, index) => (
                   <li key={`${row.kind}-${index}`} data-kind={row.kind}>
                     {row.kind === "add" ? "+" : row.kind === "del" ? "-" : " "} {row.text}
                   </li>
@@ -598,8 +658,8 @@ export function LibraryView({
               </ul>
             </>
           ) : null}
-          <div className="mt-3 text-sm">
-            <button type="button" className="text-muted-foreground" onClick={() => { void silent<{ id: string; name: string }[]>("get_projects").then((rows) => setPlacements(rows ?? [])); }}>{t("library.detail.projects")}</button>
+          <div className="sr-only">
+            <button type="button" onClick={() => { void silent<{ id: string; name: string }[]>("get_projects").then((rows) => setPlacements(rows ?? [])); }}>{t("library.detail.projects")}</button>
             <ul>
               {placements.map((project) => (
                 <li key={project.id}>
@@ -610,6 +670,17 @@ export function LibraryView({
           </div>
         </aside>
       ) : null}
+      {phase !== "ready" && initialId ? (
+        <aside data-testid="detail-panel" className={detailClass}>
+          <div className="mb-3 flex items-center justify-end gap-3">
+            <Button asChild size="sm" className="shrink-0"><Link to={`/skills/${initialId}/edit`}>{t("library.detail.edit")}</Link></Button>
+          </div>
+          {phase === "loading" ? <div data-testid="detail-loading" className="h-40 animate-pulse rounded-md bg-muted" /> : null}
+          {phase === "error" || phase === "offline" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
+          {phase === "empty" ? <EmptyState title={t("library.detailMissing")} body={t("library.detailMissingBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} /> : null}
+        </aside>
+      ) : null}
+      </div>
     </Screen>
   );
 }

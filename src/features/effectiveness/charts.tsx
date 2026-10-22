@@ -54,7 +54,7 @@ export function RadarFigure({ report }: { report: EffectivenessReport }) {
   );
   const primary = polygon(axes, PLOT);
   const overlayShape = polygon(overlay, PLOT);
-  const caption = t("effect.caption.radar", { axis: report.weakest_axis });
+  const caption = t("effect.caption.radar", { axis: shortAxis(report.weakest_axis) });
   return (
     <figure className="flex flex-col gap-3">
       <svg
@@ -123,7 +123,7 @@ export function RadarFigure({ report }: { report: EffectivenessReport }) {
   );
 }
 
-export function AxisTable({ report }: { report: EffectivenessReport }) {
+export function AxisTable({ report, showOverlay = false }: { report: EffectivenessReport; showOverlay?: boolean }) {
   const overlay = report.overlay?.axes ?? [];
   return (
     <div className="overflow-hidden rounded-md border border-border">
@@ -133,7 +133,7 @@ export function AxisTable({ report }: { report: EffectivenessReport }) {
           <TableRow>
             <TableHead>{t("effect.radar")}</TableHead>
             <TableHead className="text-right">{t("effect.series.skill")}</TableHead>
-            {report.overlay?.name ? <TableHead className="text-right">{report.overlay.name}</TableHead> : null}
+            {showOverlay && report.overlay?.name ? <TableHead className="text-right">{report.overlay.name}</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -141,7 +141,7 @@ export function AxisTable({ report }: { report: EffectivenessReport }) {
             const other = overlay[index]?.value;
             return (
               <TableRow key={axis.name} className="odd:bg-muted/30">
-                <TableCell className="whitespace-normal font-medium">{axis.name}</TableCell>
+                <TableCell className="whitespace-normal font-medium">{shortAxis(axis.name)}</TableCell>
                 <TableCell>
                   <span className="flex items-center justify-end gap-3">
                     <span className="hidden h-2 w-24 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">
@@ -150,7 +150,7 @@ export function AxisTable({ report }: { report: EffectivenessReport }) {
                     <span className="w-8 text-right font-mono tabular-nums">{axis.value == null ? "—" : axis.value}</span>
                   </span>
                 </TableCell>
-                {report.overlay?.name ? (
+                {showOverlay && report.overlay?.name ? (
                   <TableCell>
                     <span className="flex items-center justify-end gap-3">
                       <span className="hidden h-2 w-24 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">

@@ -12,9 +12,14 @@ export function ConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <div role="dialog" aria-label={label} className="mt-3 rounded-md border border-border p-3">
-      {detail ? <p>{detail}</p> : null}
-      <Button type="button" size="sm" onClick={onConfirm}>{confirmLabel}</Button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div role="dialog" aria-label={label} className="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-lg">
+        <h2 className="font-sans text-title font-semibold">{label}</h2>
+        {detail ? <p className="mt-1 text-sm text-muted-foreground">{detail}</p> : null}
+        <div className="mt-4 flex justify-end">
+          <Button type="button" size="sm" onClick={onConfirm}>{confirmLabel}</Button>
+        </div>
+      </div>
     </div>
   );
 }

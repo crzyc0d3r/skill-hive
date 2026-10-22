@@ -1,5 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { SkillCard } from "@/features/library/model";
+import { writeLibraryIndex } from "@/lib/library-cache";
 
 export const FILES_CHANGED = "app-files-changed";
 export const SKILLS_AUTO_UPDATED = "skills-auto-updated";
@@ -17,6 +19,11 @@ export async function bindFileWatcher(queryClient: QueryClient): Promise<Unliste
       listen(FILES_CHANGED, refresh),
       listen(SKILLS_AUTO_UPDATED, refresh),
       listen(BACKUP_AUTO_COMPLETED, refresh),
+      listen<SkillCard[]>("library-index", (event) => {
+        if (!Array.isArray(event.payload) || event.payload.length === 0) return;
+        const rows = writeLibraryIndex(event.payload);
+        queryClient.setQueryData(SKILLS_KEY, rows);
+      }),
     ]);
     return () => {
       for (const stop of stops) stop();

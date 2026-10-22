@@ -244,8 +244,8 @@ try {
   if (!attached) throw new Error(`sidebar did not appear\n${last}`);
   console.log(`attached ${last}`);
 
-  async function find(selector, using = "css selector") {
-    const deadline = Date.now() + 10000;
+  async function find(selector, using = "css selector", timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
     let last = `missing ${selector}`;
     while (Date.now() < deadline) {
       try {
@@ -266,7 +266,8 @@ try {
       .replace(/\s+/g, " ");
     const bodyAt = html.indexOf("<body");
     const slice = (bodyAt >= 0 ? html.slice(bodyAt) : html).slice(0, 1200);
-    throw new Error(`${selector} not found\n${last}\nurl ${url.value}\nsource ${slice}`);
+    const alert = html.match(/role="alert"[^>]*>([^<]+)/)?.[1]?.trim();
+    throw new Error(`${selector} not found${alert ? `\nalert ${alert}` : ""}\n${last}\nurl ${url.value}\nsource ${slice}`);
   }
 
   async function dismissToasts() {
@@ -286,23 +287,61 @@ try {
     }
   }
   async function clickFound(id) {
+    await call("POST", `${prefix}/execute/sync`, {
+      script: "try { arguments[0].scrollIntoView({block:'center', inline:'nearest'}); } catch (e) {}",
+      args: [{ "element-6066-11e4-a52e-4f735466cecf": id, ELEMENT: id }],
+    }).catch(() => {});
     await call("POST", `${prefix}/element/${id}/click`, {});
   }
-  async function click(selector) {
+  async function domClick(selector, using = "css selector") {
+    const script = using === "xpath"
+      ? `const node = document.evaluate(arguments[0], document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+         if (!node) return "missing";
+         node.scrollIntoView({block:"center", inline:"nearest"});
+         node.click();
+         return "clicked";`
+      : `const node = document.querySelector(arguments[0]);
+         if (!node) return "missing";
+         node.scrollIntoView({block:"center", inline:"nearest"});
+         node.click();
+         return "clicked";`;
+    const result = await call("POST", `${prefix}/execute/sync`, { script, args: [selector] });
+    if (result?.value !== "clicked") throw new Error(`dom click failed for ${selector}: ${JSON.stringify(result)}`);
+  }
+  async function click(selector, timeoutMs = 10000) {
     let last;
     for (let attempt = 1; attempt <= 4; attempt += 1) {
-      const id = await find(selector);
+      const id = await find(selector, "css selector", timeoutMs);
       try {
         await clickFound(id);
         return;
       } catch (err) {
         last = err;
         const message = String(err?.message ?? err);
-        if (message.includes("click intercepted")) await dismissToasts();
-        else if (!message.includes("stale element")) throw err;
+        if (message.includes("click intercepted") || message.includes("element not interactable")) {
+          await dismissToasts();
+          await domClick(selector);
+          return;
+        }
+        if (!message.includes("stale element")) throw err;
       }
     }
     throw last;
+  }
+
+  // The loading screen renders the same test id disabled and without a
+  // handler. Wait until the ready button can start a snapshot.
+  async function clickBackupNow() {
+    const selector = "[data-testid=backup-now]:not([disabled])";
+    await find(selector, "css selector", 30000);
+    await click(selector);
+  }
+
+  // Restore lives in the snapshot row menu, and the row appears only after
+  // git backup finishes. Windows CI has needed more than the default 10s.
+  async function openBackupRestore() {
+    await click("[data-testid=backup-row-menu]", 30000);
+    await find("[data-testid=backup-restore]");
   }
 
   await find("[data-testid=sidebar]");
@@ -319,7 +358,8 @@ try {
   await click("[data-testid=tab-leaderboard]");
   await find("[data-testid=marketplace]");
   await click("a[href='/backup']");
-  await click("[data-testid=backup-now]");
+  await clickBackupNow();
+  await openBackupRestore();
   await click("[data-testid=backup-restore]");
   await find("[data-testid=backup]");
 
@@ -354,7 +394,9 @@ try {
   }
   async function clickText(text, last = false) {
     const quoted = JSON.stringify(text);
-    const expression = last ? `(//button[normalize-space()=${quoted}])[last()]` : `//button[normalize-space()=${quoted}]`;
+    const expression = last
+      ? `(//button[normalize-space()=${quoted} and not(@disabled)])[last()]`
+      : `//button[normalize-space()=${quoted} and not(@disabled)]`;
     let lastError;
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const id = await find(expression, "xpath");
@@ -364,8 +406,12 @@ try {
       } catch (err) {
         lastError = err;
         const message = String(err?.message ?? err);
-        if (message.includes("click intercepted")) await dismissToasts();
-        else if (!message.includes("stale element")) throw err;
+        if (message.includes("click intercepted") || message.includes("element not interactable")) {
+          await dismissToasts();
+          await domClick(expression, "xpath");
+          return;
+        }
+        if (!message.includes("stale element")) throw err;
       }
     }
     throw lastError;
@@ -487,16 +533,25 @@ try {
 
   await click("a[href='/settings']");
   await find("[data-testid=settings]");
-  const agentTabs = await call("POST", `${prefix}/elements`, { using: "css selector", value: 'button[role="tab"]' });
-  const tabIds = agentTabs.value ?? [];
-  let agentsTab = null;
-  for (const entry of tabIds) {
-    const id = entry["element-6066-11e4-a52e-4f735466cecf"] ?? Object.values(entry)[0];
-    const text = await call("GET", `${prefix}/element/${id}/text`);
-    if (String(text.value ?? "").trim() === "Agents") agentsTab = id;
+  const openedAgents = await call("POST", `${prefix}/execute/sync`, {
+    script: `const select = document.querySelector('select[aria-label="Section"]');
+      const selectVisible = Boolean(select && select.getClientRects().length);
+      if (selectVisible) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;
+        setter.call(select, "agents");
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        return "select";
+      }
+      const agents = [...document.querySelectorAll('button[role="tab"]')].find((node) => node.textContent.trim() === "Agents");
+      if (!agents) return "missing";
+      agents.click();
+      return "tab";`,
+    args: [],
+  });
+  if (openedAgents?.value !== "select" && openedAgents?.value !== "tab") {
+    throw new Error(`Agents settings section was not found (${JSON.stringify(openedAgents)})`);
   }
-  if (!agentsTab) throw new Error("Agents settings tab was not found");
-  await call("POST", `${prefix}/element/${agentsTab}/click`, {});
+  await clickText("Add agent");
   await typeInto('input[aria-label="Agent name"]', "Field Notes");
   await typeInto('input[aria-label="Agent path"]', path.join(home, ".field-notes", "skills"));
   await clickText("New Agent");
@@ -524,8 +579,8 @@ try {
   if (!skillFile) throw new Error("seeded-git SKILL.md was not copied");
   const original = readFileSync(skillFile, "utf8");
   await click("a[href='/backup']");
-  await click("[data-testid=backup-now]");
-  await find("[data-testid=backup-restore]");
+  await clickBackupNow();
+  await openBackupRestore();
   writeFileSync(skillFile, `${original}\nchanged\n`);
   await click("[data-testid=backup-restore]");
   const restoreDeadline = Date.now() + 15000;
@@ -641,7 +696,7 @@ conn.commit()
   }));
   await openPath("/skills/warnings/history");
   await find("[data-testid=history]");
-  await clickText("Baseline");
+  await clickText("Save as baseline");
   await waitUntil("history baseline", () => {
     const history = readFileSync(path.join(authoring, "history", "baseline", "history.json"), "utf8");
     return history.includes("measured-1") && history.includes("0.81") && history.includes("\"is_current_best\": true");
@@ -680,6 +735,7 @@ conn.commit()
       await openPath("/project/fixture");
       await find("[data-testid=project]");
       await click("[data-testid=link-project]");
+      await click('button[aria-label="More notes"]');
       await clickText("Pull center");
       projectError = undefined;
       break;

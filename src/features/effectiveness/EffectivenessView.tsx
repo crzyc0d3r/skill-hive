@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Panel, Screen, Stat, StatePanel } from "@/components/chrome";
+import { DeltaBar, VerdictChip } from "@/components/app/VerdictChip";
+import { EmptyState, ErrorState, Panel, Screen, StatePanel } from "@/components/chrome";
+import { scoreDelta } from "@/lib/verdict";
 import { EffectivenessSkeleton } from "@/components/skeletons";
 import { t } from "@/lib/i18n";
 import { demoEnabled } from "@/lib/demo";
 import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
-import { SAMPLE_REPORT, type EffectivenessReport } from "@/features/effectiveness/model";
+import { SAMPLE_REPORT, shortAxis, type EffectivenessReport } from "@/features/effectiveness/model";
 import { AxisTable, BisectList, ConflictMatrix, GradeMark, InfluenceMap, Leaderboard, MapTable, RadarFigure, WarningTable } from "@/features/effectiveness/charts";
 
 const VERDICTS = ["hijacked", "cofired", "none", "strong", "value", "install", "healthy"] as const;
@@ -120,31 +122,72 @@ export function EffectivenessView() {
         testId="effectiveness"
         className="min-h-[calc(100dvh-8.5rem)]"
         title={t("effect.title")}
-        actions={<Button type="button" size="sm" disabled={phase === "loading"} aria-busy={phase === "loading"}>{t("effect.show")}</Button>}
+        actions={phase === "loading" ? <Button type="button" size="sm" disabled aria-busy>{t("effect.runAgain")}</Button> : undefined}
       >
-        {phase === "loading" ? <EffectivenessSkeleton /> : <StatePanel tone={phase === "ready" ? "empty" : phase} title={phaseCopy(phase === "ready" ? "empty" : phase)} action={retry} />}
+        {phase === "loading" ? <EffectivenessSkeleton /> : phase === "error" ? <ErrorState title={t("effect.error")} detail={t("shell.renderError")} onRetry={() => setAttempt((value) => value + 1)} /> : phase === "ready" || phase === "empty" ? <EmptyState title={phaseCopy("empty")} action={<Button type="button" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>} /> : <StatePanel tone={phase} title={phaseCopy(phase)} action={retry} />}
       </Screen>
     );
   }
 
   const code = verdictKey(report.verdict);
+  const scores = scoreDelta(report.axes);
   return (
     <Screen
       testId="effectiveness"
       className="min-h-[calc(100dvh-8.5rem)]"
       title={t("effect.title")}
-      lede={open ? undefined : verdictText(code)}
       actions={
-        <Button type="button" size="sm" aria-busy={refreshing} disabled={refreshing} onClick={() => { if (!refreshing) setOpen((value) => !value); }}>
-          {open ? t("effect.hide") : t("effect.show")}
-        </Button>
+        <>
+          <Button type="button" size="sm" aria-busy={refreshing} disabled={refreshing} onClick={() => setAttempt((value) => value + 1)}>{t("effect.runAgain")}</Button>
+          <Button type="button" variant="outline" size="sm" aria-busy={refreshing} disabled={refreshing} onClick={() => { if (!refreshing) setOpen((value) => !value); }}>
+            {open ? t("effect.hide") : t("effect.show")}
+          </Button>
+        </>
       }
     >
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm" data-testid="verdict-hero">
+        <VerdictChip delta={scores.delta} large />
+        <p className="mt-2 text-sm">{t("effect.deltaLine", { delta: String(Math.round(scores.delta ?? 0)) })}</p>
+        <div className="mt-3 max-w-xl"><DeltaBar delta={scores.delta} /></div>
+        {scores.withScore !== null && scores.withoutScore !== null ? (
+          <p className="mt-2 text-xs text-muted-foreground">{t("verdict.numbers", { with: String(Math.round(scores.withScore)), without: String(Math.round(scores.withoutScore)) })} · {report.grade} ({report.grade_score})</p>
+        ) : null}
+      </div>
+      <Panel title={t("effect.goingOn")}>
+        <p className="text-sm" data-testid="effect-verdict">{verdictText(code)}</p>
+        <p className="mt-1 text-sm text-muted-foreground" data-testid="effect-action">{actionText(code)}</p>
+      </Panel>
+      <Panel title={t("effect.grade")}>
+        <div className="flex flex-wrap items-center gap-6">
+          <GradeMark letter={report.grade} score={report.grade_score} hero testId="effect-grade" />
+          <div className="min-w-0 max-w-prose flex-1">
+            <p className="text-sm font-medium">{verdictText(code)}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{actionText(code)}</p>
+          </div>
+        </div>
+      </Panel>
+      <Panel title={t("effect.radar")} className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          {open ? <p className="text-sm text-muted-foreground">{t("effect.series.skill")}</p> : <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: shortAxis(report.weakest_axis) })}</p>}
+          <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById("effect-radar-table")?.focus()}>
+            {t("effect.showTable")}
+          </Button>
+        </div>
+        <AxisTable report={report} showOverlay={open} />
+      </Panel>
+      <details className="rounded-lg border border-border bg-card px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium">{t("effect.advanced")}</summary>
+        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+          <p>{t("effect.explain.overlay")}</p>
+          <p>{t("effect.explain.board")}</p>
+          <p>{t("effect.explain.map")}</p>
+        </div>
+      </details>
       {open ? (
         <>
           <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.7fr)]">
             <Panel title={t("effect.radar")} className="min-w-0">
-              <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>
+              <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: shortAxis(report.weakest_axis) })}</p>
               <div className="mt-3">
                 <RadarFigure report={report} />
               </div>
@@ -152,8 +195,8 @@ export function EffectivenessView() {
             <div className="flex min-w-0 flex-col gap-3">
               <Panel>
                 <GradeMark letter={report.grade} score={report.grade_score} testId="effect-grade" />
-                <p className="mt-3 text-sm" data-testid="effect-verdict">{verdictText(code)}</p>
-                <p className="mt-1 text-sm text-muted-foreground" data-testid="effect-action">{actionText(code)}</p>
+                <p className="mt-3 text-sm">{verdictText(code)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{actionText(code)}</p>
               </Panel>
               <Panel title={t("effect.map")}>
                 <p className="mb-2 text-sm text-muted-foreground">{t("effect.caption.map", { arrow: report.thickest_arrow })}</p>
@@ -185,31 +228,7 @@ export function EffectivenessView() {
             <MapTable report={report} />
           </Panel>
         </>
-      ) : (
-        <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
-          <Panel className="h-full">
-            <GradeMark letter={report.grade} score={report.grade_score} hero testId="effect-grade" />
-            <p className="mt-4 text-sm" data-testid="effect-verdict">{verdictText(code)}</p>
-            <p className="mt-2 text-sm text-muted-foreground" data-testid="effect-action">{actionText(code)}</p>
-            {report.omitted_axes?.length ? <p className="mt-3 text-xs text-muted-foreground">{t("effect.omitted", { axes: report.omitted_axes.join(", ") })}</p> : null}
-          </Panel>
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label={t("effect.radar")} value={report.axes.length} hint={report.weakest_axis} />
-            <Stat label={t("effect.board")} value={report.leader_name} hint={report.leader_factor} />
-            <Stat label={t("effect.overlay")} value={report.overlay?.name ?? "—"} />
-            <Stat label={t("effect.map")} value={report.influence?.edges.length ?? 0} hint={report.thickest_arrow} />
-          </div>
-        </div>
-      )}
-      <Panel title={t("effect.radar")} className="min-w-0">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {open ? <p className="text-sm text-muted-foreground">{t("effect.series.skill")}</p> : <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>}
-          <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById("effect-radar-table")?.focus()}>
-            {t("effect.showTable")}
-          </Button>
-        </div>
-        <AxisTable report={report} />
-      </Panel>
+      ) : null}
     </Screen>
   );
 }

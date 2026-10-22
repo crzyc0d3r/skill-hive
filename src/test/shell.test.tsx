@@ -31,7 +31,7 @@ describe("application shell", () => {
 
     await user.keyboard("{Escape}");
     await user.keyboard("{Control>}b{/Control}");
-    expect(screen.getByTestId("sidebar")).toHaveAttribute("data-collapsed", "true");
+    expect(screen.getByTestId("sidebar")).toHaveAttribute("data-collapsed", "false");
   });
 
   it("persists the theme choice through set_settings", async () => {

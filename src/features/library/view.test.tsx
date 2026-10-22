@@ -8,7 +8,7 @@ describe("library", () => {
     const user = userEvent.setup();
     renderAt("/my-skills");
     expect(await screen.findByText("research-notes")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "local" }));
+    await user.click(screen.getByRole("button", { name: "Local folder" }));
     expect(screen.queryByText("review-diff")).not.toBeInTheDocument();
     await act(async () => {
       screen.getByRole("button", { name: "research" }).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
@@ -19,7 +19,7 @@ describe("library", () => {
     await user.click(screen.getByRole("button", { name: "Rename tag" }));
     expect(screen.getByRole("button", { name: "sources" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "local" }));
+    await user.click(screen.getByRole("button", { name: "Local folder" }));
     await user.click(screen.getByRole("checkbox", { name: "Select research-notes" }));
     await user.click(screen.getByRole("checkbox", { name: "Select review-diff" }));
     await user.click(screen.getByRole("button", { name: "Sync to agents" }));
@@ -28,7 +28,7 @@ describe("library", () => {
     expect(screen.getByTestId("sync-dots-skill-research").querySelector("[data-filled='true']")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /research-notes/ }));
-    await user.click(screen.getByRole("button", { name: "Diff" }));
+    await user.click(screen.getByRole("button", { name: "Changes" }));
     expect(screen.getByTestId("diff-view")).toHaveTextContent("Source body");
   });
 
@@ -76,7 +76,7 @@ describe("library", () => {
     await screen.findByText("plain");
     await user.click(screen.getByRole("checkbox", { name: "Select plain" }));
     await user.click(screen.getByRole("button", { name: "Enable" }));
-    await user.click(screen.getByRole("button", { name: "Available" }));
+    await user.click(screen.getByRole("button", { name: "Not in use" }));
     expect(screen.queryByText("plain")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "All" }));
     await user.click(screen.getByRole("checkbox", { name: "Select plain" }));
@@ -91,7 +91,7 @@ describe("library", () => {
     await user.click(addChoices[addChoices.length - 1]);
     expect(screen.getByRole("button", { name: "Remove Claude Code" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /review-diff/ }));
-    await user.click(screen.getByRole("button", { name: "Diff" }));
+    await user.click(screen.getByRole("button", { name: "Changes" }));
     expect(screen.getByTestId("file-diff")).toHaveTextContent("SKILL.md");
     expect(screen.getByTestId("file-diff")).toHaveTextContent("right");
     await user.click(screen.getByRole("checkbox", { name: "Select plain" }));

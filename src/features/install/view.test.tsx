@@ -7,10 +7,10 @@ describe("install", () => {
     installIpc();
     const user = userEvent.setup();
     const leaderboard = renderAt("/install?tab=leaderboard");
-    expect(await screen.findByRole("tab", { name: "Leaderboard" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("tab", { name: "Marketplace" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("marketplace")).toBeInTheDocument();
     expect(screen.getByLabelText("Search marketplace")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Local Install" }));
+    await user.click(screen.getByRole("tab", { name: "From a folder" }));
     await user.type(screen.getByLabelText("Select folder"), "/path/to/demo");
     await user.click(screen.getByRole("button", { name: "Install local" }));
     expect(screen.getByText("Imported demo")).toBeInTheDocument();

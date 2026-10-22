@@ -18,7 +18,8 @@ it("backs up and restores a snapshot", async () => {
     renderAt("/backup");
     expect(await screen.findByText("First-run restore is ready when a remote exists.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back Up Now" }));
-    await user.click(screen.getByRole("button", { name: "Restore" }));
+    await user.click(screen.getByRole("button", { name: /Snapshot actions/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Restore" }));
     expect(screen.getByText(/safety-snap-1/)).toBeInTheDocument();
   });
 });
