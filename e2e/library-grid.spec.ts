@@ -148,11 +148,11 @@ for (const theme of ["light", "dark"] as const) {
     await prepare(page, theme, 1100, { "skill-hive-preview-agents": "1" });
     await page.goto("/install?tab=scan");
     const scan = page.getByTestId("install");
-    await expect(scan.getByText("Found in 3 locations")).toBeVisible();
+    await expect(scan.getByText("~/.claude/skills/autopilot, ~/.codex/skills/autopilot, ~/.cursor/skills/autopilot")).toBeVisible();
     await expect(page.getByRole("button", { name: "claude_code" })).toHaveCount(0);
-    await expect(scan.getByText("Claude Code")).toBeVisible();
-    await expect(scan.getByText("Codex")).toBeVisible();
-    await expect(scan.getByText("Cursor")).toBeVisible();
+    await expect(scan.getByText("Claude Code", { exact: true })).toBeVisible();
+    await expect(scan.getByText("Codex", { exact: true })).toBeVisible();
+    await expect(scan.getByText("Cursor", { exact: true })).toBeVisible();
     await page.screenshot({
       path: `docs/parity/screenshots/${theme}/install-scan-grouped.png`,
       fullPage: false,

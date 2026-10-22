@@ -533,6 +533,7 @@ try {
   }
   if (!agentsTab) throw new Error("Agents settings tab was not found");
   await call("POST", `${prefix}/element/${agentsTab}/click`, {});
+  await clickText("Add agent");
   await typeInto('input[aria-label="Agent name"]', "Field Notes");
   await typeInto('input[aria-label="Agent path"]', path.join(home, ".field-notes", "skills"));
   await clickText("New Agent");
@@ -716,6 +717,7 @@ conn.commit()
       await openPath("/project/fixture");
       await find("[data-testid=project]");
       await click("[data-testid=link-project]");
+      await click('button[aria-label="More notes"]');
       await clickText("Pull center");
       projectError = undefined;
       break;

@@ -16,6 +16,7 @@ test("held-back removal then backup restore", async ({ page }) => {
   await expect(page.getByText("Update All")).toBeVisible();
   await page.goto("/backup");
   await page.getByRole("button", { name: "Back Up Now" }).click();
-  await page.getByRole("button", { name: "Restore" }).first().click();
+  await page.getByRole("button", { name: /Snapshot actions/ }).first().click();
+  await page.getByRole("menuitem", { name: "Restore" }).click();
   await expect(page.getByText(/safety-snap-1/)).toBeVisible();
 });
