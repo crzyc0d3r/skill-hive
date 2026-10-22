@@ -386,7 +386,9 @@ try {
   }
   async function clickText(text, last = false) {
     const quoted = JSON.stringify(text);
-    const expression = last ? `(//button[normalize-space()=${quoted}])[last()]` : `//button[normalize-space()=${quoted}]`;
+    const expression = last
+      ? `(//button[normalize-space()=${quoted} and not(@disabled)])[last()]`
+      : `//button[normalize-space()=${quoted} and not(@disabled)]`;
     let lastError;
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const id = await find(expression, "xpath");
@@ -678,7 +680,7 @@ conn.commit()
   }));
   await openPath("/skills/warnings/history");
   await find("[data-testid=history]");
-  await clickText("Baseline");
+  await clickText("Save as baseline");
   await waitUntil("history baseline", () => {
     const history = readFileSync(path.join(authoring, "history", "baseline", "history.json"), "utf8");
     return history.includes("measured-1") && history.includes("0.81") && history.includes("\"is_current_best\": true");
