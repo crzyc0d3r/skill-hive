@@ -186,7 +186,7 @@ describe("ui parity invokes", () => {
     await user.click(screen.getByRole("button", { name: "More billing" }));
     await user.click(screen.getByRole("menuitem", { name: "Update center" }));
     expect(calls("update_project_skill_to_center").some((entry) => entry.args.id === "field" && entry.args.name === "billing")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Codex" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Agents" }), "codex");
     expect(calls("set_settings").some((entry) => entry.args.key === "project_last_agents" && String(entry.args.value).includes("codex"))).toBe(true);
     await user.click(screen.getByRole("button", { name: "More billing" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete local skill" }));

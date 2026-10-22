@@ -79,13 +79,13 @@ export function CompareView() {
                 <td className="py-2">{t("suite.withSkill")}</td>
                 <td>75%</td>
                 <td>63%</td>
-                <td><VerdictChip delta={withDelta} /></td>
+                <td className="tabular-nums"><span className="mr-2">+{withDelta}</span><VerdictChip delta={withDelta} /></td>
               </tr>
               <tr className="border-t border-border text-muted-foreground">
                 <td className="py-2">{t("history.rate")}</td>
                 <td>80%</td>
                 <td>78%</td>
-                <td><VerdictChip delta={rateDelta} /></td>
+                <td className="tabular-nums"><span className="mr-2">+{rateDelta}</span><VerdictChip delta={rateDelta} /></td>
               </tr>
             </tbody>
           </table>

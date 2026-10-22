@@ -175,7 +175,7 @@ export function BackupView() {
               <th className="px-3 py-2">{t("history.date")}</th>
               <th className="px-3 py-2">{t("backup.size")}</th>
               <th className="px-3 py-2">{t("backup.scope.skills")}</th>
-              <th className="px-3 py-2 text-right">{t("backup.restore")}</th>
+              <th className="px-3 py-2 text-right"><span className="sr-only">{t("backup.rowMenu")}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -311,7 +311,7 @@ export function BackupView() {
               onBlur={() => { if (device.trim()) void backupSetDeviceName(device.trim()); }}
             />
           </label>
-          <p className="text-sm text-muted-foreground"><span className="block text-xs">{t("backup.remote")}</span>{remote}</p>
+          {remote ? <p className="text-sm text-muted-foreground">{remote}</p> : null}
           <form
             className="space-y-2 text-sm"
             data-testid="first-run-restore"
@@ -324,7 +324,7 @@ export function BackupView() {
           >
             <p>{t("backup.firstRun")}</p>
             <label className="block">
-              <span className="mb-1.5 block text-muted-foreground">{t("backup.remote")}</span>
+              <span className="mb-1.5 block text-muted-foreground">{t("backup.address")}</span>
               <Input name="remote" aria-label="Restore remote" className="h-8 w-full" />
             </label>
             <Button type="submit" variant="outline" size="sm">Use remote library</Button>

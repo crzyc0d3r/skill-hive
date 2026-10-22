@@ -295,7 +295,7 @@ export function WorkspaceView({
             </Button>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">{t("workspace.centerChangedHelp")}</p>
+        <p className="mt-3 mb-4 max-w-prose text-sm text-muted-foreground">{t("workspace.centerChangedHelp")}</p>
         <div className="flex flex-wrap items-center gap-2">
           <SearchField aria-label={t("workspace.search")} data-search value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("workspace.search")} />
         </div>

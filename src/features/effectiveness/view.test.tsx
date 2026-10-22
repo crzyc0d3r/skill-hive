@@ -20,7 +20,7 @@ describe("effectiveness", () => {
     expect(screen.getByTestId("effect-verdict")).toHaveTextContent("Other skills are answering");
     expect(screen.queryByTestId("effect-map")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Show the charts" }));
-    expect(screen.getByText("What this means: the weakest axis is Survival in a crowded library.")).toBeInTheDocument();
+    expect(screen.getByText("What this means: the weakest axis is Holds up.")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Effectiveness radar" })).toBeInTheDocument();
     const map = screen.getByTestId("effect-map");
     map.focus();

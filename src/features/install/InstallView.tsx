@@ -258,13 +258,15 @@ export function InstallView({
                     <input type="checkbox" aria-label={`${t("install.git.select", { name: row.name })}`} checked={checked} disabled={Boolean(row.alreadyManaged)} onChange={() => setPicked((current) => current.includes(row.name) ? current.filter((item) => item !== row.name) : [...current, row.name])} />
                   </td>
                   <td className="px-3 py-2">
-                    <span className="block font-medium">{row.name}</span>
-                    <span className="mt-1 flex flex-wrap items-center gap-1">
-                      {row.tools.slice(0, 4).map((tool) => <AgentBadge key={tool} agent={tool} />)}
-                      <span className="text-xs text-muted-foreground">{status}</span>
-                    </span>
+                    <span className="font-medium">{row.name}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{status}</span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{row.paths.join(", ")}</td>
+                  <td className="px-3 py-2">
+                    <span className="flex flex-wrap items-center gap-1">
+                      {row.tools.slice(0, 4).map((tool) => <AgentBadge key={tool} agent={tool} />)}
+                    </span>
+                    {row.differs ? <p className="mt-1 font-mono text-xs text-muted-foreground">{row.paths.join(", ")}</p> : null}
+                  </td>
                   <td className="sr-only">
                     <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} />
                     <Button type="button" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>

@@ -8,7 +8,7 @@ import { EffectivenessSkeleton } from "@/components/skeletons";
 import { t } from "@/lib/i18n";
 import { demoEnabled } from "@/lib/demo";
 import { previewPhase, useOnline, type ViewPhase } from "@/lib/view-state";
-import { SAMPLE_REPORT, type EffectivenessReport } from "@/features/effectiveness/model";
+import { SAMPLE_REPORT, shortAxis, type EffectivenessReport } from "@/features/effectiveness/model";
 import { AxisTable, BisectList, ConflictMatrix, GradeMark, InfluenceMap, Leaderboard, MapTable, RadarFigure, WarningTable } from "@/features/effectiveness/charts";
 
 const VERDICTS = ["hijacked", "cofired", "none", "strong", "value", "install", "healthy"] as const;
@@ -168,7 +168,7 @@ export function EffectivenessView() {
       </Panel>
       <Panel title={t("effect.radar")} className="min-w-0">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {open ? <p className="text-sm text-muted-foreground">{t("effect.series.skill")}</p> : <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>}
+          {open ? <p className="text-sm text-muted-foreground">{t("effect.series.skill")}</p> : <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: shortAxis(report.weakest_axis) })}</p>}
           <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById("effect-radar-table")?.focus()}>
             {t("effect.showTable")}
           </Button>
@@ -187,7 +187,7 @@ export function EffectivenessView() {
         <>
           <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.7fr)]">
             <Panel title={t("effect.radar")} className="min-w-0">
-              <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: report.weakest_axis })}</p>
+              <p className="text-sm text-muted-foreground">{t("effect.caption.radar", { axis: shortAxis(report.weakest_axis) })}</p>
               <div className="mt-3">
                 <RadarFigure report={report} />
               </div>

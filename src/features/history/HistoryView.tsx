@@ -102,7 +102,7 @@ export function HistoryView() {
       className="min-h-[calc(100dvh-8.5rem)]"
       title={t("history.title")}
       actions={
-        <Button type="button" size="sm" variant="outline" aria-busy={refreshing || phase === "loading"} disabled={phase === "loading"} onClick={() => { void writeHistoryBaseline("baseline").then((raw) => { setSaved(true); if (typeof raw !== "string") return; try { const next = readIterations(raw); if (next.length) { setRows(next); setPhase("ready"); } } catch { /* the command returns the history document */ } }); }}>
+        <Button type="button" size="sm" aria-busy={refreshing || phase === "loading"} disabled={phase === "loading"} onClick={() => { void writeHistoryBaseline("baseline").then((raw) => { setSaved(true); if (typeof raw !== "string") return; try { const next = readIterations(raw); if (next.length) { setRows(next); setPhase("ready"); } } catch { /* the command returns the history document */ } }); }}>
           {t("history.baseline")}
         </Button>
       }
@@ -119,8 +119,8 @@ export function HistoryView() {
       {phase === "empty" ? <EmptyState title={t("history.empty")} body={t("results.emptyBody")} action={<Button asChild size="sm"><Link to="/skills/skill-research/tests">{t("history.emptyCta")}</Link></Button>} /> : null}
       {alerts.length ? <p data-testid="history-alerts" className="rounded-md border border-warning/40 bg-warning-subtle px-3 py-2 text-sm text-warning-text">{t("history.alerts")}: {alerts.join("; ")}</p> : null}
       {rows.length > 0 ? (
-        <Panel title={t("history.trend")} className="min-w-0">
-          <svg viewBox="0 0 680 180" role="img" aria-label={t("history.trend")} className="h-48 w-full">
+        <Panel title={t("history.trend")} className="w-full min-w-0">
+          <svg viewBox="0 0 680 180" preserveAspectRatio="none" width="100%" role="img" aria-label={t("history.trend")} className="block h-44 w-full">
             <text x="4" y="20" fontSize="12" fill="var(--color-muted-foreground)">100%</text>
             <text x="4" y="156" fontSize="12" fill="var(--color-muted-foreground)">50%</text>
             <line x1="40" y1="156" x2="660" y2="156" stroke="var(--color-border)" />

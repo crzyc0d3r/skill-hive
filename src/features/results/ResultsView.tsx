@@ -66,6 +66,7 @@ export function ResultsView() {
   const [notes, setNotes] = useState<string[]>([]);
   const [triggers, setTriggers] = useState<{ query: string; outcome: string }[]>([]);
   const [attempt, setAttempt] = useState(0);
+  const [sheetTab, setSheetTab] = useState("transcript");
 
   useEffect(() => {
     if (forced) {
@@ -166,7 +167,7 @@ export function ResultsView() {
           </div>
         </div>
       ) : null}
-      {phase === "ready" || cells.length > 0 ? <div className={cn("grid min-w-0 items-start gap-3", open && "min-[1100px]:grid-cols-[minmax(0,1fr)_16rem]")}>
+      {phase === "ready" || cells.length > 0 ? <div className={cn("grid min-w-0 items-start gap-3", open && "min-[1100px]:grid-cols-[minmax(0,1fr)_18rem] min-[1440px]:grid-cols-[minmax(0,1fr)_400px] min-[1920px]:grid-cols-[minmax(0,1fr)_480px]")}>
         <Panel className="min-w-0 w-full">
           <div
             role="grid"
@@ -205,11 +206,47 @@ export function ResultsView() {
             <h2 className="font-sans text-title font-semibold">{t("results.sheet")}</h2>
             <p data-testid="heatmap-open" className="mt-2 text-sm font-medium">{open.startsWith("without") ? t("results.withoutSkill") : open.startsWith("with") ? t("results.withSkill") : open}</p>
             {selected ? <p className="mt-1 text-sm">{taskLabel(selected)} · {Math.round(selected.passRate * 100)}%</p> : null}
-            <div className="mt-3 flex flex-wrap gap-1" role="tablist" aria-label={t("results.sheet")}>
-              {[t("results.transcript"), t("results.timeline"), t("results.outputs"), t("results.grading"), t("results.checks"), t("results.feedback")].map((label, tabIndex) => (
-                <span key={label} role="tab" aria-selected={tabIndex === 0} className={tabIndex === 0 ? "rounded-md bg-muted px-2 py-1 text-xs" : "rounded-md px-2 py-1 text-xs text-muted-foreground"}>{label}</span>
+            <div className="mt-3 flex flex-nowrap gap-1 overflow-x-auto" role="tablist" aria-label={t("results.sheet")}>
+              {(["transcript", "timeline", "outputs", "grading", "checks", "feedback"] as const).map((key) => (
+                <button key={key} type="button" role="tab" aria-selected={sheetTab === key} className={sheetTab === key ? "shrink-0 whitespace-nowrap rounded-md bg-muted px-2 py-1 text-xs" : "shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-xs text-muted-foreground"} onClick={() => setSheetTab(key)}>{t(`results.${key}`)}</button>
               ))}
             </div>
+            {sheetTab === "transcript" ? (
+              <>
+                <div data-testid="transcript" className="mt-3 max-h-28 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs">
+                  {demo ? (
+                    <>
+                      <p id="step-2">step 2 wrote outputs/answer.txt</p>
+                      <p id="step-3">step 3 read outputs/answer.txt</p>
+                      <p id="outputs/answer.txt">PINECONE</p>
+                    </>
+                  ) : (
+                    steps.map((step) => (
+                      <p id={`step-${step.id}`} key={step.id}>{step.tool}</p>
+                    ))
+                  )}
+                </div>
+                <form
+                  className="mt-3 flex flex-wrap items-end gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const next = evidenceAnchor(query);
+                    setSearched(true);
+                    setAnchor(next);
+                    if (next) scrollToId(next);
+                  }}
+                >
+                  <label className="min-w-0 flex-1 text-sm">
+                    <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("results.evidence")}</span>
+                    <Input aria-label={t("results.evidence")} className="h-8 w-full" value={query} onChange={(event) => setQuery(event.target.value)} />
+                  </label>
+                  <Button type="submit" size="sm">{t("results.evidence")}</Button>
+                </form>
+                {searched ? <p className="mt-2 font-mono text-sm" data-testid="evidence-anchor">{anchor ?? t("results.noAnchor")}</p> : <p className="sr-only" data-testid="evidence-anchor" />}
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">{t(`results.${sheetTab}`)}</p>
+            )}
           </aside>
         ) : null}
       </div> : null}
@@ -232,38 +269,6 @@ export function ResultsView() {
             </button>
           ))}
         </div>
-        <div data-testid="transcript" className="mt-3 max-h-28 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs">
-          {demo ? (
-            <>
-              <p id="step-2">step 2 wrote outputs/answer.txt</p>
-              <p id="step-3">step 3 read outputs/answer.txt</p>
-              <p id="outputs/answer.txt">PINECONE</p>
-            </>
-          ) : (
-            steps.map((step) => (
-              <p id={`step-${step.id}`} key={step.id}>{step.tool}</p>
-            ))
-          )}
-        </div>
-        {open ? (
-        <form
-          className="mt-3 flex flex-wrap items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const next = evidenceAnchor(query);
-            setSearched(true);
-            setAnchor(next);
-            if (next) scrollToId(next);
-          }}
-        >
-          <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("results.transcript")}</span>
-            <Input aria-label={t("results.evidence")} className="h-8" value={query} onChange={(event) => setQuery(event.target.value)} />
-          </label>
-          <Button type="submit" size="sm">{t("results.evidence")}</Button>
-        </form>
-        ) : null}
-        {searched ? <p className="mt-2 font-mono text-sm" data-testid="evidence-anchor">{anchor ?? t("results.noAnchor")}</p> : <p className="sr-only" data-testid="evidence-anchor" />}
       </Panel> : null}
       {budgetOpen ? (
         <div role="dialog" data-testid="budget-dialog" className="rounded-lg border border-border bg-card p-4 shadow-sm">

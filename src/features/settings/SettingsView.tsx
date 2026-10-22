@@ -115,7 +115,15 @@ export function SettingsView({
   return (
     <Screen testId="settings" title="Settings">
       <div className="grid items-start gap-4 min-[1100px]:grid-cols-[12.5rem_minmax(0,720px)]">
-      <div role="tablist" aria-label="Settings" className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 min-[1100px]:flex-col min-[1100px]:bg-transparent min-[1100px]:p-0">
+      <label className="block text-sm min-[1100px]:hidden">
+        <span className="mb-1.5 block text-muted-foreground">{t("settings.section")}</span>
+        <select aria-label={t("settings.section")} value={tab} onChange={(event) => setParams({ tab: event.target.value })} className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3">
+          {TABS.map((item) => (
+            <option key={item} value={item}>{t(`settings.${item}`)}</option>
+          ))}
+        </select>
+      </label>
+      <div role="tablist" aria-label="Settings" className="hidden max-w-full gap-1 min-[1100px]:flex min-[1100px]:flex-col min-[1100px]:bg-transparent min-[1100px]:p-0">
         {TABS.map((item) => (
           <Button key={item} type="button" role="tab" aria-selected={tab === item} variant="ghost" size="sm" className={`h-8 shrink-0 justify-start rounded-md px-3 shadow-none ${tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-transparent"}`} onClick={() => setParams({ tab: item })}>
             {t(`settings.${item}`)}
@@ -247,10 +255,10 @@ export function SettingsView({
       ) : null}
       {phase === "ready" && tab === "agents" ? (
         <div className="mt-4">
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: true }))); void setAllToolsEnabled(true); }}>{t("settings.agents.enableAll")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: false }))); void setAllToolsEnabled(false); }}>{t("settings.agents.disableAll")}</Button>
-            <Button type="button" variant="outline" size="sm" disabled={agentRefresh} aria-busy={agentRefresh} onClick={() => { setAgentRefresh(true); setRefreshed(true); void silent<string[]>("get_tool_order_cmd").finally(() => setAgentRefresh(false)); }}>{t("settings.agents.refresh")}</Button>
+          <div role="group" aria-label={t("settings.agents")} className="inline-flex overflow-hidden rounded-md border border-border">
+            <Button type="button" variant="ghost" size="sm" className="rounded-none" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: true }))); void setAllToolsEnabled(true); }}>{t("settings.agents.enableAll")}</Button>
+            <Button type="button" variant="ghost" size="sm" className="rounded-none border-l border-border" onClick={() => { void onAgents(agents.map((agent) => ({ ...agent, enabled: false }))); void setAllToolsEnabled(false); }}>{t("settings.agents.disableAll")}</Button>
+            <Button type="button" variant="ghost" size="sm" className="rounded-none border-l border-border" disabled={agentRefresh} aria-busy={agentRefresh} onClick={() => { setAgentRefresh(true); setRefreshed(true); void silent<string[]>("get_tool_order_cmd").finally(() => setAgentRefresh(false)); }}>{t("settings.agents.refresh")}</Button>
           </div>
           {refreshed ? <p role="status">{t("settings.agents.refreshed")}</p> : null}
           <Button type="button" size="sm" className="mt-3" onClick={() => setAddAgentOpen(true)}>{t("settings.agents.add")}</Button>
@@ -283,13 +291,12 @@ export function SettingsView({
             <input type="checkbox" aria-label={t("settings.detectedOnly")} checked={!showAllAgents} onChange={(event) => setShowAllAgents(!event.target.checked)} />
             {t("settings.detectedOnly")}
           </label>
-          <Button type="button" variant="outline" size="sm" className="mt-3" aria-pressed={showAllAgents} onClick={() => setShowAllAgents((current) => !current)}>{t("settings.agents.showAll")}</Button>
           <p className="mt-2 text-sm text-muted-foreground">{showAllAgents ? t("settings.agents.showingAll") : t("settings.agents.detected")}</p>
           <Table data-testid="agent-order" className="mt-3">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("agents.col.name")}</TableHead>
-                <TableHead>{t("settings.agents.found")}</TableHead>
+                <TableHead className="hidden min-[1100px]:table-cell">{t("settings.agents.found")}</TableHead>
                 <TableHead>{t("settings.agents.enable")}</TableHead>
                 <TableHead />
               </TableRow>
@@ -311,8 +318,8 @@ export function SettingsView({
                   setDragKey(null);
                 }}
               >
-                <TableCell><AgentName agent={agent.key} displayName={agent.name} /></TableCell>
-                <TableCell className="text-muted-foreground">{agent.installed ? "Detected" : "—"}</TableCell>
+                <TableCell className={agent.installed ? undefined : "text-muted-foreground"}><AgentName agent={agent.key} displayName={agent.name} /></TableCell>
+                <TableCell className="hidden text-muted-foreground min-[1100px]:table-cell">{agent.installed ? "Detected" : "—"}</TableCell>
                 <TableCell>
                   <Switch aria-label={`${t("settings.agents.enable")} ${agent.name}`} checked={agent.enabled} onCheckedChange={(enabled) => { void onAgents(agents.map((item) => item.key === agent.key ? { ...item, enabled } : item)); void setToolEnabled(agent.key, enabled); }} />
                   <span className="sr-only">{agent.enabled ? "Enabled" : "Disabled"}</span>

@@ -55,7 +55,7 @@ it("shows every warning-fixture finding and the status count", async () => {
     await user.click(await screen.findByRole("button", { name: "Publish" }));
     cleanup();
     renderAt("/global-workspace/claude_code");
-    expect(await screen.findByText("Center changed")).toBeInTheDocument();
+    expect(await screen.findByText("Library is newer")).toBeInTheDocument();
   });
 
   it("creates a draft from Mod+N and lists it in the library", async () => {

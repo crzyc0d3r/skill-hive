@@ -54,7 +54,7 @@ export function RadarFigure({ report }: { report: EffectivenessReport }) {
   );
   const primary = polygon(axes, PLOT);
   const overlayShape = polygon(overlay, PLOT);
-  const caption = t("effect.caption.radar", { axis: report.weakest_axis });
+  const caption = t("effect.caption.radar", { axis: shortAxis(report.weakest_axis) });
   return (
     <figure className="flex flex-col gap-3">
       <svg

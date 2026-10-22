@@ -295,7 +295,7 @@ export function LibraryView({
 
   const missingDetail = phase === "empty" && Boolean(initialId);
   return (
-    <Screen testId="library" title={t("library.title")} lede={missingDetail ? undefined : t("library.emptyBody")} actions={missingDetail ? undefined : <PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
+    <Screen testId="library" title={t("library.title")} lede={missingDetail ? t("library.detailMissingBody") : t("library.emptyBody")} actions={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>}>
       <div className="flex flex-wrap items-center gap-2">
         <SearchField
           aria-label={t("library.search")}
@@ -492,11 +492,11 @@ export function LibraryView({
         data-layout={layout}
         data-columns={open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}
         className={layout === "grid" ? "absolute inset-x-0 top-0 grid items-stretch gap-3" : "absolute inset-x-0 top-0 space-y-2"}
-        style={layout === "grid" ? { transform: `translateY(${grid.offset}px)`, gridTemplateColumns: `repeat(${open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}, minmax(0, 1fr))`, gridAutoRows: "168px" } : { transform: `translateY(${grid.offset}px)` }}
+        style={layout === "grid" ? { transform: `translateY(${grid.offset}px)`, gridTemplateColumns: `repeat(${open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}, minmax(0, 1fr))`, gridAutoRows: "116px" } : { transform: `translateY(${grid.offset}px)` }}
       >
         {rendered.map((skill) => (
           <li key={skill.id} data-virtual-card="" className="h-full min-w-0">
-            <Card className={cn("group/card flex h-[168px] flex-col gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "h-16 flex-row")}>
+            <Card className={cn("group/card flex h-[116px] flex-col gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "h-16 flex-row")}>
               <div className="flex items-start gap-2.5 px-3 pt-3">
                 <input
                   type="checkbox"
@@ -507,7 +507,7 @@ export function LibraryView({
                 />
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                   <span className="block font-medium whitespace-normal">{skill.name}</span>
-                  <span className={cn("mt-0.5 break-words text-[13px] leading-5 text-muted-foreground", layout === "list" ? "line-clamp-1" : "line-clamp-2")}>{skill.description.replace(/\s+/g, " ").trim()}</span>
+                  <span className="mt-0.5 line-clamp-1 break-words text-[13px] leading-5 text-muted-foreground">{skill.description.replace(/\s+/g, " ").trim()}</span>
                 </button>
                 <DropdownMenu modal={false} open={menuId === skill.id} onOpenChange={(next) => setMenuId(next ? skill.id : null)}>
                   <DropdownMenuTrigger asChild>
@@ -669,7 +669,7 @@ export function LibraryView({
         <aside data-testid="detail-panel" className="rounded-lg border border-border bg-card p-3">
           {phase === "loading" ? <div data-testid="detail-loading" className="h-40 animate-pulse rounded-md bg-muted" /> : null}
           {phase === "error" || phase === "offline" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
-          {phase === "empty" ? <EmptyState title={t("library.detailMissing")} body={t("library.detailMissingBody")} /> : null}
+          {phase === "empty" ? <EmptyState title={t("library.detailMissing")} body={t("library.detailMissingBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} /> : null}
         </aside>
       ) : null}
       </div>

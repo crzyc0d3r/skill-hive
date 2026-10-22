@@ -4,7 +4,7 @@ import { designColumns } from "@/lib/shell-width";
 const MIN_CARD = 280;
 const GAP = 12;
 const UNMEASURED_CAP = 24;
-const ROW_HEIGHT = { grid: 180, list: 76 } as const;
+const ROW_HEIGHT = { grid: 128, list: 76 } as const;
 
 export function columnCount(width: number, minCard = MIN_CARD, gap = GAP): number {
   if (!Number.isFinite(width) || width <= 0) return 1;

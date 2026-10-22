@@ -106,7 +106,7 @@ for (const theme of ["light", "dark"] as const) {
       path: `docs/parity/screenshots/${theme}/settings-agents-detected.png`,
       fullPage: false,
     });
-    await page.getByRole("button", { name: "Show all agents" }).click();
+    await page.getByRole("checkbox", { name: "Detected only" }).uncheck();
     const adal = page.getByText("AdaL").first();
     await adal.scrollIntoViewIfNeeded();
     await expect(adal).toBeVisible();

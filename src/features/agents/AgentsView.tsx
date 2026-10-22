@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AgentBadge } from "@/components/app/AgentBadge";
 import { EmptyState, ErrorState, Screen } from "@/components/chrome";
 import { AgentListSkeleton } from "@/components/skeletons";
 import { RetryContext, useViewPhase } from "@/lib/view-state";
@@ -9,6 +10,14 @@ import { Link } from "react-router-dom";
 import { t } from "@/lib/i18n";
 import { demoEnabled } from "@/lib/demo";
 import { ensureAgent, importAgent, useAuthoring } from "@/lib/authoring/store";
+
+const USED_BY: Record<string, string[]> = {
+  reviewer: ["claude_code", "cursor"],
+};
+
+function toolsUsing(id: string, name: string): string[] {
+  return USED_BY[id] ?? USED_BY[name] ?? ["claude_code"];
+}
 
 export function AgentsView() {
   const phase = useViewPhase();
@@ -82,8 +91,8 @@ export function AgentsView() {
             <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("agents.col.name")}</th>
-                <th className="px-3 py-2 font-medium">{t("agents.col.usedBy")}</th>
-                <th className="px-3 py-2 font-medium">{t("agents.col.edited")}</th>
+                <th className="hidden px-3 py-2 font-medium min-[1100px]:table-cell">{t("agents.col.usedBy")}</th>
+                <th className="hidden px-3 py-2 font-medium min-[1440px]:table-cell">{t("agents.col.edited")}</th>
                 <th className="px-3 py-2 font-medium">{t("agents.col.status")}</th>
               </tr>
             </thead>
@@ -91,8 +100,12 @@ export function AgentsView() {
               {agents.map((agent) => (
                 <tr key={agent.id} className="border-t border-border">
                   <td className="px-3 py-3"><Link to={`/agents/${agent.id}/edit`} className="font-medium">{agent.name}</Link></td>
-                  <td className="px-3 py-3 text-muted-foreground">{t("agents.usedBy.draft")}</td>
-                  <td className="px-3 py-3 text-muted-foreground">{t("agents.edited.today")}</td>
+                  <td className="hidden px-3 py-3 min-[1100px]:table-cell">
+                    <span className="flex flex-wrap gap-1">
+                      {toolsUsing(agent.id, agent.name).map((tool) => <AgentBadge key={tool} agent={tool} />)}
+                    </span>
+                  </td>
+                  <td className="hidden px-3 py-3 text-muted-foreground min-[1440px]:table-cell">{t("agents.edited.today")}</td>
                   <td className="px-3 py-3"><Badge variant="secondary">{t("library.badge.draft")}</Badge></td>
                 </tr>
               ))}
