@@ -131,7 +131,7 @@ export function StatePanel({
       role={tone === "error" ? "alert" : tone === "loading" ? "progressbar" : "status"}
       aria-busy={tone === "loading" ? true : undefined}
       data-testid={testId ?? (tone === "loading" ? "loading-state" : undefined)}
-      className={cn("flex flex-col gap-3 rounded-lg border px-4 py-4", tone === "error" ? "max-w-xl" : "min-h-40 flex-1 justify-center", surface)}
+      className={cn("flex w-fit max-w-xl flex-col items-start gap-3 self-start rounded-lg border px-4 py-4", surface)}
     >
       {icon}
       <p className="max-w-prose text-sm text-foreground">{title || (tone === "offline" ? t("shell.offline") : t("shell.empty"))}</p>

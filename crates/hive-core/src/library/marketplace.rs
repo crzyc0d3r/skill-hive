@@ -131,9 +131,6 @@ fn parse_leaderboard_fallback(html: &str) -> Result<Vec<MarketSkill>> {
         }
         rest = &after[end..];
     }
-    if out.is_empty() {
-        return Err(anyhow!("leaderboard fallback found no skills"));
-    }
     Ok(out)
 }
 
@@ -276,6 +273,12 @@ mod tests {
         );
         let board = parse_leaderboard(&html).unwrap();
         assert_eq!(board[0].name, "review");
+    }
+
+    #[test]
+    fn empty_leaderboard_html_is_not_an_internal_error() {
+        let board = parse_leaderboard("<html>no skills</html>").unwrap();
+        assert!(board.is_empty());
     }
 
     #[test]

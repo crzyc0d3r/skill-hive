@@ -4,7 +4,7 @@ export interface DemoState {
   skills: SkillCard[];
   presets: { id: string; name: string; skillIds: string[] }[];
   agents: { key: string; name: string; installed: boolean; enabled: boolean; path: string }[];
-  scanned: { name: string; tool: string }[];
+  scanned: { name: string; tool: string; reason?: string }[];
 }
 
 export const DEMO: DemoState = {
@@ -55,6 +55,8 @@ export const DEMO: DemoState = {
   scanned: [
     { name: "claude-skill", tool: "claude_code" },
     { name: "cursor-skill", tool: "cursor" },
+    { name: "locked-skill", tool: "claude_code", reason: "permission denied" },
+    { name: "blank-skill", tool: "cursor", reason: "parse error at line 1" },
   ],
 };
 

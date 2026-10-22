@@ -52,4 +52,18 @@ it("searches the marketplace, installs one skill, and cancels the next", async (
     );
     expect(screen.getByText("The marketplace arrives in a later phase.")).toBeInTheDocument();
   });
+
+  it("shows an offline error instead of the empty browse state", async () => {
+    renderAt("/install?tab=leaderboard&market=offline");
+    expect(await screen.findByTestId("marketplace-offline")).toBeInTheDocument();
+    expect(screen.getByText("The marketplace is offline. Check the connection and try again.")).toBeInTheDocument();
+    expect(screen.queryByText("Popular skills show up here. Search to look one up.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("explains an empty marketplace before any results", async () => {
+    renderAt("/install?tab=leaderboard&market=initial");
+    expect(await screen.findByText("Popular skills show up here. Search to look one up.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
 });

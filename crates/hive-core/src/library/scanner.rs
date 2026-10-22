@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::db::skill_store::SkillStore;
 use crate::library::content_hash::hash_skill_dir;
 use crate::library::installer::install_local;
-use crate::library::skill_metadata::{find_skill_dirs, read_skill_document};
+use crate::library::skill_metadata::{find_skill_dirs, read_skill_document, sanitize_skill_name};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScannedSkill {
@@ -21,6 +21,10 @@ pub struct ScannedSkill {
     pub already_managed: bool,
     /// Another copy of this name has different content.
     pub differs: bool,
+    /// Empty when the folder read cleanly. Otherwise the IO cause
+    /// ("not found", "permission denied", the error message) or
+    /// "parse error at line N".
+    pub reason: String,
 }
 
 pub fn scan_roots(store: &SkillStore, roots: &[(&str, &Path)]) -> Result<Vec<ScannedSkill>> {
@@ -51,7 +55,24 @@ pub fn scan_roots_with_central(
         dirs.sort();
         dirs.dedup();
         for dir in dirs {
-            let doc = read_skill_document(&dir)?;
+            let text = match fs::read_to_string(dir.join("SKILL.md")) {
+                Ok(text) => text,
+                Err(err) => {
+                    found.push(failed_skill(tool, &dir, &io_reason(&err)));
+                    continue;
+                }
+            };
+            if let Some(reason) = parse_reason(&text) {
+                found.push(failed_skill(tool, &dir, &reason));
+                continue;
+            }
+            let doc = match read_skill_document(&dir) {
+                Ok(doc) => doc,
+                Err(err) => {
+                    found.push(failed_skill(tool, &dir, &io_reason(&err)));
+                    continue;
+                }
+            };
             let fingerprint = hash_skill_dir(&dir).unwrap_or_default();
             let linked = home
                 .as_ref()
@@ -63,6 +84,7 @@ pub fn scan_roots_with_central(
                 fingerprint: fingerprint.clone(),
                 already_managed: managed.contains(&fingerprint) || linked,
                 differs: false,
+                reason: String::new(),
             });
         }
     }
@@ -88,6 +110,72 @@ pub fn scan_roots_with_central(
         grouped.push(skill);
     }
     Ok(grouped)
+}
+
+fn io_reason(err: &std::io::Error) -> String {
+    match err.kind() {
+        std::io::ErrorKind::NotFound => "not found".to_string(),
+        std::io::ErrorKind::PermissionDenied => "permission denied".to_string(),
+        _ => {
+            let message = err.to_string();
+            if message.is_empty() {
+                "read error".to_string()
+            } else {
+                message
+            }
+        }
+    }
+}
+
+/// Empty files, an unclosed opening fence, and a frontmatter line with no
+/// colon are parse failures. The line number is 1-based in the file.
+fn parse_reason(text: &str) -> Option<String> {
+    parse_error_line(text).map(|line| format!("parse error at line {line}"))
+}
+
+fn parse_error_line(text: &str) -> Option<usize> {
+    if text.trim().is_empty() {
+        return Some(1);
+    }
+    let rest = text.trim_start_matches('\u{feff}');
+    let after = rest.strip_prefix("---")?;
+    let after = if let Some(stripped) = after.strip_prefix("\r\n") {
+        stripped
+    } else if let Some(stripped) = after.strip_prefix('\n') {
+        stripped
+    } else {
+        return Some(1);
+    };
+    let Some(end) = after.find("\n---") else {
+        return Some(1);
+    };
+    let front = &after[..end];
+    for (offset, line) in front.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.split_once(':').is_none() {
+            return Some(offset + 2);
+        }
+    }
+    None
+}
+
+fn failed_skill(tool: &str, dir: &Path, reason: &str) -> ScannedSkill {
+    let folder = dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("skill");
+    ScannedSkill {
+        tool: tool.to_string(),
+        path: dir.to_string_lossy().to_string(),
+        name: sanitize_skill_name(folder),
+        fingerprint: String::new(),
+        already_managed: false,
+        differs: false,
+        reason: reason.to_string(),
+    }
 }
 
 pub fn collect_flat(root: &Path) -> Vec<PathBuf> {
@@ -226,7 +314,7 @@ mod tests {
         .unwrap();
         assert!(rows
             .iter()
-            .any(|row| row.name == "top" && !row.already_managed));
+            .any(|row| row.name == "top" && !row.already_managed && row.reason.is_empty()));
         assert!(rows.iter().any(|row| row.name == "deep"));
         #[cfg(unix)]
         assert!(rows
@@ -242,6 +330,99 @@ mod tests {
             .join("top")
             .join("SKILL.md")
             .is_file());
+    }
+
+    #[test]
+    fn unreadable_and_empty_skills_share_error_reasons() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("agent");
+        fs::create_dir_all(root.join("blank")).unwrap();
+        fs::write(root.join("blank").join("SKILL.md"), "   ").unwrap();
+        fs::create_dir_all(root.join("locked")).unwrap();
+        let store = SkillStore::new(&tmp.path().join("hive.db")).unwrap();
+        let rows = scan_roots_with_central(&store, &[("cursor", root.as_path())], None).unwrap();
+        let blank = rows.iter().find(|row| row.name == "blank").unwrap();
+        assert_eq!(blank.reason, "parse error at line 1");
+        assert!(blank.path.contains("blank"));
+        fs::create_dir_all(root.join("bad-line")).unwrap();
+        fs::write(
+            root.join("bad-line").join("SKILL.md"),
+            "---\nname: bad-line\nnot a field\n---\nbody\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("open-fence")).unwrap();
+        fs::write(
+            root.join("open-fence").join("SKILL.md"),
+            "---\nname: open-fence\n",
+        )
+        .unwrap();
+        let rows = scan_roots_with_central(&store, &[("cursor", root.as_path())], None).unwrap();
+        assert_eq!(
+            rows.iter()
+                .find(|row| row.name == "bad-line")
+                .unwrap()
+                .reason,
+            "parse error at line 3"
+        );
+        assert_eq!(
+            rows.iter()
+                .find(|row| row.name == "open-fence")
+                .unwrap()
+                .reason,
+            "parse error at line 1"
+        );
+    }
+
+    #[test]
+    fn io_reasons_use_the_error_kind_and_message() {
+        assert_eq!(
+            io_reason(&std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "missing"
+            )),
+            "not found"
+        );
+        assert_eq!(
+            io_reason(&std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "no"
+            )),
+            "permission denied"
+        );
+        let message = io_reason(&std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "stream did not contain valid UTF-8",
+        ));
+        assert!(message.contains("UTF-8"), "{message}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permission_denied_reports_the_os_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("agent");
+        let file = root.join("locked").join("SKILL.md");
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, "---\nname: locked\ndescription: d\n---\nbody\n").unwrap();
+        let mut blocked = fs::metadata(&file).unwrap().permissions();
+        blocked.set_mode(0o000);
+        fs::set_permissions(&file, blocked).unwrap();
+        struct Restore(std::path::PathBuf);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let mut perms = fs::metadata(&self.0).unwrap().permissions();
+                perms.set_mode(0o644);
+                fs::set_permissions(&self.0, perms).ok();
+            }
+        }
+        let _restore = Restore(file.clone());
+        let store = SkillStore::new(&tmp.path().join("hive.db")).unwrap();
+        let rows = scan_roots_with_central(&store, &[("cursor", root.as_path())], None).unwrap();
+        assert_eq!(
+            rows.iter().find(|row| row.name == "locked").unwrap().reason,
+            "permission denied"
+        );
     }
 
     #[test]

@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { filterMarket, MARKET_FIXTURE, type MarketSkill } from "@/features/install/market";
 import { beginMarketInstall, cancelMarketInstall, fetchLeaderboard, marketInstallResult, searchSkillsSh } from "@/lib/ipc/actions";
 import { demoEnabled } from "@/lib/demo";
+import { useOnline } from "@/lib/view-state";
 import { t } from "@/lib/i18n";
 
-export function MarketplacePanel({ reachable = true, skills }: { reachable?: boolean; skills?: MarketSkill[] }) {
+export function MarketplacePanel({ reachable = true, skills, mode = null }: { reachable?: boolean; skills?: MarketSkill[]; mode?: "initial" | "offline" | null }) {
   const [query, setQuery] = useState("");
   const [owner, setOwner] = useState<string | null>(null);
   const [installed, setInstalled] = useState<string | null>(null);
@@ -23,6 +24,7 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
     }, 300);
     return () => window.clearTimeout(handle);
   }, [query]);
+  const online = useOnline();
   const leaderboard = useQuery({
     queryKey: ["leaderboard", demoEnabled()],
     queryFn: () =>
@@ -36,20 +38,41 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
             })),
           )
         : fetchLeaderboard(),
-    enabled: reachable && !skills,
+    enabled: reachable && !skills && mode !== "initial" && mode !== "offline",
+    retry: false,
   });
-  const source = remote ?? skills ?? leaderboard.data ?? [];
+  const offline = mode === "offline" || !online || leaderboard.isError;
+  const source = mode === "initial" ? [] : remote ?? skills ?? leaderboard.data ?? [];
   const rows = filterMarket(source, query, owner);
   const owners = [...new Set(source.map((skill) => skill.owner))];
   if (!reachable) return <p className="mt-4 text-sm text-muted-foreground">{t("install.leaderboard.empty")}</p>;
+  if (offline) {
+    return (
+      <div className="mt-4 space-y-2" data-testid="marketplace">
+        <label className="block text-sm">
+          <span className="mb-1.5 block text-muted-foreground">{t("install.search")}</span>
+          <Input aria-label={t("install.search")} value={query} onChange={(event) => setQuery(event.target.value)} className="h-8 max-w-sm" />
+        </label>
+        <div data-testid="marketplace-offline" role="alert" className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-destructive/40 px-6 py-10 text-center">
+          <p className="max-w-sm text-sm text-destructive">{t("install.leaderboard.offline")}</p>
+          <Button type="button" size="sm" variant="outline" onClick={() => void leaderboard.refetch()}>{t("banner.retry")}</Button>
+        </div>
+      </div>
+    );
+  }
+  const showResults = rows.length > 0;
   return (
     <div className="mt-4 space-y-2" data-testid="marketplace">
       <label className="block text-sm">
         <span className="mb-1.5 block text-muted-foreground">{t("install.search")}</span>
         <Input aria-label={t("install.search")} value={query} onChange={(event) => setQuery(event.target.value)} className="h-8 max-w-sm" />
       </label>
-      {leaderboard.isError ? <p role="alert">{leaderboard.error instanceof Error ? leaderboard.error.message : "Marketplace unavailable"}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
+      {!showResults ? (
+        <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-border px-6 py-10 text-center">
+          <p className="max-w-sm text-sm text-muted-foreground">{mode !== "initial" && leaderboard.isPending && leaderboard.fetchStatus !== "idle" ? t("install.leaderboard.loading") : t("install.leaderboard.browse")}</p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {owners.map((item) => (
           <Button key={item} type="button" aria-pressed={owner === item} variant="outline" size="sm" onClick={() => setOwner(owner === item ? null : item)}>
@@ -77,7 +100,7 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
         </Button>
       ) : null}
       {installed ? <p role="status">{t("install.installed")} {installed}</p> : null}
-      <Button type="button" variant="outline" size="sm" onClick={() => void leaderboard.refetch()}>{t("install.loadMore")}</Button>
+      {showResults ? <Button type="button" variant="outline" size="sm" onClick={() => void leaderboard.refetch()}>{t("install.loadMore")}</Button> : null}
     </div>
   );
 }

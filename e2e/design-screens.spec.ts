@@ -19,7 +19,7 @@ const SCREENS = [
 ] as const;
 
 const EXTRAS = [
-  { id: "install-market", path: "/install?tab=leaderboard", landmark: "install" },
+  { id: "install-market", path: "/install?tab=leaderboard&market=initial", landmark: "install" },
   { id: "install-folder", path: "/install?tab=local", landmark: "install" },
   { id: "install-git", path: "/install?tab=git", landmark: "install" },
   { id: "settings-agents", path: "/settings?tab=agents", landmark: "settings" },
@@ -84,6 +84,13 @@ for (const theme of THEMES) {
         await page.goto(screen.path);
         await expect(page.getByTestId(screen.landmark)).toBeVisible();
         await expect(page.getByTestId("route-error")).toHaveCount(0);
+        if (screen.id === "install-folder") {
+          await page.getByLabel("Select folder").fill("~/.claude/skills");
+        }
+        if (screen.id === "install-market") {
+          await expect(page.getByText("Popular skills show up here. Search to look one up.")).toBeVisible();
+          await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+        }
         const overflow = await page.locator("body").evaluate((node) => node.scrollWidth - node.clientWidth);
         expect(overflow).toBeLessThanOrEqual(1);
         await saveShot(page, theme, width, screen.id);
@@ -159,3 +166,152 @@ for (const theme of THEMES) {
     }
   }
 }
+
+const OFFLINE_ROUTES = [
+  ["effectiveness", "/effectiveness"],
+  ["results", "/runs/run-fixture"],
+  ["compare", "/compare/fixture"],
+  ["history", "/skills/skill-research/history"],
+] as const;
+
+test.describe("layout evidence", () => {
+  for (const theme of THEMES) {
+    for (const width of WIDTHS) {
+      test(`${theme} ${width}`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await boot(page, theme, width);
+        await page.goto("/install?tab=scan");
+        await expect(page.getByTestId("install")).toBeVisible();
+        await expect(page.getByText("permission denied", { exact: true })).toBeVisible();
+        await expect(page.getByText("parse error at line 1", { exact: true })).toBeVisible();
+        await expect(page.getByText("We found 4 skills in 2 agents. 2 are new.")).toBeVisible();
+        await saveShot(page, theme, width, "install");
+        await page.goto("/install?tab=scan&state=error");
+        await expect(page.getByText("Couldn't read Cursor's folder — permission denied")).toBeVisible();
+        await expect(page.getByText("permission denied", { exact: true })).toBeVisible();
+        await saveShot(page, theme, width, "install-error");
+        if (width === 1440) {
+          fs.copyFileSync(
+            path.join("docs/parity/screenshots", theme, `design-install-error-${width}.png`),
+            path.join("docs/parity/screenshots", theme, "design-install-error.png"),
+          );
+        }
+        await page.goto("/install?tab=local");
+        await page.getByLabel("Select folder").fill("~/.claude/skills");
+        await expect(page.getByLabel("Select folder")).toHaveValue("~/.claude/skills");
+        await saveShot(page, theme, width, "install-folder");
+        await page.goto("/install?tab=leaderboard&market=initial");
+        await expect(page.getByText("Popular skills show up here. Search to look one up.")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+        await saveShot(page, theme, width, "install-market");
+        if (width === 1440) {
+          fs.copyFileSync(
+            path.join("docs/parity/screenshots", theme, `design-install-market-${width}.png`),
+            path.join("docs/parity/screenshots", theme, "design-install-market.png"),
+          );
+        }
+        await page.goto("/install?tab=leaderboard&market=offline");
+        await expect(page.getByTestId("marketplace-offline")).toBeVisible();
+        await expect(page.getByText("The marketplace is offline. Check the connection and try again.")).toBeVisible();
+        await saveShot(page, theme, width, "install-market-offline");
+        await page.goto("/my-skills");
+        await expect(page.getByTestId("library")).toBeVisible();
+        await saveShot(page, theme, width, "library");
+        await page.goto("/my-skills?crowd=1");
+        await expect(page.getByText(/Generated skill/).first()).toBeVisible();
+        await saveShot(page, theme, width, "library-scrolled");
+        await page.goto("/?banner=load");
+        await expect(page.getByTestId("status-banner")).toContainText("Could not load settings.");
+        const placed = await page.evaluate(() => {
+          const bannerNode = document.querySelector("[data-testid=status-banner]");
+          const header = document.querySelector("[data-testid=header]")?.getBoundingClientRect();
+          const search = [...document.querySelectorAll("button")].find((node) => node.textContent?.includes("Search"))?.getBoundingClientRect();
+          const alert = bannerNode?.getBoundingClientRect();
+          const heading = document.querySelector("main h1")?.getBoundingClientRect();
+          return {
+            position: bannerNode ? getComputedStyle(bannerNode).position : "",
+            headerBottom: header?.bottom ?? 0,
+            searchBottom: search?.bottom ?? 0,
+            bannerTop: alert?.top ?? 0,
+            bannerBottom: alert?.bottom ?? 0,
+            headingTop: heading?.top ?? 0,
+          };
+        });
+        expect(placed.position).toBe("static");
+        expect(placed.bannerTop).toBeGreaterThanOrEqual(placed.headerBottom - 1);
+        expect(placed.bannerTop).toBeGreaterThanOrEqual(placed.searchBottom - 1);
+        expect(placed.headingTop).toBeGreaterThanOrEqual(placed.bannerBottom - 1);
+        await saveShot(page, theme, width, "banner");
+        await page.evaluate(() => localStorage.setItem("skill-hive-crowd", "1"));
+        await page.goto("/my-skills");
+        await expect(page.getByTestId("library")).toBeVisible();
+        const scroller = page.getByTestId("content");
+        let clipped = false;
+        for (let top = 0; top < 8000 && !clipped; top += 350) {
+          await scroller.evaluate((node, scrollTop) => {
+            node.scrollTop = scrollTop;
+          }, top);
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))));
+          const desc = page.locator("span.truncate", { hasText: "Generated skill" }).first();
+          if (!(await desc.isVisible().catch(() => false))) continue;
+          clipped = await desc.evaluate((node) => node.scrollWidth > node.clientWidth + 1);
+        }
+        expect(clipped).toBe(true);
+        const card = page.locator("[data-virtual-card]", { hasText: "Generated skill" }).first();
+        await card.screenshot({ path: path.join("docs", "polish", `library-ellipsis-${theme}-${width}.png`) });
+        if (theme === "dark" && width === 800) {
+          await card.screenshot({ path: path.join("docs", "polish", "library-ellipsis.png") });
+        }
+        if (width === 1440) {
+          await page.goto("/settings");
+          await expect(page.getByTestId("settings")).toBeVisible();
+          const sidebar = page.getByTestId("sidebar");
+          const menuTransition = await page.locator("[data-sidebar=menu-button]").first().evaluate((node) => getComputedStyle(node).transitionProperty);
+          expect(menuTransition).not.toContain("background");
+          const surfaceDuration = await sidebar.evaluate((node) => getComputedStyle(node).transitionDuration);
+          const surfaceProperty = await sidebar.evaluate((node) => getComputedStyle(node).transitionProperty);
+          expect(surfaceDuration).not.toBe("0s");
+          expect(surfaceProperty).toContain("background-color");
+          await sidebar.screenshot({ path: path.join("docs", "polish", `sidebar-theme-${theme}.png`) });
+          const other = theme === "light" ? "Dark" : "Light";
+          const held = await page.evaluate((label) => {
+            const before = getComputedStyle(document.querySelector("[data-testid=sidebar]")!).backgroundColor;
+            const button = [...document.querySelectorAll("button")].find((node) => node.textContent?.trim() === label);
+            button?.click();
+            let paused = 0;
+            for (const animation of document.getAnimations()) {
+              const effect = animation.effect;
+              const timing = effect && "getComputedTiming" in effect ? effect.getComputedTiming() : null;
+              if (!timing || Number(timing.duration) < 30) continue;
+              animation.pause();
+              animation.currentTime = Number(timing.duration) / 2;
+              paused += 1;
+            }
+            const mid = getComputedStyle(document.querySelector("[data-testid=sidebar]")!).backgroundColor;
+            return { before, mid, paused, dark: document.documentElement.classList.contains("dark") };
+          }, other);
+          expect(held.paused).toBeGreaterThan(0);
+          expect(held.mid).not.toBe(held.before);
+          expect(held.dark).toBe(theme === "light");
+          await sidebar.screenshot({ path: path.join("docs", "polish", `sidebar-theme-${theme}-mid.png`) });
+          await page.evaluate(() => {
+            for (const animation of document.getAnimations()) animation.finish();
+          });
+          await settle(page);
+          const settled = await sidebar.evaluate((node) => getComputedStyle(node).backgroundColor);
+          expect(settled).not.toBe(held.mid);
+          await sidebar.screenshot({ path: path.join("docs", "polish", `sidebar-theme-${other.toLowerCase()}-from-${theme}.png`) });
+        }
+        for (const [name, route] of OFFLINE_ROUTES) {
+          await page.goto(`${route}?state=offline`);
+          await expect(page.getByText(/offline/i).first()).toBeVisible();
+          const legacy = width === 1100 ? `${name}-offline.png` : `${name}-offline-${width}.png`;
+          await page.screenshot({ path: path.join("docs/parity/screenshots", theme, legacy), fullPage: false });
+          if (width === 1100) {
+            await page.screenshot({ path: path.join("docs/parity/screenshots", theme, `${name}-offline-1100.png`), fullPage: false });
+          }
+        }
+      });
+    }
+  }
+});

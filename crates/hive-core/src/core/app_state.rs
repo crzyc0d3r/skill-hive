@@ -25,6 +25,7 @@ pub struct StartupTimings {
     pub migrate_legacy_tool_keys_ms: u128,
     pub skill_count: usize,
     pub reindex_from_metadata_ms: Option<u128>,
+    pub reindex_cached: bool,
     pub restore_sync_included_ms: u128,
     pub restore_sync_included_changed: bool,
     pub write_all_from_db_ms: Option<u128>,
@@ -45,6 +46,7 @@ impl Default for StartupTimings {
             migrate_legacy_tool_keys_ms: 0,
             skill_count: 0,
             reindex_from_metadata_ms: None,
+            reindex_cached: false,
             restore_sync_included_ms: 0,
             restore_sync_included_changed: false,
             write_all_from_db_ms: None,
@@ -63,23 +65,27 @@ pub fn initialize_cli_store() -> Result<Arc<SkillStore>> {
     initialize_store_inner(false, false).map(|(store, _)| store)
 }
 
-fn reindex_or_rebuild_metadata(store: &SkillStore) -> Result<()> {
-    let Err(err) = sync_metadata::reindex_from_metadata(store) else {
-        return Ok(());
-    };
-    // #421: empty skill metadata used to abort every launch. When the
-    // database still holds a library whose directories all exist, it is the
-    // better record: rebuild the metadata from it. Otherwise keep refusing —
-    // starting with an empty library would let the auto backup commit that
-    // emptiness.
-    if err.is::<sync_metadata::EmptySkillMetadata>() && db_library_is_intact(store) {
-        central_repo::record_startup_error(format!(
-            "sync metadata: {err}; rebuilt it from the database"
-        ));
-        return sync_metadata::write_all_from_db(store)
-            .context("Failed to rebuild sync metadata from the database");
+/// `Ok(true)` when the stored stamp matched and the per-skill hash was skipped.
+fn reindex_or_rebuild_metadata(store: &SkillStore) -> Result<bool> {
+    match sync_metadata::reindex_from_metadata(store) {
+        Ok(ran) => Ok(!ran),
+        // #421: empty skill metadata used to abort every launch. When the
+        // database still holds a library whose directories all exist, it is the
+        // better record: rebuild the metadata from it. Otherwise keep refusing —
+        // starting with an empty library would let the auto backup commit that
+        // emptiness.
+        Err(err)
+            if err.is::<sync_metadata::EmptySkillMetadata>() && db_library_is_intact(store) =>
+        {
+            central_repo::record_startup_error(format!(
+                "sync metadata: {err}; rebuilt it from the database"
+            ));
+            sync_metadata::write_all_from_db(store)
+                .context("Failed to rebuild sync metadata from the database")?;
+            Ok(false)
+        }
+        Err(err) => Err(err.context("Failed to reindex from sync metadata")),
     }
-    Err(err.context("Failed to reindex from sync metadata"))
 }
 
 /// The database can stand in for empty metadata only if it covers the whole
@@ -179,7 +185,7 @@ fn initialize_store_inner(
 
     if sync_metadata::metadata_exists() {
         let step = Instant::now();
-        reindex_or_rebuild_metadata(&store)?;
+        timings.reindex_cached = reindex_or_rebuild_metadata(&store)?;
         timings.reindex_from_metadata_ms = Some(step.elapsed().as_millis());
     }
 
@@ -232,11 +238,19 @@ impl StartupTimings {
             self.migrate_legacy_tool_keys_ms
         );
         if let Some(ms) = self.reindex_from_metadata_ms {
-            log::info!(
-                "startup: reindex_from_metadata {} ms (skills={})",
-                ms,
-                self.skill_count
-            );
+            if self.reindex_cached {
+                log::info!(
+                    "startup: reindex_from_metadata cached {} ms (skills={})",
+                    ms,
+                    self.skill_count
+                );
+            } else {
+                log::info!(
+                    "startup: reindex_from_metadata {} ms (skills={})",
+                    ms,
+                    self.skill_count
+                );
+            }
         }
         if self.restore_sync_included_changed {
             log::info!(

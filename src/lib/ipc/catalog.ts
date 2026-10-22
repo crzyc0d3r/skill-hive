@@ -29,6 +29,7 @@ export interface ScanRow {
   alreadyManaged?: boolean;
   differs?: boolean;
   fingerprint?: string;
+  reason?: string;
 }
 
 const inflight = new Map<string, Promise<unknown>>();

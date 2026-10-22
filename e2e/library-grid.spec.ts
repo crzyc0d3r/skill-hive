@@ -152,7 +152,12 @@ for (const theme of ["light", "dark"] as const) {
     await prepare(page, theme, 1100, { "skill-hive-preview-agents": "1" });
     await page.goto("/install?tab=scan");
     const scan = page.getByTestId("install");
-    await expect(scan.getByText("~/.claude/skills/autopilot, ~/.codex/skills/autopilot, ~/.cursor/skills/autopilot")).toBeVisible();
+    const fullPath = "~/.claude/skills/autopilot · ~/.codex/skills/autopilot · ~/.cursor/skills/autopilot";
+    const path = scan.getByTitle(fullPath);
+    await expect(path).toBeVisible();
+    await expect(path).toHaveText("~/.claude/skills/autopilot … ~/.cursor/skills/autopilot");
+    const box = await path.boundingBox();
+    expect(box?.height ?? 99).toBeLessThan(24);
     await expect(page.getByRole("button", { name: "claude_code" })).toHaveCount(0);
     await expect(scan.getByText("Claude Code", { exact: true })).toBeVisible();
     await expect(scan.getByText("Codex", { exact: true })).toBeVisible();

@@ -106,7 +106,9 @@ export const gitBackupSetRemote = (url: string) => command<null>("git_backup_set
 export const gitBackupRemoveRemote = () => command<null>("git_backup_remove_remote");
 export const backupSetDeviceName = (name: string) => command<null>("backup_set_device_name", { name });
 export const addProject = (name: string, path: string) => command<string>("add_project", { name, path });
-export const fetchLeaderboard = (board?: string) => command<MarketSkill[]>("fetch_leaderboard", { board: board ?? null });
+export async function fetchLeaderboard(board?: string): Promise<MarketSkill[]> {
+  return await invoke<MarketSkill[]>("fetch_leaderboard", { board: board ?? null });
+}
 export const searchSkillsSh = (query: string) => command<MarketSkill[]>("search_skillssh", { query, limit: 24 });
 export const installFromSkillsSh = (source: string, name: string) =>
   command<InstalledSkill>("install_from_skillssh", { source, name });

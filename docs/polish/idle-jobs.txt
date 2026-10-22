@@ -1,0 +1,11 @@
+Idle job log, Tauri, SKILL_HIVE_BASE=/tmp/skill-hive-polish, 500 skills.
+
+First launch, stamp absent:
+startup: reindex_from_metadata 380 ms (skills=500)
+job-event lines: 0
+
+Second launch, stamp present:
+startup: reindex_from_metadata cached 10 ms (skills=500)
+
+Library page idle 2026-10-22T09:52:12Z to 2026-10-22T09:53:12Z: job-event lines 0
+Settings page idle 2026-10-22T09:53:14Z to 2026-10-22T09:54:14Z: job-event lines 0

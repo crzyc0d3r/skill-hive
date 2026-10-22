@@ -226,7 +226,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         const choice = isThemeChoice(value) ? value : "system";
         setTheme(choice);
         applyTheme(choice);
-        setBanner(null);
+        const showLoadBanner = import.meta.env.DEV && new URLSearchParams(window.location.search).get("banner") === "load";
+        setBanner(showLoadBanner ? t("banner.load") : null);
       })
       .catch(() => {
         if (!cancelled) setBanner(t("banner.load"));
@@ -346,6 +347,10 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     void import("@tauri-apps/api/event")
       .then(({ listen }) =>
         listen<{ job: string; current: number; total: number; message: string; done: boolean }>("job-progress", (event) => {
+          if (event.payload.job === "library") {
+            setJob(null);
+            return;
+          }
           setJob(event.payload.done ? null : event.payload);
         }),
       )
@@ -406,18 +411,17 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     .filter((group) => group.items.length > 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background font-sans text-foreground">
+    <div data-theme-surface="" className="flex h-full min-h-0 flex-col bg-background font-sans text-foreground">
       {platform === "mac" ? (
         <div data-testid="drag-strip" data-tauri-drag-region className="h-7 shrink-0 bg-sidebar" />
       ) : null}
-      <StatusBanner message={banner} onRetry={() => setReloadKey((value) => value + 1)} />
       <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)} className="relative h-full min-h-0 flex-1">
         <Sidebar
           collapsible="none"
           data-testid="sidebar"
           data-collapsed={collapsed ? "true" : "false"}
           data-band={band}
-          className={cn("h-full shrink-0 border-r border-sidebar-border bg-sidebar", collapsed && "[&_[data-sidebar=group-label]]:sr-only", band === 800 && !collapsed && "absolute inset-y-0 left-0 z-40 shadow-lg")}
+          className={cn("h-full shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground", collapsed && "[&_[data-sidebar=group-label]]:sr-only", band === 800 && !collapsed && "absolute inset-y-0 left-0 z-40 shadow-lg")}
           style={{ width: sidebarWidth }}
         >
           <SidebarHeader className="h-11 justify-center border-b border-sidebar-border px-3">
@@ -669,10 +673,11 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
             </SidebarMenu>
           </SidebarFooter>
         </Sidebar>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <div data-theme-surface="" className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background">
           <header
             data-testid="header"
-            className={cn("sticky top-0 z-10 flex h-11 items-center justify-between gap-3 border-b border-border bg-background", pagePad, "py-0")}
+            data-theme-surface=""
+            className={cn("sticky top-0 z-30 flex h-11 items-center justify-between gap-3 border-b border-border bg-background", pagePad, "py-0")}
           >
             <div className="min-w-0">
               <div data-testid="breadcrumb" className="truncate text-overline font-semibold text-muted-foreground uppercase">{crumb}</div>
@@ -691,14 +696,17 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
               </Button>
             </div>
           </header>
+          <StatusBanner
+            message={banner}
+            className={band >= 1920 ? "px-8" : band >= 1440 ? "px-6" : "px-4"}
+            onRetry={() => setReloadKey((value) => value + 1)}
+          />
           <main
             data-testid="content"
+            data-theme-surface=""
             className={cn("min-h-0 flex-1 overflow-auto", pagePad)}
             style={{ scrollPaddingTop: "44px" }}
           >
-            {job && !job.done ? (
-              <JobBanner job={job} onCancel={() => { void silent("cancel_job"); setJob(null); }} />
-            ) : null}
             <div className="mx-auto w-full max-w-[1600px]">
               <DataPhaseContext.Provider value={dataPhase}>
               <RetryContext.Provider value={retryData}>
@@ -730,14 +738,18 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           </main>
         </div>
       </SidebarProvider>
+      {job && !job.done ? (
+        <JobBanner job={job} onCancel={() => { void silent("cancel_job"); setJob(null); }} />
+      ) : null}
       <footer
         role="status"
         data-testid="status-bar"
+        data-theme-surface=""
         className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-border bg-sidebar px-3 text-xs text-muted-foreground"
       >
         <span className="flex items-center gap-2">
           <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
-          {job && !job.done ? t("job.working") : authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : t("shell.ready")}
+          {job && !job.done ? jobLabel(job.job, job.message, job.current, job.total).text : authoring.counts ? t("status.validation", { errors: String(authoring.counts.errors), warnings: String(authoring.counts.warnings) }) : t("shell.ready")}
         </span>
         <Link to="/runs/run-fixture" data-testid="run-chip" aria-label={t("results.title")} className="inline-flex items-center gap-1 text-muted-foreground">
           <ClipboardListIcon className="size-3.5" aria-hidden="true" />
@@ -884,7 +896,7 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
           onClose={() => setCloseOpen(false)}
         />
       ) : null}
-      <Toaster position="top-right" closeButton />
+      <Toaster position="top-right" offset={{ top: 56, right: 16 }} closeButton />
     </div>
   );
 }
@@ -898,15 +910,18 @@ function JobBanner({
 }) {
   const { text, percent } = jobLabel(job.job, job.message, job.current, job.total);
   return (
-    <div data-testid="job-progress" className="mb-4 rounded-lg border border-border bg-popover px-4 py-3 text-popover-foreground shadow-md">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">{text}</p>
+    <div data-testid="job-progress" className="pointer-events-none fixed inset-x-0 top-0 z-[80]">
+      <div className="h-0.5 bg-primary/25" aria-hidden="true">
+        <div className="h-full bg-primary" style={{ width: `${percent}%` }} />
+      </div>
+      <div className="pointer-events-auto absolute right-3 top-14 flex w-72 items-center gap-3 rounded-md border border-border bg-card px-3 py-1.5 text-card-foreground shadow-md">
+        <p className="min-w-0 flex-1 truncate text-xs">{text}</p>
         <Button type="button" size="sm" variant="outline" onClick={onCancel}>
           {t("shell.cancel")}
         </Button>
       </div>
       <div
-        className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+        className="sr-only h-2 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}

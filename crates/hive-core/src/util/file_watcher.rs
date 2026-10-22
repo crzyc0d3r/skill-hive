@@ -266,16 +266,21 @@ fn should_emit(event: &Event) -> bool {
     if event.paths.is_empty() {
         return false;
     }
-    // Drop events that come exclusively from `.git/` subtrees. `git fetch`
-    // writes FETCH_HEAD/refs/packed-refs every time refreshGitStatus runs;
-    // forwarding those to the UI causes refreshAppData → setManagedSkills →
-    // refreshGitStatus to loop back into another fetch.
-    event.paths.iter().any(|p| !is_in_git_dir(p))
+    // Drop events that come exclusively from paths the app writes itself.
+    // `.git` fetches used to loop refreshGitStatus. `.skill-hive` is the
+    // library index, and `.skills-manager` is sync metadata. On Windows the
+    // notification names the directory, so a file-level mute does not match
+    // and the index rewrite wakes another rebuild.
+    event.paths.iter().any(|path| !is_watch_noise(path))
 }
 
-fn is_in_git_dir(path: &Path) -> bool {
-    path.components()
-        .any(|c| c.as_os_str() == std::ffi::OsStr::new(".git"))
+fn is_watch_noise(path: &Path) -> bool {
+    path.components().any(|component| {
+        matches!(
+            component.as_os_str().to_str(),
+            Some(".git" | ".skill-hive" | ".skills-manager")
+        )
+    })
 }
 
 /// Whether the event touches the central repository's working tree (the part
@@ -286,7 +291,7 @@ fn touches_central_repo(event: &Event) -> bool {
     event
         .paths
         .iter()
-        .any(|p| p.starts_with(&skills_dir) && !is_in_git_dir(p))
+        .any(|p| p.starts_with(&skills_dir) && !is_watch_noise(p))
 }
 
 fn notify_central_change() {
@@ -377,6 +382,22 @@ mod tests {
     use crate::db::skill_store::{ProjectRecord, SkillStore};
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn library_index_writes_are_not_library_changes() {
+        assert!(super::is_watch_noise(std::path::Path::new(
+            "/skills/.skill-hive/library-index.json"
+        )));
+        assert!(super::is_watch_noise(std::path::Path::new(
+            "/skills/.skills-manager/skills/a.json"
+        )));
+        assert!(super::is_watch_noise(std::path::Path::new(
+            "/skills/foo/.git/FETCH_HEAD"
+        )));
+        assert!(!super::is_watch_noise(std::path::Path::new(
+            "/skills/foo/SKILL.md"
+        )));
+    }
 
     #[test]
     fn self_write_mute_window_is_half_open() {

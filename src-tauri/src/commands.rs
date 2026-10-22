@@ -128,6 +128,8 @@ pub struct ScanDto {
     pub already_managed: bool,
     pub differs: bool,
     pub fingerprint: String,
+    /// "error", "parse", or empty when the folder read cleanly.
+    pub reason: String,
 }
 
 #[derive(Serialize)]
@@ -183,6 +185,8 @@ struct CachedLibrary {
 
 static LIBRARY_INDEX: Mutex<Option<CachedLibrary>> = Mutex::new(None);
 static LIBRARY_GENERATION: AtomicU64 = AtomicU64::new(0);
+static LIBRARY_DIRTY: AtomicBool = AtomicBool::new(false);
+static LIBRARY_REFRESHING: AtomicBool = AtomicBool::new(false);
 
 struct CachedTools {
     at_ms: u64,
@@ -229,10 +233,9 @@ fn library_index_path() -> PathBuf {
 
 pub fn invalidate_library_index() {
     LIBRARY_GENERATION.fetch_add(1, Ordering::AcqRel);
-    if let Ok(mut guard) = LIBRARY_INDEX.lock() {
-        *guard = None;
-    }
-    let _ = std::fs::remove_file(library_index_path());
+    // Keep memory and the disk index. Clearing either made the next
+    // navigation rebuild the library and flash a progress banner.
+    LIBRARY_DIRTY.store(true, Ordering::Release);
 }
 
 fn memory_index(path: &str) -> Option<Vec<ManagedSkill>> {
@@ -253,6 +256,10 @@ fn remember_index(path: &str, skills: &[ManagedSkill]) {
     }
 }
 
+fn remember_disk_index(path: &str, skills: &[ManagedSkill]) {
+    remember_index(path, skills);
+}
+
 fn read_disk_index() -> Option<Vec<ManagedSkill>> {
     let text = std::fs::read_to_string(library_index_path()).ok()?;
     serde_json::from_str(&text).ok()
@@ -263,10 +270,11 @@ fn write_library_index(store: &SkillStore, skills: &[ManagedSkill]) {
     let path = library_index_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
+        hive_core::util::file_watcher::mute_self_writes(parent);
     }
     hive_core::util::file_watcher::mute_self_writes(&path);
     if let Ok(text) = serde_json::to_string(skills) {
-        let _ = std::fs::write(path, text);
+        let _ = std::fs::write(&path, text);
     }
 }
 
@@ -279,7 +287,6 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
 
 fn rebuild_library(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
     let generation = LIBRARY_GENERATION.load(Ordering::Acquire);
-    crate::progress::emit("library", 0, 1, "Reading the library", false);
     let tags = store.get_tags_map().map_err(db)?;
     let targets = store.get_all_targets().map_err(db)?;
     let mut skills = Vec::new();
@@ -324,8 +331,8 @@ fn rebuild_library(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
     }
     if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
         write_library_index(store, &skills);
+        LIBRARY_DIRTY.store(false, Ordering::Release);
     }
-    crate::progress::emit("library", 1, 1, "Library ready", true);
     Ok(skills)
 }
 
@@ -461,6 +468,7 @@ fn to_scan(rows: Vec<ScannedSkill>) -> Vec<ScanDto> {
             already_managed: row.already_managed,
             differs: row.differs,
             fingerprint: row.fingerprint,
+            reason: row.reason,
         })
         .collect()
 }
@@ -729,24 +737,40 @@ pub async fn get_managed_skills(
     let store = store.inner().clone();
     let path = store.db_file();
     if let Some(cached) = memory_index(&path) {
+        schedule_quiet_refresh(app, store, &path);
         return Ok(cached);
     }
     if let Some(cached) = read_disk_index() {
-        let generation = LIBRARY_GENERATION.load(Ordering::Acquire);
-        remember_index(&path, &cached);
-        let refreshing = store.clone();
-        tauri::async_runtime::spawn(async move {
-            let rebuilt =
-                crate::offload::offload(move || rebuild_library(refreshing.as_ref())).await;
-            if let Ok(rows) = rebuilt {
-                if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
-                    let _ = app.emit("library-index", &rows);
-                }
-            }
-        });
+        // A disk hit is a fresh cache. Marking it dirty rewrote the index,
+        // the watcher treated that write as a library change, and the next
+        // read rebuilt again.
+        remember_disk_index(&path, &cached);
+        schedule_quiet_refresh(app, store, &path);
         return Ok(cached);
     }
     crate::offload::offload(move || managed(store.as_ref())).await
+}
+
+fn schedule_quiet_refresh(app: AppHandle, store: Arc<SkillStore>, path: &str) {
+    if !LIBRARY_DIRTY.load(Ordering::Acquire) {
+        return;
+    }
+    if memory_index(path).is_none() {
+        return;
+    }
+    if LIBRARY_REFRESHING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let generation = LIBRARY_GENERATION.load(Ordering::Acquire);
+    tauri::async_runtime::spawn(async move {
+        let rebuilt = crate::offload::offload(move || rebuild_library(store.as_ref())).await;
+        LIBRARY_REFRESHING.store(false, Ordering::Release);
+        if let Ok(rows) = rebuilt {
+            if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
+                let _ = app.emit("library-index", &rows);
+            }
+        }
+    });
 }
 
 #[tauri::command]
@@ -761,10 +785,8 @@ pub async fn get_skill_files(
             .get_skill_by_id(skill_id.trim())
             .map_err(db)?
             .ok_or_else(|| AppError::not_found("skill"))?;
-        report("library", 0, 1, "Reading skill files")?;
         let source = source_dir(&skill);
         let files = skill_tree_files(Path::new(&skill.central_path), source.as_deref());
-        crate::progress::finish("library", "Skill files ready");
         Ok(files)
     })
     .await
@@ -1580,11 +1602,11 @@ pub fn maybe_run_auto_update(store: &SkillStore, now_ms: i64) -> Result<u32, App
 
 pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
     let skills = store.get_all_skills().map_err(db)?;
-    let total = skills.len() as u32;
     let ttl = check_ttl_ms(store);
     let mut available = 0u32;
     let mut pending = Vec::new();
-    report("scan", 0, total.max(1), "Checking for updates")?;
+    // Silent on purpose. The shell runs this while the user is idle, and a
+    // job event here mounts progress UI on every launch.
     for skill in &skills {
         if crate::progress::cancelled() {
             return Err(AppError::invalid_input("cancelled"));
@@ -1607,7 +1629,6 @@ pub fn check_updates_in(store: &SkillStore) -> Result<u32, AppError> {
     if !pending.is_empty() {
         store.update_skill_check_states(&pending).map_err(db)?;
     }
-    crate::progress::finish("scan", "Update check finished");
     Ok(available)
 }
 
@@ -3225,9 +3246,61 @@ pub fn remove_preset_by_id(store: &SkillStore, preset_id: &str) -> Result<(), Ap
 }
 #[cfg(test)]
 mod tests {
-    use super::{confirm_preview, preview_repository};
+    use super::{
+        confirm_preview, invalidate_library_index, memory_index, preview_repository,
+        remember_index, ManagedSkill, LIBRARY_DIRTY,
+    };
     use std::fs;
     use std::process::Command;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn invalidation_keeps_the_library_index() {
+        let path = "polish-cache-db";
+        remember_index(
+            path,
+            &[ManagedSkill {
+                id: "skill-1".into(),
+                name: "notes".into(),
+                description: "A note".into(),
+                source: "local".into(),
+                tags: Vec::new(),
+                enabled: true,
+                body: String::new(),
+                source_body: String::new(),
+                agents: Vec::new(),
+                files: Vec::new(),
+                updated_at: 1,
+                update_status: "current".into(),
+                locations: vec!["/skills/notes".into()],
+            }],
+        );
+        LIBRARY_DIRTY.store(false, Ordering::Release);
+        super::remember_disk_index(path, &memory_index(path).expect("cached rows"));
+        assert!(
+            !LIBRARY_DIRTY.load(Ordering::Acquire),
+            "reading the disk index must not schedule a rebuild"
+        );
+        invalidate_library_index();
+        let rows = memory_index(path).expect("memory index");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].name, "notes");
+        assert!(LIBRARY_DIRTY.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn idle_update_check_emits_no_job() {
+        let tmp = std::env::temp_dir().join(format!("skill-hive-idle-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let store = hive_core::db::skill_store::SkillStore::new(&tmp.join("hive.db")).unwrap();
+        crate::progress::capture_job_events();
+        let count = super::check_updates_in(&store).unwrap();
+        let events = crate::progress::captured_job_events();
+        let _ = fs::remove_dir_all(&tmp);
+        assert_eq!(count, 0);
+        assert!(events.is_empty(), "idle job events: {events:?}");
+    }
 
     fn git(dir: &std::path::Path, args: &[&str]) {
         let status = Command::new("git")

@@ -272,6 +272,25 @@ body,
   line-height: 1.45;
 }
 
+html:not([data-reduce-motion="on"]),
+html:not([data-reduce-motion="on"]) body,
+html:not([data-reduce-motion="on"]) #root,
+html:not([data-reduce-motion="on"]) [data-theme-surface],
+html:not([data-reduce-motion="on"]) [data-slot="sidebar"] :where(:not(button):not([data-slot="button"]):not([data-sidebar="menu-button"])) {
+  transition-property: background-color, color, border-color;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-out);
+}
+
+[data-sidebar="sidebar"] {
+  color: var(--sidebar-foreground);
+}
+
+[data-sidebar="sidebar"] svg {
+  stroke: currentColor;
+  color: currentColor;
+}
+
 html.dark button[data-theme-selected="true"] {
   background-color: #f4f1ea !important;
   color: #1c1917 !important;
