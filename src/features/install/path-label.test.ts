@@ -11,8 +11,12 @@ describe("scan path labels", () => {
   });
 
   it("styles read and parse failures the same way", () => {
+    expect(scanReasonIsError("permission denied")).toBe(true);
+    expect(scanReasonIsError("not found")).toBe(true);
+    expect(scanReasonIsError("parse error at line 3")).toBe(true);
     expect(scanReasonIsError("error")).toBe(true);
     expect(scanReasonIsError("parse")).toBe(true);
     expect(scanReasonIsError("")).toBe(false);
+    expect(scanReasonIsError(undefined)).toBe(false);
   });
 });

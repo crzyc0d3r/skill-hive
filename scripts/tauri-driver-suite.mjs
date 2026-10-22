@@ -773,22 +773,20 @@ conn.commit()
     const frameDir = path.join(process.cwd(), "docs", "polish", "windows");
     mkdirSync(frameDir, { recursive: true });
     const tops = [];
-    async function contentTop() {
+    async function readPage(landmark) {
       const result = await call("POST", `${prefix}/execute/sync`, {
-        script: `const node = document.querySelector('[data-testid="content"]');
-          return node ? node.getBoundingClientRect().top : null;`,
+        script: `const node = document.querySelector('[data-testid="${landmark}"]');
+          if (!node) return "";
+          return node.getBoundingClientRect().top + "|" + (document.documentElement.classList.contains("dark") ? "1" : "0");`,
         args: [],
       });
-      if (typeof result.value !== "number") throw new Error(`content top missing: ${JSON.stringify(result)}`);
-      return result.value;
-    }
-    async function saveFrame(name) {
-      await dismissToasts();
-      const shot = await call("GET", `${prefix}/screenshot`);
-      writeFileSync(path.join(frameDir, `${name}.png`), Buffer.from(shot.value, "base64"));
-      const top = await contentTop();
-      tops.push({ name, top });
-      return top;
+      const raw = String(result.value ?? "");
+      const [topText, darkText] = raw.split("|");
+      const top = Number(topText);
+      if (!raw || !Number.isFinite(top) || (darkText !== "0" && darkText !== "1")) {
+        throw new Error(`page sample missing for ${landmark}: ${JSON.stringify(result)}`);
+      }
+      return { top, dark: darkText === "1" };
     }
     const steps = [
       ["01-library", "/my-skills", "library"],
@@ -800,23 +798,44 @@ conn.commit()
       ["07-library-return", "/my-skills", "library"],
     ];
     for (const theme of ["Light", "Dark"]) {
+      const expectDark = theme === "Dark";
       await openPath("/settings");
       await find("[data-testid=settings]");
       await clickText(theme);
       await new Promise((resolve) => setTimeout(resolve, 400));
+      const switched = await readPage("settings");
+      if (switched.dark !== expectDark) {
+        throw new Error(`theme did not switch to ${theme} before the frames`);
+      }
       let first = null;
       for (const [name, pathname, landmark] of steps) {
         await openPath(pathname);
         await find(`[data-testid=${landmark}]`);
-        const top = await saveFrame(`${theme.toLowerCase()}-${name}`);
+        const samples = [];
+        const started = Date.now();
+        while (Date.now() - started < 2000) {
+          const sample = await readPage(landmark);
+          if (sample.dark !== expectDark) {
+            throw new Error(`theme flipped on ${theme} ${name}`);
+          }
+          samples.push(sample.top);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        await dismissToasts();
+        const shot = await call("GET", `${prefix}/screenshot`);
+        const frame = `${theme.toLowerCase()}-${name}`;
+        writeFileSync(path.join(frameDir, `${frame}.png`), Buffer.from(shot.value, "base64"));
+        const top = samples[0];
         if (first === null) first = top;
-        if (Math.abs(top - first) > 1) {
-          throw new Error(`content top moved on ${theme} ${name}: ${first} -> ${top}`);
+        const drifted = samples.some((value) => Math.abs(value - first) > 1);
+        tops.push({ name: frame, landmark, dark: expectDark, top, samples });
+        if (drifted) {
+          throw new Error(`page top moved on ${theme} ${name}: baseline ${first}, samples ${samples.join(", ")}`);
         }
       }
     }
     writeFileSync(path.join(frameDir, "tops.json"), JSON.stringify(tops, null, 2));
-    console.log(`windows navigation frames ${tops.length} content tops ${[...new Set(tops.map((row) => row.top))].join(", ")}`);
+    console.log(`windows navigation frames ${tops.length} page tops ${[...new Set(tops.map((row) => row.top))].join(", ")}`);
   }
 
   console.log("tauri-driver suite: shell routes, install, and authoring artifacts");

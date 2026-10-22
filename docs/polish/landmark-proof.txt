@@ -1,0 +1,36 @@
+Page-landmark check. The Windows driver samples [data-testid=library|settings|install]
+for about 2s and requires html.dark to match the theme. scripts/prove-page-landmark.mjs
+runs that measurement in Playwright.
+
+main@10d960b (http://127.0.0.1:1421) exits 1. The scroll container stays at 38.5
+while the page element jumps from 52.5 to 131.5 once ?job=sync shows the in-flow banner.
+
+polish-pass (http://127.0.0.1:1420) exits 0. The page element stays at 52.5 and the
+scroll container stays at 38.5, including settings and install, for the whole sample.
+Theme stayed dark on every sample.
+
+main@10d960b
+{
+  "base": "http://127.0.0.1:1421",
+  "themeDark": true,
+  "plain": { "min": 52.5, "max": 52.5, "first": 52.5, "n": 20 },
+  "plainContent": { "min": 38.5, "max": 38.5, "first": 38.5, "n": 20 },
+  "job": { "min": 131.5, "max": 131.5, "first": 131.5, "n": 20 },
+  "jobContent": { "min": 38.5, "max": 38.5, "first": 38.5, "n": 20 },
+  "settings": { "min": 131.5, "max": 131.5, "first": 131.5, "n": 20 },
+  "install": { "min": 131.5, "max": 131.5, "first": 131.5, "n": 20 },
+  "moved": true
+}
+
+fix
+{
+  "base": "http://127.0.0.1:1420",
+  "themeDark": true,
+  "plain": { "min": 52.5, "max": 52.5, "first": 52.5, "n": 20 },
+  "plainContent": { "min": 38.5, "max": 38.5, "first": 38.5, "n": 20 },
+  "job": { "min": 52.5, "max": 52.5, "first": 52.5, "n": 20 },
+  "jobContent": { "min": 38.5, "max": 38.5, "first": 38.5, "n": 20 },
+  "settings": { "min": 52.5, "max": 52.5, "first": 52.5, "n": 20 },
+  "install": { "min": 52.5, "max": 52.5, "first": 52.5, "n": 20 },
+  "moved": false
+}

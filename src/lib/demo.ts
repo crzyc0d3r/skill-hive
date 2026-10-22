@@ -55,8 +55,8 @@ export const DEMO: DemoState = {
   scanned: [
     { name: "claude-skill", tool: "claude_code" },
     { name: "cursor-skill", tool: "cursor" },
-    { name: "locked-skill", tool: "claude_code", reason: "error" },
-    { name: "blank-skill", tool: "cursor", reason: "parse" },
+    { name: "locked-skill", tool: "claude_code", reason: "permission denied" },
+    { name: "blank-skill", tool: "cursor", reason: "parse error at line 1" },
   ],
 };
 

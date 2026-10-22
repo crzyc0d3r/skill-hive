@@ -25,13 +25,21 @@ describe("scan grouping", () => {
 
   it("keeps a read error ahead of a parse error", () => {
     const rows = groupScanRows([
-      { name: "broken", tool: "cursor", path: "/a/SKILL.md", reason: "parse" },
-      { name: "broken", tool: "codex", path: "/b/SKILL.md", reason: "error" },
+      { name: "broken", tool: "cursor", path: "/a/SKILL.md", reason: "parse error at line 3" },
+      { name: "broken", tool: "codex", path: "/b/SKILL.md", reason: "permission denied" },
     ]);
-    expect(rows[0]?.reason).toBe("error");
+    expect(rows[0]?.reason).toBe("permission denied");
+    const legacy = groupScanRows([
+      { name: "broken", tool: "cursor", path: "/a/SKILL.md", reason: "parse" },
+      { name: "broken", tool: "codex", path: "/b/SKILL.md", reason: "not found" },
+    ]);
+    expect(legacy[0]?.reason).toBe("not found");
   });
 
   it("does not count a read or parse failure as new", () => {
+    expect(isFreshScan({ reason: "not found" })).toBe(false);
+    expect(isFreshScan({ reason: "permission denied" })).toBe(false);
+    expect(isFreshScan({ reason: "parse error at line 2" })).toBe(false);
     expect(isFreshScan({ reason: "error" })).toBe(false);
     expect(isFreshScan({ reason: "parse" })).toBe(false);
     expect(isFreshScan({ alreadyManaged: true })).toBe(false);

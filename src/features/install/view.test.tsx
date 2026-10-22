@@ -49,8 +49,8 @@ describe("install", () => {
         <InstallView
           scanned={[
             { name: "notes", tool: "cursor", path: "~/.cursor/skills/notes" },
-            { name: "locked-skill", tool: "claude_code", path: "~/.claude/skills/locked-skill", reason: "error" },
-            { name: "blank-skill", tool: "cursor", path: "~/.cursor/skills/blank-skill", reason: "parse" },
+            { name: "locked-skill", tool: "claude_code", path: "~/.claude/skills/locked-skill", reason: "permission denied" },
+            { name: "blank-skill", tool: "cursor", path: "~/.cursor/skills/blank-skill", reason: "parse error at line 4" },
           ]}
           onImportAll={() => {}}
           onImportOne={() => {}}
@@ -64,6 +64,6 @@ describe("install", () => {
     );
     expect(screen.getByText("We found 3 skills in 2 agents. 1 are new.")).toBeInTheDocument();
     expect(screen.getByText("permission denied").closest("td")).toHaveClass("text-destructive");
-    expect(screen.getByText("Parse error").closest("td")).toHaveClass("text-destructive");
+    expect(screen.getByText("parse error at line 4").closest("td")).toHaveClass("text-destructive");
   });
 });

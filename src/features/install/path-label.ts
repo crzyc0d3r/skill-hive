@@ -6,6 +6,7 @@ export function middleEllipsis(value: string, max = 56): string {
   return `${text.slice(0, keep)}…${text.slice(text.length - keep)}`;
 }
 
+/** Any reason string is a real read or parse failure. An empty reason scanned cleanly. */
 export function scanReasonIsError(reason: string | undefined): boolean {
-  return reason === "error" || reason === "parse";
+  return Boolean(reason?.trim());
 }

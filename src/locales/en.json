@@ -606,8 +606,6 @@
   "install.scan.skill": "Skill",
   "install.scan.foundIn": "Found in",
   "install.scan.reason": "Reason",
-  "install.scan.readError": "permission denied",
-  "install.scan.parseError": "Parse error",
   "install.scan.onlyNew": "Only new",
   "install.scan.search": "Search found skills",
   "install.git.title": "Install from Git",

@@ -268,7 +268,7 @@ export function InstallView({
               const name = scanNames[row.name] ?? row.name;
               const checked = picked.includes(row.name);
               const reason = scanReasonIsError(row.reason)
-                ? row.reason === "parse" ? t("install.scan.parseError") : t("install.scan.readError")
+                ? row.reason
                 : row.differs ? t("install.scan.differs") : row.alreadyManaged ? t("install.scan.inLibrary") : t("install.scan.new");
               const fullPath = row.paths.filter(Boolean).join(" · ");
               return (

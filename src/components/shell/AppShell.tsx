@@ -696,7 +696,11 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
               </Button>
             </div>
           </header>
-          <StatusBanner message={banner} onRetry={() => setReloadKey((value) => value + 1)} />
+          <StatusBanner
+            message={banner}
+            className={band >= 1920 ? "px-8" : band >= 1440 ? "px-6" : "px-4"}
+            onRetry={() => setReloadKey((value) => value + 1)}
+          />
           <main
             data-testid="content"
             data-theme-surface=""
