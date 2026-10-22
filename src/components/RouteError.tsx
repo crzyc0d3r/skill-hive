@@ -72,10 +72,13 @@ export class RouteErrorBoundary extends Component<Props, State> {
       <div role="alert" data-testid="route-error" className="rounded-lg border border-destructive/40 bg-card px-4 py-4 text-card-foreground">
         <h1 className="font-sans text-2xl font-semibold">{t("shell.error")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("shell.renderError")}</p>
-        <pre className="mt-3 overflow-auto whitespace-pre-wrap font-mono text-xs">{this.state.error.message}</pre>
         <Button type="button" size="sm" className="mt-3" onClick={() => window.location.reload()}>
-          {t("shell.reload")}
+          {t("banner.retry")}
         </Button>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm">{t("shell.details")}</summary>
+          <pre className="mt-2 overflow-auto whitespace-pre-wrap font-mono text-xs">{this.state.error.message}</pre>
+        </details>
       </div>
     );
     if (!topLevel) return alert;

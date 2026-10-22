@@ -39,7 +39,29 @@ async function boot(page: Page, theme: "light" | "dark", width: number) {
   await page.setViewportSize({ width, height: 900 });
 }
 
+async function settle(page: Page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const deadline = performance.now() + 1200;
+    while (performance.now() < deadline) {
+      const pending = document.getAnimations().filter((animation) => {
+        if (animation.playState !== "running") return false;
+        const effect = animation.effect;
+        if (effect && "getTiming" in effect && effect.getTiming().iterations === Infinity) return false;
+        return true;
+      });
+      if (pending.length === 0) break;
+      await Promise.race([
+        Promise.all(pending.map((animation) => animation.finished.catch(() => undefined))),
+        new Promise((resolve) => window.setTimeout(resolve, 40)),
+      ]);
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined))));
+  });
+}
+
 async function saveShot(page: Page, theme: "light" | "dark", width: number, name: string) {
+  await settle(page);
   const design = path.join("docs/parity/screenshots", theme, `design-${name}-${width}.png`);
   await page.screenshot({ path: design, fullPage: false });
   const auditDir = path.join("docs/ui-audit/after", theme, String(width));
@@ -85,19 +107,26 @@ for (const theme of THEMES) {
       await saveShot(page, theme, width, "detail");
       await page.goto("/my-skills?crash=route");
       await expect(page.getByTestId("route-error")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+      await expect(page.locator("summary", { hasText: "Details" })).toBeVisible();
       if (await page.locator("vite-error-overlay").count()) {
         await page.locator("vite-error-overlay").evaluate((node) => node.remove());
       }
       await saveShot(page, theme, width, "error-route");
+      await page.locator("summary", { hasText: "Details" }).click();
+      await expect(page.getByText("Route render failed")).toBeVisible();
       await page.goto("/?crash=app");
       await expect(page.getByTestId("route-error")).toBeVisible();
-      await expect(page.getByText("Top-level render failed")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+      await expect(page.locator("summary", { hasText: "Details" })).toBeVisible();
       const dark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
       expect(dark).toBe(theme === "dark");
       if (await page.locator("vite-error-overlay").count()) {
         await page.locator("vite-error-overlay").evaluate((node) => node.remove());
       }
       await saveShot(page, theme, width, "error-app");
+      await page.locator("summary", { hasText: "Details" }).click();
+      await expect(page.getByText("Top-level render failed")).toBeVisible();
     });
 
     for (const state of ["empty", "loading", "error"] as const) {

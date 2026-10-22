@@ -223,7 +223,6 @@
   "settings.agents.detected": "Agents on this machine",
   "settings.agents.found": "Detected",
   "settings.agents.showingAll": "Showing every supported agent, including ones not on this machine.",
-  "shell.reload": "Reload",
   "shell.renderError": "This screen hit an error and was stopped.",
   "shell.details": "Details",
   "install.scan.locations": "Found in {count} locations",

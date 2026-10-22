@@ -201,7 +201,7 @@ export function WorkspaceView({
 
   if (!agentKey) {
     return (
-      <Screen testId="global-workspace" title={t("workspace.title")} lede={t("workspace.lede")} actions={<Button type="button" size="sm" onClick={() => setCreating(true)}>{t("preset.new")}</Button>}>
+      <Screen testId="global-workspace" title={t("workspace.title")} lede={t("workspace.lede")} actions={phase === "empty" ? undefined : <Button type="button" size="sm" onClick={() => setCreating(true)}>{t("preset.new")}</Button>}>
         {creating ? (
           <form
             role="dialog"

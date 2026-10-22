@@ -33,10 +33,13 @@ const TABS = ["general", "appearance", "agents", "backup", "keyboard", "about"] 
 
 function paintSelected(node: HTMLButtonElement | null, selected: boolean) {
   if (!node) return;
+  const dark = document.documentElement.classList.contains("dark");
   if (selected) {
-    node.style.setProperty("background-color", "#f4f1ea", "important");
-    node.style.setProperty("color", "#1c1917", "important");
-    node.style.setProperty("border-color", "#f4f1ea", "important");
+    const background = dark ? "#f4f1ea" : "#1c1917";
+    const foreground = dark ? "#1c1917" : "#f4f1ea";
+    node.style.setProperty("background-color", background, "important");
+    node.style.setProperty("color", foreground, "important");
+    node.style.setProperty("border-color", background, "important");
   } else {
     node.style.removeProperty("background-color");
     node.style.removeProperty("color");
@@ -192,12 +195,14 @@ export function SettingsView({
               </Button>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" aria-pressed={motion} variant="outline" size="sm" className="transition-none" ref={(node) => paintSelected(node, motion)} onClick={() => { const next = !motion; setMotion(next); document.documentElement.dataset.reduceMotion = next ? "on" : "off"; }}>
+          <div className="mt-3">
+            <Button type="button" aria-pressed={motion} data-theme-selected={motion ? "true" : "false"} variant="outline" size="sm" className="transition-none" ref={(node) => paintSelected(node, motion)} onClick={() => { const next = !motion; setMotion(next); document.documentElement.dataset.reduceMotion = next ? "on" : "off"; }}>
               {t("settings.motion")}
             </Button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
             {sizes.map((size) => (
-              <Button key={size} type="button" aria-pressed={textSize === size} variant="outline" size="sm" className="transition-none" ref={(node) => paintSelected(node, textSize === size)} onClick={() => { applyTextSize(size); setTextSize(size); void writeSetting("ui_text_size", size); }}>
+              <Button key={size} type="button" aria-pressed={textSize === size} data-theme-selected={textSize === size ? "true" : "false"} variant="outline" size="sm" className="transition-none" ref={(node) => paintSelected(node, textSize === size)} onClick={() => { applyTextSize(size); setTextSize(size); void writeSetting("ui_text_size", size); }}>
                 {t(`settings.text.${size}`)}
               </Button>
             ))}

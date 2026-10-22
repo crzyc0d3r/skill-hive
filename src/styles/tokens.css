@@ -267,10 +267,16 @@ body,
   line-height: 1.45;
 }
 
-button[data-theme-selected="true"] {
+html.dark button[data-theme-selected="true"] {
   background-color: #f4f1ea !important;
   color: #1c1917 !important;
   border-color: #f4f1ea !important;
+}
+
+html:not(.dark) button[data-theme-selected="true"] {
+  background-color: #1c1917 !important;
+  color: #f4f1ea !important;
+  border-color: #1c1917 !important;
 }
 
 @keyframes skeleton-shimmer {

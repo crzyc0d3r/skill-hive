@@ -121,7 +121,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/my-skills?crash=route");
     await expect(page.getByTestId("sidebar")).toBeVisible();
     await expect(page.getByTestId("route-error")).toBeVisible();
-    await expect(page.getByText("Route render failed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     if (await page.locator("vite-error-overlay").count()) {
       await page.locator("vite-error-overlay").evaluate((node) => node.remove());
     }
@@ -129,9 +129,11 @@ for (const theme of ["light", "dark"] as const) {
       path: `docs/parity/screenshots/${theme}/error-route.png`,
       fullPage: false,
     });
+    await page.locator("summary", { hasText: "Details" }).click();
+    await expect(page.getByText("Route render failed")).toBeVisible();
     await page.goto("/?crash=app");
     await expect(page.getByTestId("route-error")).toBeVisible();
-    await expect(page.getByText("Top-level render failed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     await expect(page.getByTestId("sidebar")).toHaveCount(0);
     const dark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
     expect(dark).toBe(theme === "dark");
@@ -142,6 +144,8 @@ for (const theme of ["light", "dark"] as const) {
       path: `docs/parity/screenshots/${theme}/error-app.png`,
       fullPage: false,
     });
+    await page.locator("summary", { hasText: "Details" }).click();
+    await expect(page.getByText("Top-level render failed")).toBeVisible();
   });
 
   test(`install scan ${theme}`, async ({ page }) => {
