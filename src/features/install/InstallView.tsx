@@ -14,6 +14,7 @@ import { InstallSkeleton } from "@/components/skeletons";
 import { RetryContext, useViewPhase } from "@/lib/view-state";
 import { Card } from "@/components/ui/card";
 import { MarketplacePanel } from "@/features/install/MarketplacePanel";
+import { middleEllipsis, scanReasonIsError } from "@/features/install/path-label";
 
 const TABS = ["leaderboard", "local", "git", "scan"] as const;
 
@@ -239,39 +240,51 @@ export function InstallView({
             <Button type="button" variant="ghost" size="sm" disabled={busy} aria-busy={busy} onClick={() => void act(async () => { setRescanned(await listScanRows()); })}>{t("install.scan.rescan")}</Button>
           </div>
           <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-10" />
+                <col className="w-[22%]" />
+                <col />
+                <col className="w-36" />
+              </colgroup>
               <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2" />
                   <th className="px-3 py-2">{t("install.scan.skill")}</th>
                   <th className="px-3 py-2">{t("install.scan.foundIn")}</th>
+                  <th className="px-3 py-2">{t("install.scan.reason")}</th>
                 </tr>
               </thead>
               <tbody>
             {visibleScan.map((row) => {
               const name = scanNames[row.name] ?? row.name;
               const checked = picked.includes(row.name);
-              const status = row.differs ? t("install.scan.differs") : row.alreadyManaged ? t("install.scan.inLibrary") : t("install.scan.new");
+              const reason = scanReasonIsError(row.reason)
+                ? row.reason === "parse" ? t("install.scan.parseError") : t("install.scan.readError")
+                : row.differs ? t("install.scan.differs") : row.alreadyManaged ? t("install.scan.inLibrary") : t("install.scan.new");
+              const fullPath = row.paths.filter(Boolean).join(" · ");
               return (
-                <tr key={row.name} className="border-t border-border">
-                  <td className="px-3 py-2">
-                    <input type="checkbox" aria-label={`${t("install.git.select", { name: row.name })}`} checked={checked} disabled={Boolean(row.alreadyManaged)} onChange={() => setPicked((current) => current.includes(row.name) ? current.filter((item) => item !== row.name) : [...current, row.name])} />
+                <tr key={row.name} className="h-10 border-t border-border">
+                  <td className="px-3">
+                    <input type="checkbox" aria-label={`${t("install.git.select", { name: row.name })}`} checked={checked} disabled={Boolean(row.alreadyManaged) || scanReasonIsError(row.reason)} onChange={() => setPicked((current) => current.includes(row.name) ? current.filter((item) => item !== row.name) : [...current, row.name])} />
                   </td>
-                  <td className="px-3 py-2">
-                    <span className="font-medium">{row.name}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{status}</span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="flex flex-wrap items-center gap-1">
-                      {row.tools.slice(0, 4).map((tool) => <AgentBadge key={tool} agent={tool} />)}
+                  <td className="px-3">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-medium">{row.name}</span>
+                      {row.tools.slice(0, 3).map((tool) => <AgentBadge key={tool} agent={tool} />)}
                     </span>
-                    {row.differs ? <p className="mt-1 font-mono text-xs text-muted-foreground">{row.paths.join(", ")}</p> : null}
+                    <span className="sr-only">
+                      <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} />
+                      <Button type="button" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
+                        {t("install.scan.one")} {row.name}
+                      </Button>
+                    </span>
                   </td>
-                  <td className="sr-only">
-                    <Input aria-label={`${t("install.scan.rename")} ${row.name}`} value={name} onChange={(event) => setScanNames((current) => ({ ...current, [row.name]: event.target.value }))} />
-                    <Button type="button" disabled={busy} aria-busy={busy} onClick={() => { void act(async () => { await onImportOne(row, name); }, () => setImported(name)); }}>
-                      {t("install.scan.one")} {row.name}
-                    </Button>
+                  <td className="px-3">
+                    <span className="block truncate font-mono text-xs text-muted-foreground" title={fullPath}>{middleEllipsis(fullPath)}</span>
+                  </td>
+                  <td className={scanReasonIsError(row.reason) ? "px-3 text-destructive" : "px-3 text-muted-foreground"}>
+                    <span className="block truncate">{reason}</span>
                   </td>
                 </tr>
               );

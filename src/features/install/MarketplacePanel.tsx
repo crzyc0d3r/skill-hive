@@ -42,14 +42,19 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
   const rows = filterMarket(source, query, owner);
   const owners = [...new Set(source.map((skill) => skill.owner))];
   if (!reachable) return <p className="mt-4 text-sm text-muted-foreground">{t("install.leaderboard.empty")}</p>;
+  const showResults = rows.length > 0;
   return (
     <div className="mt-4 space-y-2" data-testid="marketplace">
       <label className="block text-sm">
         <span className="mb-1.5 block text-muted-foreground">{t("install.search")}</span>
         <Input aria-label={t("install.search")} value={query} onChange={(event) => setQuery(event.target.value)} className="h-8 max-w-sm" />
       </label>
-      {leaderboard.isError ? <p role="alert">{leaderboard.error instanceof Error ? leaderboard.error.message : "Marketplace unavailable"}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
+      {!showResults ? (
+        <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-border px-6 py-10 text-center">
+          <p className="max-w-sm text-sm text-muted-foreground">{leaderboard.isPending ? t("install.leaderboard.loading") : t("install.leaderboard.browse")}</p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {owners.map((item) => (
           <Button key={item} type="button" aria-pressed={owner === item} variant="outline" size="sm" onClick={() => setOwner(owner === item ? null : item)}>
@@ -77,7 +82,7 @@ export function MarketplacePanel({ reachable = true, skills }: { reachable?: boo
         </Button>
       ) : null}
       {installed ? <p role="status">{t("install.installed")} {installed}</p> : null}
-      <Button type="button" variant="outline" size="sm" onClick={() => void leaderboard.refetch()}>{t("install.loadMore")}</Button>
+      {showResults ? <Button type="button" variant="outline" size="sm" onClick={() => void leaderboard.refetch()}>{t("install.loadMore")}</Button> : null}
     </div>
   );
 }

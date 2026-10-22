@@ -501,18 +501,18 @@ export function LibraryView({
       >
         {rendered.map((skill) => (
           <li key={skill.id} data-virtual-card="" className="h-full min-w-0">
-            <Card className={cn("group/card flex h-[116px] flex-col gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "h-16 flex-row")}>
-              <div className="flex items-start gap-2.5 px-3 pt-3">
+            <Card className={cn("group/card flex h-[116px] flex-col gap-0 overflow-hidden rounded-lg border-border bg-card p-0 py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "h-16 flex-row items-center")}>
+              <div className="flex h-12 shrink-0 items-start gap-2.5 px-3 pt-2">
                 <input
                   type="checkbox"
                   aria-label={`Select ${skill.name}`}
                   checked={selected.includes(skill.id)}
                   onChange={() => toggleSelected(skill.id)}
-                  className="mt-1 size-4 shrink-0 rounded border-border accent-primary"
+                  className="mt-0.5 size-4 shrink-0 rounded border-border accent-primary"
                 />
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
-                  <span className="block font-medium whitespace-normal">{skill.name}</span>
-                  <span className="mt-0.5 line-clamp-1 break-words text-[13px] leading-5 text-muted-foreground">{skill.description.replace(/\s+/g, " ").trim()}</span>
+                  <span className="block h-5 overflow-hidden text-sm font-medium leading-5">{skill.name}</span>
+                  <span className="block h-5 overflow-hidden text-[13px] leading-5 text-muted-foreground">{skill.description.replace(/\s+/g, " ").trim()}</span>
                 </button>
                 <DropdownMenu modal={false} open={menuId === skill.id} onOpenChange={(next) => setMenuId(next ? skill.id : null)}>
                   <DropdownMenuTrigger asChild>
@@ -529,7 +529,7 @@ export function LibraryView({
                   </DropdownMenuContent> : null}
                 </DropdownMenu>
               </div>
-              <div className="mt-2 flex h-6 shrink-0 items-center gap-1 overflow-hidden px-3">
+              <div className="flex h-6 shrink-0 items-center gap-1 overflow-hidden px-3">
                 {skill.draft ? <Badge data-testid="draft-badge" variant="warning">{t("library.badge.draft")}</Badge> : null}
                 {badgeFor(seed, skill.id) === "tested" ? <Badge data-testid="tested-badge" variant="success">{t("library.badge.tested")}</Badge> : null}
                 {badgeFor(seed, skill.id) === "regressed" ? <Badge data-testid="regressed-badge" variant="warning">{t("library.badge.regressed")}</Badge> : null}

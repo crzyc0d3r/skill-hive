@@ -5,6 +5,8 @@ export interface ScanCopy {
   alreadyManaged?: boolean;
   differs?: boolean;
   fingerprint?: string;
+  /** "error", "parse", or empty. */
+  reason?: string;
 }
 
 export interface GroupedScan extends ScanCopy {
@@ -27,6 +29,7 @@ export function groupScanRows(rows: ScanCopy[]): GroupedScan[] {
         paths: [row.path],
         fingerprints: fingerprint ? [fingerprint] : [],
         differs: Boolean(row.differs),
+        reason: row.reason ?? "",
       });
       continue;
     }
@@ -35,6 +38,7 @@ export function groupScanRows(rows: ScanCopy[]): GroupedScan[] {
     if (fingerprint && !existing.fingerprints.includes(fingerprint)) existing.fingerprints.push(fingerprint);
     if (row.differs || existing.fingerprints.length > 1) existing.differs = true;
     if (row.alreadyManaged) existing.alreadyManaged = true;
+    if (row.reason === "error" || (row.reason === "parse" && existing.reason !== "error")) existing.reason = row.reason;
   }
   return grouped;
 }

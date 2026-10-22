@@ -22,4 +22,12 @@ describe("scan grouping", () => {
     expect(rows[0]?.differs).toBe(false);
     expect(rows[0]?.paths).toHaveLength(2);
   });
+
+  it("keeps a read error ahead of a parse error", () => {
+    const rows = groupScanRows([
+      { name: "broken", tool: "cursor", path: "/a/SKILL.md", reason: "parse" },
+      { name: "broken", tool: "codex", path: "/b/SKILL.md", reason: "error" },
+    ]);
+    expect(rows[0]?.reason).toBe("error");
+  });
 });

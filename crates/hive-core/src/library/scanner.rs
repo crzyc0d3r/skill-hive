@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::db::skill_store::SkillStore;
 use crate::library::content_hash::hash_skill_dir;
 use crate::library::installer::install_local;
-use crate::library::skill_metadata::{find_skill_dirs, read_skill_document};
+use crate::library::skill_metadata::{find_skill_dirs, read_skill_document, sanitize_skill_name};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScannedSkill {
@@ -21,6 +21,8 @@ pub struct ScannedSkill {
     pub already_managed: bool,
     /// Another copy of this name has different content.
     pub differs: bool,
+    /// "error", "parse", or empty when the folder read cleanly.
+    pub reason: String,
 }
 
 pub fn scan_roots(store: &SkillStore, roots: &[(&str, &Path)]) -> Result<Vec<ScannedSkill>> {
@@ -51,7 +53,29 @@ pub fn scan_roots_with_central(
         dirs.sort();
         dirs.dedup();
         for dir in dirs {
-            let doc = read_skill_document(&dir)?;
+            let text = match fs::read_to_string(dir.join("SKILL.md")) {
+                Ok(text) => text,
+                Err(err) => {
+                    let reason = if err.kind() == std::io::ErrorKind::InvalidData {
+                        "parse"
+                    } else {
+                        "error"
+                    };
+                    found.push(failed_skill(tool, &dir, reason));
+                    continue;
+                }
+            };
+            if text.trim().is_empty() {
+                found.push(failed_skill(tool, &dir, "parse"));
+                continue;
+            }
+            let doc = match read_skill_document(&dir) {
+                Ok(doc) => doc,
+                Err(_) => {
+                    found.push(failed_skill(tool, &dir, "parse"));
+                    continue;
+                }
+            };
             let fingerprint = hash_skill_dir(&dir).unwrap_or_default();
             let linked = home
                 .as_ref()
@@ -63,6 +87,7 @@ pub fn scan_roots_with_central(
                 fingerprint: fingerprint.clone(),
                 already_managed: managed.contains(&fingerprint) || linked,
                 differs: false,
+                reason: String::new(),
             });
         }
     }
@@ -88,6 +113,19 @@ pub fn scan_roots_with_central(
         grouped.push(skill);
     }
     Ok(grouped)
+}
+
+fn failed_skill(tool: &str, dir: &Path, reason: &str) -> ScannedSkill {
+    let folder = dir.file_name().and_then(|name| name.to_str()).unwrap_or("skill");
+    ScannedSkill {
+        tool: tool.to_string(),
+        path: dir.to_string_lossy().to_string(),
+        name: sanitize_skill_name(folder),
+        fingerprint: String::new(),
+        already_managed: false,
+        differs: false,
+        reason: reason.to_string(),
+    }
 }
 
 pub fn collect_flat(root: &Path) -> Vec<PathBuf> {
@@ -226,7 +264,7 @@ mod tests {
         .unwrap();
         assert!(rows
             .iter()
-            .any(|row| row.name == "top" && !row.already_managed));
+            .any(|row| row.name == "top" && !row.already_managed && row.reason.is_empty()));
         assert!(rows.iter().any(|row| row.name == "deep"));
         #[cfg(unix)]
         assert!(rows
@@ -242,6 +280,20 @@ mod tests {
             .join("top")
             .join("SKILL.md")
             .is_file());
+    }
+
+    #[test]
+    fn unreadable_and_empty_skills_share_error_reasons() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("agent");
+        fs::create_dir_all(root.join("blank")).unwrap();
+        fs::write(root.join("blank").join("SKILL.md"), "   ").unwrap();
+        fs::create_dir_all(root.join("locked")).unwrap();
+        let store = SkillStore::new(&tmp.path().join("hive.db")).unwrap();
+        let rows = scan_roots_with_central(&store, &[("cursor", root.as_path())], None).unwrap();
+        let blank = rows.iter().find(|row| row.name == "blank").unwrap();
+        assert_eq!(blank.reason, "parse");
+        assert!(blank.path.contains("blank"));
     }
 
     #[test]

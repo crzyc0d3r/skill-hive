@@ -198,7 +198,7 @@ export function SettingsView({
           <div className="mt-3">
             <Button type="button" aria-pressed={motion} data-theme-selected={motion ? "true" : "false"} variant="outline" size="sm" className="transition-none" ref={(node) => paintSelected(node, motion)} onClick={() => { const next = !motion; setMotion(next); document.documentElement.dataset.reduceMotion = next ? "on" : "off"; }}>
               {t("settings.motion")}
-              <span aria-hidden="true" className="rounded border border-current px-1.5 text-xs leading-4">{motion ? t("settings.state.on") : t("settings.state.off")}</span>
+              <span aria-hidden="true" className="inline-flex h-5 items-center rounded border border-current px-1.5 text-xs leading-none">{motion ? t("settings.state.on") : t("settings.state.off")}</span>
             </Button>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
