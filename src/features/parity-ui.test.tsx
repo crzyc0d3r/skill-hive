@@ -141,11 +141,13 @@ describe("ui parity invokes", () => {
 
     installIpc([{ ...SKILLS[0], agents: ["claude_code"] }, SKILLS[1], SKILLS[2]]);
     renderAt("/global-workspace/claude_code");
-    await user.click(await screen.findAllByRole("button", { name: "Upload" }).then((nodes) => nodes[0]));
+    await user.click(await screen.findByRole("button", { name: "More research-notes" }));
+    await user.click(screen.getByRole("menuitem", { name: "Upload" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     expect(calls("sync_skill_to_tool").some((entry) => entry.args.tool === "claude_code")).toBe(true);
     expect(calls("import_global_local_skill_to_center")).toHaveLength(0);
-    await user.click(screen.getAllByRole("button", { name: "Pull" })[0]);
+    await user.click(screen.getByRole("button", { name: "More research-notes" }));
+    await user.click(screen.getByRole("menuitem", { name: "Pull" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     expect(calls("import_global_local_skill_to_center").some((entry) => entry.args.tool === "claude_code")).toBe(true);
 
@@ -216,7 +218,7 @@ describe("ui parity invokes", () => {
     seedSetting("ui_language", "zh-CN");
     const loaded = renderAt("/settings?tab=appearance");
     await waitFor(() => expect(document.documentElement.dataset.textSize).toBe("large"));
-    await waitFor(() => expect(document.documentElement.lang).toBe("zh-CN"));
+    await waitFor(() => expect(document.documentElement.lang).toBe("en"));
     loaded.unmount();
     setLocale("en");
 
@@ -228,8 +230,8 @@ describe("ui parity invokes", () => {
     await user.click(screen.getByRole("tab", { name: "Appearance" }));
     await user.click(screen.getByRole("button", { name: "Small" }));
     expect(calls("set_settings").some((entry) => entry.args.key === "ui_text_size" && entry.args.value === "small")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Simplified Chinese" }));
-    expect(calls("set_settings").some((entry) => entry.args.key === "ui_language" && entry.args.value === "zh-CN")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Simplified Chinese" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Traditional Chinese" })).not.toBeInTheDocument();
     setLocale("en");
     await user.click(screen.getByRole("tab", { name: "About" }));
     expect(await screen.findByText(/Version 1\.0\.0 current/)).toBeInTheDocument();

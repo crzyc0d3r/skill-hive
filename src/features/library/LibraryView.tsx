@@ -9,6 +9,7 @@ import { badgeFor } from "@/features/generate/model";
 import { useGenerate } from "@/features/generate/store";
 import { applyAvailableSkillUpdates, checkSkillUpdate, silent } from "@/lib/ipc/actions";
 import { listAgents, type AgentRow } from "@/lib/ipc/catalog";
+import { readAgentCache } from "@/lib/library-cache";
 import { agentDisplayName, detectedAgents } from "@/lib/agents";
 import { AgentMark } from "@/components/app/AgentBadge";
 import { SourceBadge } from "@/components/app/SourceBadge";
@@ -200,9 +201,15 @@ export function LibraryView({
   const [sourceRef, setSourceRef] = useState<string | null>(null);
   const { seed } = useGenerate();
   useEffect(() => {
+    const cached = readAgentCache<AgentRow>();
+    if (cached?.length) setCatalogAgents(cached);
+    let live = true;
     void listAgents().then((rows) => {
-      if (Array.isArray(rows)) setCatalogAgents(rows);
+      if (live && Array.isArray(rows)) setCatalogAgents(rows);
     });
+    return () => {
+      live = false;
+    };
   }, []);
   useEffect(() => {
     if (!openId) return;
@@ -211,6 +218,7 @@ export function LibraryView({
     });
   }, [openId]);
   const [detail, setDetail] = useState<{ id: string; body: string } | null>(null);
+  const [sourceDetail, setSourceDetail] = useState<{ id: string; body: string } | null>(null);
   useEffect(() => {
     if (!openId) return;
     const card = skills.find((skill) => skill.id === openId);
@@ -227,6 +235,21 @@ export function LibraryView({
       live = false;
     };
   }, [openId, skills]);
+  useEffect(() => {
+    if (!openId || tab !== "diff") return;
+    const card = skills.find((skill) => skill.id === openId);
+    if (!card || card.sourceBody) {
+      setSourceDetail(null);
+      return;
+    }
+    let live = true;
+    void silent<{ body?: string }>("get_source_skill_document", { skillId: openId }).then((doc) => {
+      if (live) setSourceDetail({ id: openId, body: doc?.body ?? "" });
+    });
+    return () => {
+      live = false;
+    };
+  }, [openId, tab, skills]);
 
   const [fileMap, setFileMap] = useState<Record<string, SkillFile[]>>({});
   useEffect(() => {
@@ -250,6 +273,7 @@ export function LibraryView({
   const grid = useVirtualGrid(visible, layout);
   const open = grouped.find((skill) => skill.id === openId) ?? null;
   const openBody = open && !open.body && detail?.id === open.id ? detail.body : (open?.body ?? "");
+  const openSource = open && !open.sourceBody && sourceDetail?.id === open.id ? sourceDetail.body : (open?.sourceBody ?? "");
   const rendered = grid.rendered;
   const members = memberIds.map((id) => skills.find((skill) => skill.id === id)?.name ?? id);
   const showChecks = selecting || selected.length > 0;
@@ -454,17 +478,17 @@ export function LibraryView({
         <EmptyState title={t("library.emptyTitle")} body={t("library.emptyBody")} action={<PrimaryLink to="/install">{t("dashboard.quick.install")}</PrimaryLink>} />
       ) : null}
       <div className={cn("flex min-w-0 flex-col gap-4", open && band >= 1440 && "flex-row items-start")}>
-      {phase === "ready" ? <div ref={grid.ref} className="max-h-[36rem] min-w-0 flex-1 overflow-auto">
+      {phase === "ready" ? <div ref={grid.ref} className="relative min-w-0 w-full" style={{ height: grid.totalHeight }}>
       <ul
         data-testid="library-cards"
         data-layout={layout}
         data-columns={open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}
-        className={layout === "grid" ? "grid items-stretch gap-3" : "space-y-2"}
-        style={layout === "grid" ? { gridTemplateColumns: `repeat(${open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}, minmax(0, 1fr))` } : undefined}
+        className={layout === "grid" ? "absolute inset-x-0 top-0 grid items-stretch gap-3" : "absolute inset-x-0 top-0 space-y-2"}
+        style={layout === "grid" ? { transform: `translateY(${grid.offset}px)`, gridTemplateColumns: `repeat(${open && band >= 1920 ? 3 : open && band >= 1440 ? 2 : grid.columns}, minmax(0, 1fr))`, gridAutoRows: "168px" } : { transform: `translateY(${grid.offset}px)` }}
       >
         {rendered.map((skill) => (
-          <li key={skill.id} data-virtual-card="" className="h-full">
-            <Card className={cn("group/card flex h-full flex-col gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "flex-row")}>
+          <li key={skill.id} data-virtual-card="" className="h-full min-w-0">
+            <Card className={cn("group/card flex h-[168px] flex-col gap-0 overflow-hidden rounded-lg border-border bg-card py-0 shadow-none transition-colors hover:border-foreground/15", layout === "list" && "h-16 flex-row")}>
               <div className="flex items-start gap-2.5 px-3 pt-3">
                 <input
                   type="checkbox"
@@ -475,7 +499,7 @@ export function LibraryView({
                 />
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setOpenId(skill.id); setTab("local"); }}>
                   <span className="block font-medium whitespace-normal">{skill.name}</span>
-                  <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">{skill.description}</span>
+                  <span className={cn("mt-0.5 break-words text-[13px] leading-5 text-muted-foreground", layout === "list" ? "line-clamp-1" : "line-clamp-2")}>{skill.description.replace(/\s+/g, " ").trim()}</span>
                 </button>
                 <DropdownMenu modal={false} open={menuId === skill.id} onOpenChange={(next) => setMenuId(next ? skill.id : null)}>
                   <DropdownMenuTrigger asChild>
@@ -597,10 +621,10 @@ export function LibraryView({
             <>
               <div data-testid="side-by-side" className="mt-2 grid gap-2 md:grid-cols-2">
                 <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{openBody}</pre>
-                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{open.sourceBody}</pre>
+                <pre className="whitespace-pre-wrap rounded-md border border-border p-2 font-mono text-sm">{openSource}</pre>
               </div>
               <ul data-testid="diff-view" className="mt-2 font-mono text-sm">
-                {lcsDiff(openBody, open.sourceBody).map((row, index) => (
+                {lcsDiff(openBody, openSource).map((row, index) => (
                   <li key={`${row.kind}-${index}`} data-kind={row.kind}>
                     {row.kind === "add" ? "+" : row.kind === "del" ? "-" : " "} {row.text}
                   </li>

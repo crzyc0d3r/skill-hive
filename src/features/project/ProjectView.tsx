@@ -149,8 +149,11 @@ export function ProjectView() {
   }
 
   return (
-    <section data-testid="project" className="flex w-full flex-col gap-4">
-      <h1 className="font-sans text-display font-semibold tracking-tight">{t("project.title")}</h1>
+    <section data-testid="project" className="flex w-full min-w-0 flex-col gap-4">
+      <header>
+        <h1 className="font-sans text-display font-semibold tracking-tight">{t("project.title")}</h1>
+        <p className="mt-1 max-w-prose text-sm leading-5 text-muted-foreground">{t("project.linked")}</p>
+      </header>
       {phase === "loading" ? <ProjectSkeleton /> : null}
       {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
       {phase === "empty" ? <EmptyState title={t("project.title")} body={t("project.linked")} /> : null}

@@ -89,8 +89,8 @@ export function SettingsView({
     void silent<string | null>("get_settings", { key: "ui_text_size" }).then((value) => {
       if (value === "small" || value === "medium" || value === "large" || value === "xl") applyTextSize(value);
     });
-    void silent<string | null>("get_settings", { key: "ui_language" }).then((value) => {
-      if (value) setLocale(value);
+    void silent<string | null>("get_settings", { key: "ui_language" }).then(() => {
+      setLocale("en");
     });
     void silent<string>("check_app_update").then((value) => {
       if (typeof value === "string") setVersionLine(value);
@@ -121,7 +121,7 @@ export function SettingsView({
           </Button>
         ))}
       </div>
-      <div className="min-w-0 max-w-[720px]">
+      <div className="min-w-0 max-w-[720px] rounded-lg border border-border bg-card p-4">
       {phase === "loading" ? <SettingsSkeleton /> : null}
       {phase === "error" ? <ErrorState title={t("shell.error")} detail={t("shell.renderError")} onRetry={retry} /> : null}
       {phase === "ready" && tab === "keyboard" ? (
@@ -164,12 +164,6 @@ export function SettingsView({
                 {t(`settings.text.${size}`)}
               </Button>
             ))}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="text-sm">{t("settings.language")}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => { setLocale("en"); void writeSetting("ui_language", "en"); }}>{t("settings.language.en")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => { setLocale("zh-CN"); void writeSetting("ui_language", "zh-CN"); }}>{t("settings.language.zhCN")}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => { setLocale("zh-TW"); void writeSetting("ui_language", "zh-TW"); }}>{t("settings.language.zhTW")}</Button>
           </div>
         </div>
       ) : null}

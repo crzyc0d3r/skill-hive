@@ -65,6 +65,19 @@ for (const theme of THEMES) {
         const overflow = await page.locator("body").evaluate((node) => node.scrollWidth - node.clientWidth);
         expect(overflow).toBeLessThanOrEqual(1);
         await saveShot(page, theme, width, screen.id);
+        if (screen.id === "library") {
+          await page.goto("/my-skills?crowd=1");
+          await expect(page.getByTestId("library")).toBeVisible();
+          await page.getByTestId("content").evaluate((node) => {
+            node.scrollTop = Math.max(0, (node.scrollHeight - node.clientHeight) / 2);
+          });
+          await expect.poll(() => page.getByTestId("content").evaluate((node) => node.scrollTop)).toBeGreaterThan(400);
+          await expect(page.getByRole("button", { name: /crowd-skill-2\d\d/ }).first()).toBeVisible();
+          await saveShot(page, theme, width, "library-scrolled");
+          await page.getByTestId("content").evaluate((node) => {
+            node.scrollTop = 0;
+          });
+        }
       }
       await page.goto("/my-skills");
       await page.getByRole("button", { name: /research-notes/ }).first().click();

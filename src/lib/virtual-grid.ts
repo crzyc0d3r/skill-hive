@@ -4,6 +4,7 @@ import { designColumns } from "@/lib/shell-width";
 const MIN_CARD = 280;
 const GAP = 12;
 const UNMEASURED_CAP = 24;
+const ROW_HEIGHT = { grid: 180, list: 76 } as const;
 
 export function columnCount(width: number, minCard = MIN_CARD, gap = GAP): number {
   if (!Number.isFinite(width) || width <= 0) return 1;
@@ -19,44 +20,59 @@ export function windowSlice<T>(items: T[], scrollTop: number, height: number, ro
   return items.slice(start * perRow, (start + count) * perRow);
 }
 
+function scrollParent(node: HTMLElement): HTMLElement {
+  let current = node.parentElement;
+  while (current) {
+    const overflow = getComputedStyle(current).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return current;
+    current = current.parentElement;
+  }
+  return node;
+}
+
+/** One window into `items`. The page scroller owns scrolling; this hook does not. */
 export function useVirtualGrid<T>(items: T[], layout: "grid" | "list") {
   const ref = useRef<HTMLDivElement>(null);
-  const [frame, setFrame] = useState({ width: 0, height: 0, scrollTop: 0, rowHeight: layout === "grid" ? 196 : 92 });
+  const rowHeight = layout === "grid" ? ROW_HEIGHT.grid : ROW_HEIGHT.list;
+  const [frame, setFrame] = useState({ width: 0, height: 0, scrollTop: 0 });
   const [viewport, setViewport] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    const scroller = scrollParent(node);
     const measure = () => {
-      const card = node.querySelector<HTMLElement>("[data-virtual-card]");
+      const origin = node.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
       const next = {
         width: node.clientWidth,
-        height: node.clientHeight,
-        scrollTop: node.scrollTop,
-        rowHeight: card && card.offsetHeight > 0 ? card.offsetHeight : layout === "grid" ? 196 : 92,
+        height: scroller.clientHeight,
+        scrollTop: Math.max(0, scroller.scrollTop - origin),
       };
       setViewport(window.innerWidth);
       setFrame((current) =>
-        current.width === next.width && current.height === next.height && current.scrollTop === next.scrollTop && current.rowHeight === next.rowHeight
-          ? current
-          : next,
+        current.width === next.width && current.height === next.height && current.scrollTop === next.scrollTop ? current : next,
       );
     };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    node.addEventListener("scroll", measure, { passive: true });
+    observer.observe(scroller);
+    scroller.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", measure);
     return () => {
       observer.disconnect();
-      node.removeEventListener("scroll", measure);
+      scroller.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
     };
   }, [layout, items.length]);
   const columns = layout === "list" ? 1 : designColumns(viewport || frame.width);
+  const perRow = Math.max(1, columns);
+  const startRow = frame.height < 40 ? 0 : Math.max(0, Math.floor(frame.scrollTop / rowHeight) - 1);
+  const rows = items.length === 0 ? 0 : Math.ceil(items.length / perRow);
   return {
     ref,
     columns,
-    rowHeight: frame.rowHeight,
-    rendered: windowSlice(items, frame.scrollTop, frame.height, frame.rowHeight, columns),
+    rowHeight,
+    offset: startRow * rowHeight,
+    totalHeight: rows * rowHeight,
+    rendered: windowSlice(items, frame.scrollTop, frame.height, rowHeight, columns),
   };
 }

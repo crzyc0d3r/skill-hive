@@ -1,4 +1,11 @@
 import "@testing-library/jest-dom/vitest";
+import { beforeEach } from "vitest";
+import { clearLibraryMemory } from "@/lib/library-cache";
+
+beforeEach(() => {
+  localStorage.removeItem("skill-hive-library-index");
+  clearLibraryMemory();
+});
 
 class ResizeObserverMock {
   observe() {}

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use hive_core::analytics::{apply_optimized, store_verdict, write_history, HistoryEntry};
@@ -31,7 +31,7 @@ use hive_core::providers::{
 use hive_core::testing::{save_suite, CheckSpec, Suite, SuiteCase, TriggerRow};
 use hive_core::util::error::AppError;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 fn db(err: impl std::fmt::Display) -> AppError {
     AppError::db(err.to_string())
@@ -71,7 +71,7 @@ fn report(job: &str, current: u32, total: u32, message: &str) -> Result<(), AppE
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManagedSkill {
     pub id: String,
@@ -89,7 +89,7 @@ pub struct ManagedSkill {
     pub locations: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillFile {
     pub path: String,
@@ -176,7 +176,57 @@ pub struct BackupStatusDto {
     pub head: String,
 }
 
+static LIBRARY_INDEX: Mutex<Option<Vec<ManagedSkill>>> = Mutex::new(None);
+static LIBRARY_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+fn library_index_path() -> PathBuf {
+    root().join(".skill-hive").join("library-index.json")
+}
+
+pub fn invalidate_library_index() {
+    LIBRARY_GENERATION.fetch_add(1, Ordering::AcqRel);
+    if let Ok(mut guard) = LIBRARY_INDEX.lock() {
+        *guard = None;
+    }
+    let _ = std::fs::remove_file(library_index_path());
+}
+
+fn memory_index() -> Option<Vec<ManagedSkill>> {
+    LIBRARY_INDEX.lock().ok()?.clone()
+}
+
+fn remember_index(skills: &[ManagedSkill]) {
+    if let Ok(mut guard) = LIBRARY_INDEX.lock() {
+        *guard = Some(skills.to_vec());
+    }
+}
+
+fn read_disk_index() -> Option<Vec<ManagedSkill>> {
+    let text = std::fs::read_to_string(library_index_path()).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn write_library_index(skills: &[ManagedSkill]) {
+    remember_index(skills);
+    let path = library_index_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    hive_core::util::file_watcher::mute_self_writes(&path);
+    if let Ok(text) = serde_json::to_string(skills) {
+        let _ = std::fs::write(path, text);
+    }
+}
+
 fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
+    if let Some(cached) = memory_index() {
+        return Ok(cached);
+    }
+    rebuild_library(store)
+}
+
+fn rebuild_library(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
+    let generation = LIBRARY_GENERATION.load(Ordering::Acquire);
     crate::progress::emit("library", 0, 1, "Reading the library", false);
     let tags = store.get_tags_map().map_err(db)?;
     let targets = store.get_all_targets().map_err(db)?;
@@ -207,6 +257,22 @@ fn managed(store: &SkillStore) -> Result<Vec<ManagedSkill>, AppError> {
     }
     let mut skills = collapse_managed(skills);
     skills.sort_by(|left, right| left.name.cmp(&right.name));
+    for skill in &mut skills {
+        skill.body.clear();
+        skill.source_body.clear();
+        skill.files.clear();
+        skill.description = skill
+            .description
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if skill.description.chars().count() > 180 {
+            skill.description = skill.description.chars().take(180).collect();
+        }
+    }
+    if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
+        write_library_index(&skills);
+    }
     crate::progress::emit("library", 1, 1, "Library ready", true);
     Ok(skills)
 }
@@ -414,10 +480,19 @@ fn persist_install(
             last_check_error: None,
         })
         .map_err(db)?;
+    invalidate_library_index();
     Ok(installed_dto(installed.name.clone(), id))
 }
 
 fn sync_skill(store: &SkillStore, skill_id: &str, tool: &str, add: bool) -> Result<(), AppError> {
+    let result = sync_skill_now(store, skill_id, tool, add);
+    if result.is_ok() {
+        invalidate_library_index();
+    }
+    result
+}
+
+fn sync_skill_now(store: &SkillStore, skill_id: &str, tool: &str, add: bool) -> Result<(), AppError> {
     let skill = store
         .get_skill_by_id(skill_id)
         .map_err(db)?
@@ -588,9 +663,27 @@ fn encode_query(input: &str) -> String {
 
 #[tauri::command]
 pub async fn get_managed_skills(
+    app: AppHandle,
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<ManagedSkill>, AppError> {
     let store = store.inner().clone();
+    if let Some(cached) = memory_index() {
+        return Ok(cached);
+    }
+    if let Some(cached) = read_disk_index() {
+        let generation = LIBRARY_GENERATION.load(Ordering::Acquire);
+        remember_index(&cached);
+        let refreshing = store.clone();
+        tauri::async_runtime::spawn(async move {
+            let rebuilt = crate::offload::offload(move || rebuild_library(refreshing.as_ref())).await;
+            if let Ok(rows) = rebuilt {
+                if LIBRARY_GENERATION.load(Ordering::Acquire) == generation {
+                    let _ = app.emit("library-index", &rows);
+                }
+            }
+        });
+        return Ok(cached);
+    }
     crate::offload::offload(move || managed(store.as_ref())).await
 }
 
@@ -934,6 +1027,7 @@ pub async fn delete_managed_skills(
             }
             store.delete_skill(&id).map_err(db)?;
         }
+        invalidate_library_index();
         Ok(())
     })
     .await
@@ -950,6 +1044,7 @@ pub async fn set_skills_enabled(
         for id in ids {
             store.update_skill_enabled(&id, enabled).map_err(db)?;
         }
+        invalidate_library_index();
         Ok(())
     })
     .await
@@ -962,7 +1057,12 @@ pub async fn set_skill_tags(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<(), AppError> {
     let store = store.inner().clone();
-    crate::offload::offload(move || store.set_tags_for_skill(&skill_id, &tags).map_err(db)).await
+    crate::offload::offload(move || {
+        store.set_tags_for_skill(&skill_id, &tags).map_err(db)?;
+        invalidate_library_index();
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -972,7 +1072,12 @@ pub async fn rename_tag(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<String>, AppError> {
     let store = store.inner().clone();
-    crate::offload::offload(move || store.as_ref().rename_tag(&from, &to).map_err(db)).await
+    crate::offload::offload(move || {
+        let names = store.as_ref().rename_tag(&from, &to).map_err(db)?;
+        invalidate_library_index();
+        Ok(names)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -981,7 +1086,12 @@ pub async fn delete_tag(
     store: State<'_, Arc<SkillStore>>,
 ) -> Result<Vec<String>, AppError> {
     let store = store.inner().clone();
-    crate::offload::offload(move || store.as_ref().delete_tag(&tag).map_err(db)).await
+    crate::offload::offload(move || {
+        let names = store.as_ref().delete_tag(&tag).map_err(db)?;
+        invalidate_library_index();
+        Ok(names)
+    })
+    .await
 }
 
 #[tauri::command]

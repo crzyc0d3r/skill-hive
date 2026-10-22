@@ -67,6 +67,7 @@ import { jobLabel } from "@/lib/job-label";
 import { DataPhaseContext, RetryContext } from "@/lib/view-state";
 import { DevCrash, RouteErrorBoundary } from "@/components/RouteError";
 import { listAgents, listPresets, listSkills, type AgentRow, type PresetRow } from "@/lib/ipc/catalog";
+import { readLibraryIndex } from "@/lib/library-cache";
 import { createPreset, deletePreset, rebuildTrayMenu, reorderPresets, setToolOrder, silent, switchPreset, updatePreset } from "@/lib/ipc/actions";
 import { writeSetting } from "@/lib/ipc/catalog";
 import { moveById } from "@/features/library/model";
@@ -242,8 +243,8 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
         /* text size is optional */
       });
     getSettings("ui_language")
-      .then((value) => {
-        if (!cancelled && value) setLocale(value);
+      .then(() => {
+        if (!cancelled) setLocale("en");
       })
       .catch(() => {
         /* language is optional */
@@ -311,7 +312,14 @@ export function AppShell({ platform = "linux" }: { platform?: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate, queryClient, shortcutRows]);
 
-  const skills = useQuery({ queryKey: SKILLS_KEY, queryFn: listSkills });
+  const skills = useQuery({
+    queryKey: SKILLS_KEY,
+    queryFn: listSkills,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    placeholderData: () => (demoEnabled() ? undefined : readLibraryIndex() ?? undefined),
+  });
   const presets = useQuery({ queryKey: ["presets"], queryFn: listPresets });
   const agents = useQuery({ queryKey: ["agents"], queryFn: listAgents });
   const dataPhase = !demoEnabled() && skills.isPending && skills.data === undefined ? "loading" : skills.isError && skills.data === undefined ? "error" : "ready";

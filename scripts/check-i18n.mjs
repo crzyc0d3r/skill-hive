@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve("src");
-const locales = ["en", "zh-CN", "zh-TW"];
+const locales = ["en"];
 const tables = Object.fromEntries(
   locales.map((id) => [id, JSON.parse(fs.readFileSync(`src/locales/${id}.json`, "utf8"))]),
 );

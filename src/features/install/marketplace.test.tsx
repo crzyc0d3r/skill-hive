@@ -34,11 +34,9 @@ it("searches the marketplace, installs one skill, and cancels the next", async (
     expect(screen.queryByText(/Installed/)).not.toBeInTheDocument();
   });
 
-  it("switches the visible locale and hides an unreachable marketplace", async () => {
+  it("stays in English and hides an unreachable marketplace", async () => {
     setLocale("zh-CN");
-    expect(t("backup.title")).toBe("备份");
-    setLocale("zh-TW");
-    expect(t("backup.title")).toBe("備份");
+    expect(t("backup.title")).toBe("Backup");
     setLocale("en");
     render(
       <MemoryRouter initialEntries={["/install?tab=leaderboard"]}>

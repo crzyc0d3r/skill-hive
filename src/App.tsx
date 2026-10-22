@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { APP_ROUTES } from "./app/routes";
@@ -32,6 +32,7 @@ import {
   unsyncSkillFromTool,
 } from "@/lib/ipc/actions";
 import { groupSkillCards, type SkillCard } from "@/features/library/model";
+import { crowdSkills } from "@/lib/crowd";
 import { DevCrash, RouteErrorBoundary } from "@/components/RouteError";
 import type { WorkspaceCard } from "./features/workspace/WorkspaceView";
 import { PlaceholderView, TokensView } from "./views/Screens";
@@ -65,10 +66,12 @@ function LibraryPage() {
   useAuthoring();
   const drafts = draftSkillCards();
   const [params] = useSearchParams();
-  const [rows, setRows] = useState(skills);
+  const crowded = params.get("crowd") === "1";
+  const sourceSkills = useMemo(() => (crowded ? crowdSkills() : skills), [crowded, skills]);
+  const [rows, setRows] = useState(sourceSkills);
   useEffect(() => {
-    setRows(groupSkillCards(skills));
-  }, [skills]);
+    setRows(groupSkillCards(sourceSkills));
+  }, [sourceSkills]);
   const preset = presets.find((item) => item.id === activePresetId) ?? presets.find((item) => item.id === "research") ?? presets[0];
   const memberIds = preset?.skillIds ?? [];
   const refresh = () => client.invalidateQueries({ queryKey: ["skills"] });
