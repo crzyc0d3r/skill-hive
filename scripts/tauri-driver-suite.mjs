@@ -329,6 +329,14 @@ try {
     throw last;
   }
 
+  // The loading screen renders the same test id disabled and without a
+  // handler. Wait until the ready button can start a snapshot.
+  async function clickBackupNow() {
+    const selector = "[data-testid=backup-now]:not([disabled])";
+    await find(selector, "css selector", 30000);
+    await click(selector);
+  }
+
   // Restore lives in the snapshot row menu, and the row appears only after
   // git backup finishes. Windows CI has needed more than the default 10s.
   async function openBackupRestore() {
@@ -350,7 +358,7 @@ try {
   await click("[data-testid=tab-leaderboard]");
   await find("[data-testid=marketplace]");
   await click("a[href='/backup']");
-  await click("[data-testid=backup-now]");
+  await clickBackupNow();
   await openBackupRestore();
   await click("[data-testid=backup-restore]");
   await find("[data-testid=backup]");
@@ -571,7 +579,7 @@ try {
   if (!skillFile) throw new Error("seeded-git SKILL.md was not copied");
   const original = readFileSync(skillFile, "utf8");
   await click("a[href='/backup']");
-  await click("[data-testid=backup-now]");
+  await clickBackupNow();
   await openBackupRestore();
   writeFileSync(skillFile, `${original}\nchanged\n`);
   await click("[data-testid=backup-restore]");
