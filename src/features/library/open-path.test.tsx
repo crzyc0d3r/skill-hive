@@ -55,7 +55,11 @@ it("paints a cached library on revisit without scanning again", async () => {
 
   const report = `library revisit: cached revisit ${revisitMs.toFixed(1)} ms, cards painted ${cards}, check_all ${ipcLog.filter((entry) => entry.cmd === "check_all_skill_updates").length}, get_managed_skills ${ipcLog.filter((entry) => entry.cmd === "get_managed_skills").length}, get_tool_status ${ipcLog.filter((entry) => entry.cmd === "get_tool_status").length}`;
   console.info(report);
-  expect(revisitMs, report).toBeLessThan(200);
+  // This machine paints the cached click in about 92 ms. The same click in
+  // GitHub's jsdom job measured 239 ms with no extra scan, so CI allows 500 ms.
+  // A multi-second rescan still fails this budget.
+  const budget = process.env.CI ? 500 : 200;
+  expect(revisitMs, report).toBeLessThan(budget);
   expect(ipcLog.filter((entry) => entry.cmd === "check_all_skill_updates").length).toBe(checksBefore);
   expect(ipcLog.filter((entry) => entry.cmd === "get_managed_skills").length).toBe(fetchesBefore);
   expect(ipcLog.filter((entry) => entry.cmd === "get_tool_status").length).toBe(toolFetchesBefore);
