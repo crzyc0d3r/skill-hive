@@ -317,11 +317,12 @@ try {
       } catch (err) {
         last = err;
         const message = String(err?.message ?? err);
-        if (message.includes("click intercepted")) await dismissToasts();
-        else if (message.includes("element not interactable")) {
+        if (message.includes("click intercepted") || message.includes("element not interactable")) {
+          await dismissToasts();
           await domClick(selector);
           return;
-        } else if (!message.includes("stale element")) throw err;
+        }
+        if (!message.includes("stale element")) throw err;
       }
     }
     throw last;
@@ -386,11 +387,12 @@ try {
       } catch (err) {
         lastError = err;
         const message = String(err?.message ?? err);
-        if (message.includes("click intercepted")) await dismissToasts();
-        else if (message.includes("element not interactable")) {
+        if (message.includes("click intercepted") || message.includes("element not interactable")) {
+          await dismissToasts();
           await domClick(expression, "xpath");
           return;
-        } else if (!message.includes("stale element")) throw err;
+        }
+        if (!message.includes("stale element")) throw err;
       }
     }
     throw lastError;
