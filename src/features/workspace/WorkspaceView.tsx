@@ -270,6 +270,9 @@ export function WorkspaceView({
                 <Badge variant="outline" className="ml-2 font-normal">
                   {card.status === "local_only" ? t("workspace.localOnly") : card.status === "center_changed" ? t("workspace.centerChanged") : t("workspace.inSync")}
                 </Badge>
+                {(card.locations?.length ?? 0) > 1 ? (
+                  <p className="text-xs text-muted-foreground">{t("library.locations", { count: String(card.locations?.length ?? 0) })}</p>
+                ) : null}
               </td>
               {band === 800 ? null : <td className="px-3 py-2 text-muted-foreground">{card.status === "local_only" ? t("workspace.foundHere") : t("workspace.fromLibrary")}</td>}
               <td className="relative px-3 py-2 text-right">

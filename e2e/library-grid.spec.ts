@@ -40,9 +40,11 @@ test("a crowded library stays one card per name and resizes its columns", async 
   const workspace = page.getByTestId("workspace-cards");
   await expect(workspace.getByText("autopilot", { exact: true })).toHaveCount(1);
   await expect(page.getByText("Installed in 4 locations").first()).toBeVisible();
-  await expect(workspace).toHaveAttribute("data-columns", "1");
+  await expect(workspace).toHaveAttribute("data-layout", "table");
+  const headerText = () => workspace.locator("thead th").allTextContents();
+  expect(await headerText()).not.toContain("From");
   await page.setViewportSize({ width: 1440, height: 800 });
-  await expect(workspace).toHaveAttribute("data-columns", "3");
+  await expect.poll(headerText).toContain("From");
   const workspaceOverflow = await workspace.evaluate((node) => node.scrollWidth - node.clientWidth);
   expect(workspaceOverflow).toBeLessThanOrEqual(1);
   await page.locator("a[href='/settings']").first().click();
