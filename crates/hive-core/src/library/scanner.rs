@@ -138,9 +138,7 @@ fn parse_error_line(text: &str) -> Option<usize> {
         return Some(1);
     }
     let rest = text.trim_start_matches('\u{feff}');
-    let Some(after) = rest.strip_prefix("---") else {
-        return None;
-    };
+    let after = rest.strip_prefix("---")?;
     let after = if let Some(stripped) = after.strip_prefix("\r\n") {
         stripped
     } else if let Some(stripped) = after.strip_prefix('\n') {
@@ -408,7 +406,7 @@ mod tests {
         fs::create_dir_all(file.parent().unwrap()).unwrap();
         fs::write(&file, "---\nname: locked\ndescription: d\n---\nbody\n").unwrap();
         let mut blocked = fs::metadata(&file).unwrap().permissions();
-        blocked.set_mode(0);
+        blocked.set_mode(0o000);
         fs::set_permissions(&file, blocked).unwrap();
         struct Restore(std::path::PathBuf);
         impl Drop for Restore {
