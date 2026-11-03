@@ -15,12 +15,15 @@ pub mod evals;
 pub mod hash;
 pub mod hive;
 pub mod library;
+pub mod loadouts;
 pub mod model;
 pub mod paths;
 pub mod providers;
+pub mod recommend;
 pub mod secrets;
 pub mod settings;
 pub mod skill;
+pub mod sources;
 pub mod targets;
 pub mod util;
 
