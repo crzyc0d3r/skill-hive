@@ -15,7 +15,7 @@ name: Release
 # given a tag: when it looks a published release up by tag it rewrites the release's name and
 # body, which would replace the generated notes.
 #
-# Builds are unsigned unless these repository secrets exist:
+# Builds are unsigned unless these repository secrets exist (empty secrets count as missing):
 #   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY   sign the macOS app
 #   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID                                 notarize it
 #   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD            sign updater artifacts
@@ -133,9 +133,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf build-essential pkg-config libxdo-dev libssl-dev
       - run: npm ci
-      - uses: tauri-apps/tauri-action@v0
+      # Tauri signs the macOS app whenever APPLE_CERTIFICATE is set, even to an empty string, and
+      # a missing secret expands to exactly that. So the signing secrets are exported only when
+      # they have a value; without them the bundles are unsigned.
+      - name: Export the signing secrets that are set
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -144,6 +147,21 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID \
+                      TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              { echo "$name<<__SKILL_HIVE_SECRET__"; echo "$value"; echo "__SKILL_HIVE_SECRET__"; } >> "$GITHUB_ENV"
+              echo "$name: set"
+            else
+              echo "$name: not set"
+            fi
+          done
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           releaseId: ${{ needs.release.outputs.release_id }}
           # The app has no updater, so there is no latest.json to publish.
