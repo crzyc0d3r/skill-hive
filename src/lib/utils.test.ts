@@ -4,7 +4,8 @@ import { cn, displayPath, formatBytes, formatDelta, formatDuration, formatPercen
 describe("utils", () => {
   it("merges class names with tailwind precedence", () => {
     expect(cn("p-2", "p-4")).toBe("p-4");
-    expect(cn("a", false && "b", "c")).toBe("a c");
+    const hidden = [] as string[];
+    expect(cn("a", hidden.length > 0 && "b", "c")).toBe("a c");
   });
 
   it("formats sizes, tokens, percentages and durations", () => {
