@@ -616,10 +616,15 @@ impl Hive {
                 })
                 .collect(),
         };
-        let mut out = Vec::new();
-        for item in items {
-            out.push(self.check_update(&item.id, false).await?);
-        }
+        // Remote lookups are independent; run a few at a time.
+        use futures::stream::{self, StreamExt};
+        let checks: Vec<Result<UpdateCheck>> = stream::iter(items)
+            .map(|item| async move { self.check_update(&item.id, false).await })
+            .buffer_unordered(4)
+            .collect()
+            .await;
+        let mut out: Vec<UpdateCheck> = checks.into_iter().collect::<Result<_>>()?;
+        out.sort_by(|a, b| a.item_id.cmp(&b.item_id));
         Ok(out)
     }
 

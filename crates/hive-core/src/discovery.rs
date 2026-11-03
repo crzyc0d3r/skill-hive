@@ -130,9 +130,17 @@ pub fn scan(lib: &Library<'_>, roots: &[ScanRoot]) -> ScanReport {
             }
         }
         if root.kind.is_none() && root.target_id.is_none() {
-            // Free-form directory: also pick up loose agent/command files at the top level.
+            // Free-form directory: also pick up loose agent and command files at the top level.
             for file in find_markdown_assets(&root.path, AssetKind::Agent) {
                 found.push((AssetKind::Agent, file));
+            }
+            for file in find_markdown_assets(&root.path, AssetKind::Command) {
+                // Only well-formed command files; broken frontmatter is not a command.
+                if detect_kind(&file) == Some(AssetKind::Command)
+                    && skill::read_markdown_asset(AssetKind::Command, &file).is_ok()
+                {
+                    found.push((AssetKind::Command, file));
+                }
             }
         }
         for (kind, path) in found {

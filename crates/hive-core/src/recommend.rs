@@ -21,7 +21,6 @@ const FTS_CANDIDATES: u32 = 60;
 #[derive(Debug, Clone)]
 struct Scored {
     item: LibraryItem,
-    body: String,
     score: f64,
     reasons: Vec<String>,
     matched: BTreeSet<String>,
@@ -172,14 +171,8 @@ impl Hive {
             if item.deployment_count > 0 {
                 reasons.push("Already deployed".into());
             }
-            let body = self
-                .db
-                .get_item_record(&item.id)?
-                .map(|r| r.body)
-                .unwrap_or_default();
             scored.push(Scored {
                 item,
-                body,
                 score: score.max(0.0),
                 reasons,
                 matched,
@@ -191,6 +184,18 @@ impl Hive {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         scored.truncate(limit);
+
+        // Optional model re-ranking: a provider with the recommender role reorders the lexical
+        // candidates and explains the choice. Failures degrade to the lexical order. It runs
+        // before the set is chosen so the suggestion follows the final ranking.
+        let llm_notes = if req.use_llm && !scored.is_empty() {
+            match self.llm_rerank(task, &mut scored).await {
+                Ok(notes) => Some(notes),
+                Err(err) => Some(format!("Model re-ranking unavailable: {err}")),
+            }
+        } else {
+            None
+        };
         let top = scored.iter().map(|s| s.score).fold(0.0_f64, f64::max);
 
         // 2. Pairwise conflicts among the results.
@@ -200,10 +205,16 @@ impl Hive {
                 .and_then(|s| s.description_budget_chars)
         });
         let options: AnalysisOptions = self.analysis_options(budget_chars)?;
-        let profiles: Vec<AssetProfile> = scored
-            .iter()
-            .map(|s| AssetProfile::from_item(&s.item, &s.body))
-            .collect();
+        // Bodies are only needed for the few results kept (directive detection).
+        let mut profiles: Vec<AssetProfile> = Vec::with_capacity(scored.len());
+        for s in &scored {
+            let body = self
+                .db
+                .get_item_record(&s.item.id)?
+                .map(|r| r.body)
+                .unwrap_or_default();
+            profiles.push(AssetProfile::from_item(&s.item, &body));
+        }
         let report = conflicts::analyze(&profiles, &options);
         let mut conflicts_with: HashMap<String, BTreeSet<String>> = HashMap::new();
         for c in report
@@ -259,7 +270,7 @@ impl Hive {
             selected.iter().map(|&i| profiles[i].clone()).collect();
         let budget = conflicts::budget(&selected_profiles, options.budget_chars);
 
-        let mut results: Vec<Recommendation> = scored
+        let results: Vec<Recommendation> = scored
             .into_iter()
             .map(|s| Recommendation {
                 conflicts_with: conflicts_with
@@ -274,17 +285,6 @@ impl Hive {
             })
             .collect();
 
-        // 4. Optional model re-ranking: a provider with the recommender role reorders the
-        //    lexical candidates and explains the choice. Failures degrade to the lexical order.
-        let llm_notes = if req.use_llm && !results.is_empty() {
-            match self.llm_rerank(task, &mut results).await {
-                Ok(notes) => Some(notes),
-                Err(err) => Some(format!("Model re-ranking unavailable: {err}")),
-            }
-        } else {
-            None
-        };
-
         Ok(RecommendResponse {
             results,
             suggested_ids: selected_ids,
@@ -295,7 +295,7 @@ impl Hive {
     }
 
     /// Ask the recommender provider to reorder `results` for `task`. Returns its notes.
-    async fn llm_rerank(&self, task: &str, results: &mut [Recommendation]) -> Result<String> {
+    async fn llm_rerank(&self, task: &str, results: &mut [Scored]) -> Result<String> {
         use crate::model::ProviderRole;
         use crate::providers::CompletionRequest;
 
