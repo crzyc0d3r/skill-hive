@@ -108,6 +108,8 @@ export interface AppInfo {
 /** Every backend command, typed. Names mirror the Rust command names. */
 export const api = {
   appInfo: () => call<AppInfo>("app_info"),
+  /** Write a line to the desktop log (no-op in the mock backend). */
+  uiReport: (level: "info" | "warn" | "error", message: string) => call<void>("ui_report", { level, message }),
   dashboard: () => call<T.Dashboard>("dashboard"),
   settings: () => call<T.Settings>("settings_get"),
   updateSettings: (patch: T.SettingsPatch) => call<T.Settings>("settings_update", { patch }),

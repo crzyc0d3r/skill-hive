@@ -21,6 +21,7 @@ import { Toaster, toast } from "sonner";
 import type { HiveEvent } from "@/lib/api/bindings";
 import { cn, modKey } from "@/lib/utils";
 import { applyTheme, useUi, type Theme } from "@/lib/store";
+import { api } from "@/lib/api/client";
 import { useAppInfo, useHiveEvents, useStats } from "@/lib/api/hooks";
 import { Button, Kbd, Tooltip, TooltipProvider } from "@/components/ui";
 import { CommandPalette } from "./CommandPalette";
@@ -65,6 +66,14 @@ function Sidebar() {
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
   const { data: stats } = useStats();
   const { data: info } = useAppInfo();
+
+  // Marks the document and the desktop log once the interface has rendered and the backend has
+  // answered; the desktop smoke test waits for both.
+  React.useEffect(() => {
+    if (!info) return;
+    document.documentElement.setAttribute("data-app-ready", info.version);
+    void api.uiReport("info", `ready v${info.version}`).catch(() => {});
+  }, [info]);
 
   return (
     <aside

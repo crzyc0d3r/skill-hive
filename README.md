@@ -489,6 +489,7 @@ Environment variables:
 | `HIVE_NO_KEYRING` | When set, never use the OS keychain; secrets go to `secrets.json`. CI sets it. |
 | `RUST_LOG` | Log filter. The desktop app defaults to `info,hive_core=debug`, the CLI to `warn`. |
 | `WEBKIT_DISABLE_DMABUF_RENDERER`, `WEBKIT_DISABLE_COMPOSITING_MODE` | Linux rendering switches, see Troubleshooting. |
+| `SKILL_HIVE_HEADLESS` | When set, a fatal startup error is only logged and written to the crash file; no native dialog is shown. The smoke test sets it. |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` (or any name you choose) | Read at run time by a provider configured with `--api-key-env`, or with the "Environment variable" field in the provider dialog. |
 
 Network access is limited to: cloning or downloading the sources you import and check for
@@ -501,6 +502,16 @@ automatic update check for the app itself. A GitHub token raises the API rate li
 private repositories; `repo` read access is enough.
 
 ## Troubleshooting
+
+### The app does not start, or the window stays empty
+
+A failure before the window appears shows a native error dialog and writes the message to
+`~/.skill-hive/logs/skill-hive-crash.log`. A failure inside the interface replaces the window
+content with the error text. In both cases `~/.skill-hive/logs/skill-hive.log` records how far
+startup got: `starting Skill Hive`, `core ready`, `tauri ready`, the `page load` events and
+finally `ui: ready v<version>` once the interface has rendered and the backend answered. Open an
+issue with that log and the crash file if there is one. On Windows the WebView2 runtime must be
+present (the installer downloads it when it is missing); on Linux see the next section.
 
 ### Linux rendering
 
@@ -573,6 +584,7 @@ npm run typecheck && npm run lint && npm test && npm run build
 npm run bindings && node scripts/gen-bindings-index.mjs   # regenerate TypeScript types from Rust
 npm run build && node scripts/screenshots.mjs             # screenshots of every screen (mock data)
 npm run build && npm run audit:ui                         # contrast / font / overflow audit
+npx tauri build --no-bundle && npm run smoke:desktop      # start the real app, wait for the UI
 ```
 
 Layout:
@@ -602,9 +614,16 @@ screenshots and `report.json` go; `--filter <text>` limits the routes.
 `node scripts/gen-bindings-index.mjs` rewrites the index. CI fails when the committed bindings
 differ from the generated ones, so run both and commit the result after changing a model type.
 
+**Desktop smoke test.** `scripts/smoke-desktop.mjs` starts the built binary against an empty
+home directory and fails unless the log reports `ui: ready` within the timeout; on Windows it
+also reads the page through WebView2's DevTools protocol and saves a screenshot. Build the
+binary with `npx tauri build --no-bundle` first: a plain `cargo build` leaves out the
+`tauri/custom-protocol` feature and the binary would try to load the dev server instead of the
+embedded interface. On a Linux machine without a display wrap the script in `xvfb-run -a`.
+
 **CI.** Every push to `main` and every pull request runs `cargo fmt`, clippy and the Rust tests
-on Linux, macOS and Windows, the web checks and the UI audit, and a Linux desktop bundle (`deb`
-and `AppImage`) as a build check.
+on Linux, macOS and Windows, the web checks and the UI audit, a Linux desktop bundle (`deb` and
+`AppImage`), and the desktop smoke test on Linux, macOS and Windows.
 
 **Cutting a release.** Bump the version in the three places that carry it: `Cargo.toml`
 (`[workspace.package] version`), `package.json` and `src-tauri/tauri.conf.json`, and merge that

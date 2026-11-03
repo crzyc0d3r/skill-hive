@@ -50,10 +50,13 @@ pub fn command(program: &str) -> Command {
         if matches!(ext.as_deref(), Some("cmd") | Some("bat")) {
             let mut c = Command::new("cmd");
             c.arg("/C").arg(path);
+            crate::util::hide_console(&mut c);
             return c;
         }
     }
-    Command::new(path)
+    let mut c = Command::new(path);
+    crate::util::hide_console(&mut c);
+    c
 }
 
 /// Last `max` characters of a string, trimmed (for error messages).

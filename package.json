@@ -21,7 +21,8 @@
     "app:build": "tauri build",
     "bindings": "cargo test -p hive-core --lib export_bindings -- --nocapture",
     "screenshots": "node scripts/screenshots.mjs",
-    "audit:ui": "node scripts/ui-audit.mjs"
+    "audit:ui": "node scripts/ui-audit.mjs",
+    "smoke:desktop": "node scripts/smoke-desktop.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
