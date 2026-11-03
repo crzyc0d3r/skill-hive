@@ -3,57 +3,49 @@ name = "hive-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-authors.workspace = true
 rust-version.workspace = true
-description = "Skill Hive core library (no Tauri dependency)"
+repository.workspace = true
+description = "Skill Hive core: library, discovery, deployment, recommendation and evaluation of agent skills"
 
-[[bin]]
-name = "lock-holder"
-path = "src/bin/lock-holder.rs"
+[features]
+default = ["keyring"]
+# OS keychain storage for provider secrets. Without it secrets use a 0600 file under the Hive home.
+keyring = ["dep:keyring"]
 
 [dependencies]
-anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-log = { workspace = true }
-rusqlite = { version = "0.31", features = ["bundled"] }
-aes-gcm = "0.10"
-rand = "0.8"
+serde_yaml_ng = "0.10"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+async-trait = "0.1"
+futures = "0.3"
+uuid = { workspace = true }
+chrono = { workspace = true }
+ts-rs = { workspace = true }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled", "cache"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "gzip", "http2", "charset", "system-proxy", "stream"] }
+sha2 = "0.11"
 hex = "0.4"
+walkdir = "2"
+globset = "0.4"
 regex = "1"
-dirs = "5"
-fs2 = "0.4"
-chrono = "0.4"
-notify = "6.1.1"
-sha2 = "0.10"
-walkdir = "2.5"
-zip = { version = "2.3", default-features = false, features = ["deflate"] }
-keyring = { version = "3", features = ["apple-native", "windows-native"] }
-ureq = { version = "2.12.1", default-features = false, features = ["tls", "json"] }
-zeroize = { version = "1.8", features = ["zeroize_derive"] }
-libc = "0.2"
-minisign-verify = "0.2"
-
-
-git2 = { version = "0.21", features = ["vendored-openssl", "cred"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-unicode-normalization = "0.1"
-urlencoding = "2"
+dirs = "7"
+dunce = "1"
+which = "8"
 tempfile = "3"
-uuid = { version = "1", features = ["v4", "v7"] }
-serde_yaml = "0.9"
-gethostname = "1"
-caseless = "0.2"
+indexmap = { version = "2", features = ["serde"] }
+url = "2"
+flate2 = "1"
+tar = "0.4"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+keyring = { version = "4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 junction = "2"
-windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_System_JobObjects",
-    "Win32_System_Threading",
-] }
 
 [dev-dependencies]
 tempfile = "3"
-minisign = "0.7"
+tokio = { workspace = true, features = ["test-util"] }

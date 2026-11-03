@@ -1,18 +1,35 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["crates/hive-core", "crates/hive-cli", "src-tauri"]
 
 [workspace.package]
-version = "1.0.0"
-edition = "2021"
+version = "0.1.0"
+edition = "2024"
 license = "MIT"
-authors = ["Skill Hive"]
-rust-version = "1.97"
-description = "Skill Hive — create, generate and test agent skills"
+rust-version = "1.85"
+repository = "https://github.com/crzyc0d3r/skill-hive"
+description = "Skill Hive: collect, curate, deploy and measure agent skills"
 
 [workspace.dependencies]
-anyhow = "1"
+hive-core = { path = "crates/hive-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-log = "0.4"
-thiserror = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "io-util", "time", "sync"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+ts-rs = { version = "12", features = ["serde-json-impl", "indexmap-impl", "no-serde-warnings"] }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 2
+strip = true
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 1

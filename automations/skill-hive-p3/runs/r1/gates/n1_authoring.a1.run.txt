@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p3/code/n1_authoring.sh
-(exit 0)
-

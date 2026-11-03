@@ -1,45 +1,31 @@
-//! Provider layer: one interface for Anthropic, OpenAI-compatible endpoints, and local agent CLIs.
+//! Model providers: CLI agents and HTTP APIs used to run evaluations, grade results and
+//! re-rank recommendations.
 
-mod cli_agent;
-mod http;
-mod middleware;
-mod pricing;
-mod probe;
-mod scripted;
-mod secrets;
-mod store;
-mod types;
+use std::process::Command;
 
-pub use cli_agent::{
-    detect_local_agent_clis, help_flags, kill_tree, spawn_grouped, start_clis_in_sandbox, CliEvent,
-    LocalCli,
-};
-pub use http::{AnthropicProvider, OpenAiProvider};
-pub use middleware::{
-    recording_diff, recording_exists, request_key, Limiter, Middleware, NoopSleeper, RealSleeper,
-    Recording, RunMode, Sleeper,
-};
-pub use pricing::{cost_usd, lookup, seed_models, Pricing};
-pub use probe::{probe_and_persist, probe_offline, probe_provider, ProbeStage};
-pub use scripted::ScriptedProvider;
-pub use secrets::{
-    clear_git_token, clear_provider_secret, has_git_token, has_provider_secret, load_env_secret,
-    load_provider_secret, store_git_token, store_provider_secret, SecretBackend,
-};
-pub use store::{
-    get_provider, list_named_providers, list_providers, provider_public_json, referenced_by_preset,
-    save_named_provider, set_last_test, upsert_provider, ProviderConfig, ProviderPublic,
-};
-pub use types::*;
+use crate::model::{DetectedCli, ProviderKind};
 
-#[cfg(test)]
-mod tests;
-
-pub fn scrub(input: &str, secrets: &[String]) -> String {
-    let mut out = crate::util::log_sanitize::sanitize(input);
-    for secret in secrets {
-        if secret.len() >= 4 && out.contains(secret.as_str()) {
-            out = out.replace(secret.as_str(), "<redacted>");
+/// Find agent CLIs on PATH and read their versions.
+pub fn detect_clis() -> Vec<DetectedCli> {
+    let mut out = Vec::new();
+    for (kind, command) in [
+        (ProviderKind::ClaudeCode, "claude"),
+        (ProviderKind::Codex, "codex"),
+    ] {
+        if let Ok(path) = which::which(command) {
+            let version = Command::new(&path)
+                .arg("--version")
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|v| !v.is_empty());
+            out.push(DetectedCli {
+                kind,
+                command: command.to_string(),
+                path: path.to_string_lossy().to_string(),
+                version,
+            });
         }
     }
     out

@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p6/code/n2_updater.sh
-(exit 0)
-

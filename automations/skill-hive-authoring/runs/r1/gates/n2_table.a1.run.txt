@@ -1,3 +1,0 @@
-$ python3 automations/skill-hive-authoring/code/publish_doc.py
-(exit 0)
-wrote /workspace/docs/authoring-wiring.md (3916 bytes)

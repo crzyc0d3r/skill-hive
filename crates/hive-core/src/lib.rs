@@ -1,34 +1,32 @@
-//! Skill Hive core. No Tauri dependency: the app and the CLI both link this crate.
-pub mod analytics;
-pub mod authoring;
-pub mod backup;
-pub mod core;
+//! Skill Hive core.
+//!
+//! Collect skills, subagents and commands from the local machine or online sources, keep them in
+//! one library, deploy curated loadouts to agent tools without conflicts, and measure whether a
+//! skill actually helps with comparative evaluations.
+//!
+//! Entry point: [`Hive`].
+
+pub mod conflicts;
 pub mod db;
 pub mod deploy;
-pub mod generation;
+pub mod discovery;
+pub mod error;
+pub mod evals;
+pub mod hash;
+pub mod hive;
 pub mod library;
+pub mod model;
+pub mod paths;
 pub mod providers;
-pub mod testing;
-pub mod updater;
+pub mod secrets;
+pub mod settings;
+pub mod skill;
+pub mod targets;
 pub mod util;
 
-#[cfg(test)]
-mod agent_catalog_tests;
-#[cfg(test)]
-mod db_layout_tests;
-#[cfg(test)]
-mod deploy_tests;
-#[cfg(test)]
-mod install_tests;
-#[cfg(test)]
-mod library_import_tests;
-#[cfg(test)]
-mod library_open_path_tests;
-#[cfg(test)]
-mod library_sidecar_tests;
-#[cfg(test)]
-mod test_support;
-#[cfg(test)]
-mod watcher_tests;
-#[cfg(test)]
-mod workspace_tests;
+pub use error::{HiveError, Result};
+pub use hive::Hive;
+
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
