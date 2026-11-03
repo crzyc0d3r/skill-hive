@@ -60,7 +60,7 @@ export function ProgressBanner() {
   const op = list[list.length - 1];
   const frac = op.total ? (op.done ?? 0) / op.total : null;
   return (
-    <div className="absolute inset-x-0 top-0 z-20 flex items-center gap-3 border-b bg-overlay px-4 py-1.5 text-xs text-muted glass animate-fade-in">
+    <div className="flex shrink-0 items-center gap-3 border-b bg-sunken/70 px-4 py-1.5 text-xs text-muted animate-fade-in">
       <Loader2 className="size-3.5 animate-spin text-accent" />
       <span className="truncate">{op.message}</span>
       {frac !== null ? (

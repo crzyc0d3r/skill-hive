@@ -161,7 +161,7 @@ export function RunPage() {
             <VerdictCard bench={bench} />
             <section className="surface p-4">
               <SectionTitle title="Arm comparison" description="Mean per arm; error bars and ± are one standard deviation across repeats." />
-              <div className="mt-3 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+              <div className="mt-3 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
                 <ArmPassRateChart arms={bench.arms} />
                 <ArmStatsTable bench={bench} />
               </div>
@@ -292,9 +292,11 @@ function ArmStatsTable({ bench }: { bench: T.Benchmark }) {
         <tbody>
           {bench.arms.map((a) => (
             <tr key={a.label} className="border-b last:border-b-0">
-              <td className="whitespace-nowrap px-2 py-1.5">
-                <span className="inline-flex items-center gap-1.5 font-medium">
-                  <ArmSwatch color={colors[a.label]} /> {armLabel(a.label)}
+              <td className="px-2 py-1.5">
+                <span className="inline-flex flex-wrap items-center gap-x-1.5 font-medium">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <ArmSwatch color={colors[a.label]} /> {armLabel(a.label)}
+                  </span>
                   {a.label === bench.baseline ? <span className="text-[10.5px] font-normal text-subtle">baseline</span> : null}
                 </span>
               </td>
