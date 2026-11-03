@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p6/code/n4_result.sh
-(exit 0)
-

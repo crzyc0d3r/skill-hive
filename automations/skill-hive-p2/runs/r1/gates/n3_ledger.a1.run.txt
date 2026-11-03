@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p2/code/n3_ledger.sh
-(exit 0)
-

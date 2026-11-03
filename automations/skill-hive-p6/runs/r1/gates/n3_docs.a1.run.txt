@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p6/code/n3_docs.sh
-(exit 0)
-

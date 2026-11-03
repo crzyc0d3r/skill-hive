@@ -1,3 +1,0 @@
-$ python3 automations/responsiveness/code/write_before.py
-(exit 0)
-

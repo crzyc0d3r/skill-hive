@@ -1,3 +1,0 @@
-$ python3 automations/skill-hive-authoring/code/verify_commands.py
-(exit 0)
-verified 21 authoring commands and no record_effect

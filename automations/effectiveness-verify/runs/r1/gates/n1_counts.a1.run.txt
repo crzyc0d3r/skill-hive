@@ -1,3 +1,0 @@
-$ python3 automations/effectiveness-verify/code/check_audit.py > automations/effectiveness-verify/out/counts.txt
-(exit 0)
-
