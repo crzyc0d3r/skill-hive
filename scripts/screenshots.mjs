@@ -67,7 +67,7 @@ try {
     if (!filter || "item-detail".includes(filter)) {
       await page.goto(`http://localhost:${port}/#/library`);
       await page.waitForTimeout(800);
-      const card = page.getByRole("button", { name: /^pdf/ }).first();
+      const card = page.getByRole("button", { name: /Select pdf/ }).first();
       if (await card.count()) {
         await card.click();
         await page.waitForTimeout(800);
