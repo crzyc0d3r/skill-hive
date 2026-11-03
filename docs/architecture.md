@@ -23,7 +23,7 @@ reaches the file system or the network directly; every operation is a core metho
 | Module | Responsibility |
 | --- | --- |
 | `model` | Every type that crosses the boundary (serde, `ts-rs` exported). `cargo test -p hive-core` regenerates `src/lib/api/bindings`. |
-| `paths` | The Hive home layout (`HIVE_HOME` or `~/.skill-hive`). |
+| `paths` | The Hive home layout (`HIVE_HOME` or `~/.skill-hive`). Agent directories resolve against the user's home, or `HIVE_TARGET_HOME` when set (tests, sandboxes). |
 | `db` | SQLite with WAL and FTS5. Items, tags, deployments, projects, custom targets, loadouts, providers, runs, case results, settings, cache, audit. Rebuildable from disk. |
 | `skill` | Parsing and validation of `SKILL.md`, subagent and command files (Agent Skills rules: name regex and length, description length, body, unknown keys, parent-path references). |
 | `hash` | Content hashes over sorted relative paths + bytes, so copies compare equal anywhere. |

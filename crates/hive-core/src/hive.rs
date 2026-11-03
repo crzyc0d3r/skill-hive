@@ -68,7 +68,14 @@ impl Hive {
     }
 
     fn assemble(paths: HivePaths, db: Database, secrets: SecretStore) -> Result<Arc<Self>> {
-        let home = dirs::home_dir().unwrap_or_else(|| paths.home.clone());
+        // `HIVE_TARGET_HOME` overrides where agent directories are looked up (tests, sandboxes);
+        // Windows ignores `HOME`/`USERPROFILE` overrides in `dirs::home_dir`, so this is the one
+        // portable switch.
+        let home = std::env::var_os("HIVE_TARGET_HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| paths.home.clone());
         let resolver = Self::build_resolver(&db, home)?;
         let (events, _) = broadcast::channel(1024);
         let http = reqwest::Client::builder()
