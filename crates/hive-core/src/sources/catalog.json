@@ -1,0 +1,149 @@
+[
+  {
+    "id": "anthropics-skills",
+    "name": "Anthropic Skills",
+    "description": "Anthropic's official skill collection: document skills (docx, pptx, xlsx, pdf), skill-creator, mcp-builder, frontend-design, webapp-testing and more. The reference implementation of the Agent Skills format.",
+    "source": "anthropics/skills",
+    "homepage": "https://github.com/anthropics/skills",
+    "tags": ["official", "documents", "authoring", "anthropic"],
+    "publisher": "Anthropic",
+    "approxCount": 20
+  },
+  {
+    "id": "openai-skills",
+    "name": "OpenAI Codex Skills",
+    "description": "OpenAI's curated and system skills for Codex: skill-creator, skill-installer, deploy helpers (Cloudflare, Netlify), Figma, Notion, Playwright and more. Skills live under skills/.system and skills/.curated.",
+    "source": "openai/skills",
+    "homepage": "https://github.com/openai/skills",
+    "tags": ["official", "codex", "openai", "integrations"],
+    "publisher": "OpenAI",
+    "approxCount": 44
+  },
+  {
+    "id": "obra-superpowers",
+    "name": "Superpowers",
+    "description": "Jesse Vincent's engineering workflow skills: brainstorming, writing plans, test-driven development, systematic debugging, code review, subagent-driven development.",
+    "source": "obra/superpowers",
+    "homepage": "https://github.com/obra/superpowers",
+    "tags": ["workflow", "engineering", "planning", "tdd"],
+    "publisher": "obra",
+    "approxCount": 15
+  },
+  {
+    "id": "vercel-agent-skills",
+    "name": "Vercel Agent Skills",
+    "description": "Vercel's skills for web development with React, Next.js and the Vercel platform, including performance and composition best practices.",
+    "source": "vercel-labs/agent-skills",
+    "homepage": "https://github.com/vercel-labs/agent-skills",
+    "tags": ["web", "react", "nextjs", "vercel"],
+    "publisher": "Vercel"
+  },
+  {
+    "id": "huggingface-skills",
+    "name": "Hugging Face Skills",
+    "description": "Skills for the Hugging Face ecosystem: model training and fine-tuning jobs, datasets, Hub operations and evaluation.",
+    "source": "huggingface/skills",
+    "homepage": "https://github.com/huggingface/skills",
+    "tags": ["ml", "huggingface", "training", "datasets"],
+    "publisher": "Hugging Face"
+  },
+  {
+    "id": "microsoft-skills",
+    "name": "Microsoft Skills",
+    "description": "Microsoft's skills for Azure services, developer tooling and Microsoft platforms.",
+    "source": "microsoft/skills",
+    "homepage": "https://github.com/microsoft/skills",
+    "tags": ["azure", "microsoft", "cloud"],
+    "publisher": "Microsoft"
+  },
+  {
+    "id": "trailofbits-skills",
+    "name": "Trail of Bits Security Skills",
+    "description": "Security-focused skills from Trail of Bits: static analysis, fuzzing, code auditing and secure development practices.",
+    "source": "trailofbits/skills",
+    "homepage": "https://github.com/trailofbits/skills",
+    "tags": ["security", "audit", "fuzzing"],
+    "publisher": "Trail of Bits"
+  },
+  {
+    "id": "supabase-agent-skills",
+    "name": "Supabase Agent Skills",
+    "description": "Skills for building on Supabase: Postgres best practices, auth, storage and edge functions.",
+    "source": "supabase/agent-skills",
+    "homepage": "https://github.com/supabase/agent-skills",
+    "tags": ["database", "postgres", "supabase"],
+    "publisher": "Supabase"
+  },
+  {
+    "id": "cloudflare-skills",
+    "name": "Cloudflare Skills",
+    "description": "Skills for building and deploying on Cloudflare Workers, Pages and the developer platform.",
+    "source": "cloudflare/skills",
+    "homepage": "https://github.com/cloudflare/skills",
+    "tags": ["cloudflare", "workers", "deploy"],
+    "publisher": "Cloudflare"
+  },
+  {
+    "id": "sentry-skills",
+    "name": "Sentry Skills",
+    "description": "Skills for instrumenting applications with Sentry and working with Sentry's SDKs and APIs.",
+    "source": "getsentry/skills",
+    "homepage": "https://github.com/getsentry/skills",
+    "tags": ["observability", "sentry", "errors"],
+    "publisher": "Sentry"
+  },
+  {
+    "id": "expo-skills",
+    "name": "Expo Skills",
+    "description": "Skills for React Native and Expo app development, builds and deployment.",
+    "source": "expo/skills",
+    "homepage": "https://github.com/expo/skills",
+    "tags": ["mobile", "react-native", "expo"],
+    "publisher": "Expo"
+  },
+  {
+    "id": "remotion-skills",
+    "name": "Remotion Skills",
+    "description": "Skills for programmatic video with Remotion.",
+    "source": "remotion-dev/skills",
+    "homepage": "https://github.com/remotion-dev/skills",
+    "tags": ["video", "remotion", "react"],
+    "publisher": "Remotion"
+  },
+  {
+    "id": "addyosmani-agent-skills",
+    "name": "Addy Osmani's Agent Skills",
+    "description": "Web engineering skills covering performance, accessibility, testing and front-end architecture.",
+    "source": "addyosmani/agent-skills",
+    "homepage": "https://github.com/addyosmani/agent-skills",
+    "tags": ["web", "performance", "accessibility"],
+    "publisher": "addyosmani"
+  },
+  {
+    "id": "k-dense-scientific-skills",
+    "name": "Claude Scientific Skills",
+    "description": "A large collection of scientific computing skills: bioinformatics, chemistry, statistics, data analysis libraries and research workflows.",
+    "source": "K-Dense-AI/claude-scientific-skills",
+    "homepage": "https://github.com/K-Dense-AI/claude-scientific-skills",
+    "tags": ["science", "research", "data"],
+    "publisher": "K-Dense AI"
+  },
+  {
+    "id": "antigravity-awesome-skills",
+    "name": "Antigravity Awesome Skills",
+    "description": "A very large community aggregation of skills across many domains. Preview carefully: collections this size contain overlapping skills, so pick the few you need.",
+    "source": "sickn33/antigravity-awesome-skills",
+    "homepage": "https://github.com/sickn33/antigravity-awesome-skills",
+    "tags": ["community", "aggregate"],
+    "publisher": "community"
+  },
+  {
+    "id": "github-awesome-copilot",
+    "name": "Awesome GitHub Copilot",
+    "description": "GitHub's community collection of Copilot customizations: agents, prompts, instructions and skills.",
+    "source": "github/awesome-copilot",
+    "homepage": "https://github.com/github/awesome-copilot",
+    "tags": ["copilot", "github", "agents", "prompts"],
+    "publisher": "GitHub"
+  }
+]

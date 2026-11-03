@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p2/code/n1_rust.sh
-(exit 101)
-

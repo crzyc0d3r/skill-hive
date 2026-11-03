@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p5/code/n1_core.sh
-(exit 0)
-

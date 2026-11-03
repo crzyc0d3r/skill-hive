@@ -1,0 +1,290 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------
+   Design tokens. Plain sRGB values so every WebView paints them the
+   same way (no colour-space conversions in compositing paths). Text
+   tokens keep at least 4.5:1 against the surfaces they sit on:
+   fg / muted / subtle on bg, elevated and sunken; each status colour
+   on its soft background and on elevated.
+   ------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --bg: #f9fafc;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #f1f4f7;
+  --bg-overlay: rgb(255 255 255 / 0.86);
+  --fg: #11161f;
+  --fg-muted: #4b525c;
+  --fg-subtle: #6b7079;
+  --line: #dee2e7;
+  --line-strong: #c6cbd1;
+
+  --accent: #c25300;          /* honey amber, the hive */
+  --accent-strong: #a84500;
+  --accent-soft: #ffebd2;
+  --accent-fg: #ffffff;
+  --accent-ring: rgb(194 83 0 / 0.35);
+
+  --ok: #1e7a3b;
+  --ok-soft: #daf8df;
+  --warn: #955600;
+  --warn-soft: #fff0cc;
+  --danger: #c52d31;
+  --danger-soft: #ffe6e5;
+  --danger-fg: #ffffff;
+  --info: #1f6fb8;
+  --info-soft: #e0f1ff;
+
+  --chart-1: #d45e00;
+  --chart-2: #3284d0;
+  --chart-3: #25984d;
+  --chart-4: #b25ec5;
+  --chart-5: #00a4ac;
+
+  --radius: 10px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 6px 20px -8px rgb(0 0 0 / 0.18);
+  --shadow-lg: 0 20px 50px -20px rgb(0 0 0 / 0.3);
+  --sidebar-w: 236px;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0d0f15;
+  --bg-elevated: #161a20;
+  --bg-sunken: #080a0e;
+  --bg-overlay: rgb(19 22 29 / 0.82);
+  --fg: #e8ebef;
+  --fg-muted: #a6abb3;
+  --fg-subtle: #8c9199;
+  --line: #26292f;
+  --line-strong: #393d45;
+
+  --accent: #f4a437;
+  --accent-strong: #ffbc56;
+  --accent-soft: #3f2810;
+  --accent-fg: #190c03;
+  --accent-ring: rgb(244 164 55 / 0.35);
+
+  --ok: #5ac576;
+  --ok-soft: #122d19;
+  --warn: #f0b135;
+  --warn-soft: #3d2a02;
+  --danger: #fa6863;
+  --danger-soft: #4b1d1b;
+  --danger-fg: #2a0806;
+  --info: #67aaed;
+  --info-soft: #142a41;
+
+  --chart-1: #f4a437;
+  --chart-2: #67aaed;
+  --chart-3: #5ac576;
+  --chart-4: #ce83de;
+  --chart-5: #3ebfc6;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 8px 24px -10px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 24px 60px -24px rgb(0 0 0 / 0.7);
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --color-bg: var(--bg);
+  --color-elevated: var(--bg-elevated);
+  --color-sunken: var(--bg-sunken);
+  --color-overlay: var(--bg-overlay);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-fg: var(--danger-fg);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-2xl: calc(var(--radius) + 12px);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-in: fade-in 180ms var(--ease-out) both;
+  --animate-slide-up: slide-up 220ms var(--ease-out) both;
+  --animate-slide-in-right: slide-in-right 240ms var(--ease-out) both;
+  --animate-pulse-soft: pulse-soft 1.8s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01", "calt";
+    overflow: hidden;
+    user-select: none;
+  }
+  input, textarea, [contenteditable], pre, code, .selectable {
+    user-select: text;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  button {
+    cursor: default;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--fg-subtle);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .drag-region { -webkit-app-region: drag; }
+  .no-drag { -webkit-app-region: no-drag; }
+  .surface {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+  }
+  .glass {
+    background: var(--bg-overlay);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+  }
+  .mono { font-family: var(--font-mono); font-feature-settings: "liga" 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  .hairline { box-shadow: inset 0 0 0 1px var(--line); }
+  .scroll-y { overflow-y: auto; overscroll-behavior: contain; }
+}
+
+/* Markdown rendering inside the app (skill bodies, READMEs, reports).
+   In the components layer so utilities passed through `className` (text-xs, …) still win. */
+@layer components {
+  .prose-hive {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--fg);
+    user-select: text;
+  }
+  .prose-hive > :first-child { margin-top: 0; }
+  .prose-hive h1, .prose-hive h2, .prose-hive h3, .prose-hive h4 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 1.4em 0 0.5em;
+    line-height: 1.25;
+  }
+  .prose-hive h1 { font-size: 1.45em; }
+  .prose-hive h2 { font-size: 1.2em; }
+  .prose-hive h3 { font-size: 1.05em; }
+  .prose-hive p, .prose-hive ul, .prose-hive ol, .prose-hive pre, .prose-hive table, .prose-hive blockquote { margin: 0.7em 0; }
+  .prose-hive ul { padding-left: 1.3em; list-style: disc; }
+  .prose-hive ol { padding-left: 1.3em; list-style: decimal; }
+  .prose-hive li + li { margin-top: 0.2em; }
+  .prose-hive a { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
+  .prose-hive code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--bg-sunken);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 0.1em 0.35em;
+  }
+  .prose-hive pre {
+    background: var(--bg-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 12px 14px;
+    overflow-x: auto;
+  }
+  .prose-hive pre code { background: none; border: 0; padding: 0; font-size: 12.5px; }
+  .prose-hive blockquote { border-left: 3px solid var(--line-strong); padding-left: 12px; color: var(--fg-muted); }
+  .prose-hive table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+  .prose-hive th, .prose-hive td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+  .prose-hive th { background: var(--bg-sunken); font-weight: 600; }
+  .prose-hive hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
+  .prose-hive img { max-width: 100%; border-radius: var(--radius-md); }
+}

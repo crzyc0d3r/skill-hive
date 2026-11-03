@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p4/code/n3_result.sh
-(exit 0)
-

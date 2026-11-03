@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p3/code/n2_editors.sh
-(exit 0)
-

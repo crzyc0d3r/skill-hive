@@ -1,82 +1,59 @@
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { LoaderCircleIcon } from "lucide-react"
-import { cn } from "cn"
-import { Slot } from "radix-ui"
+import * as React from "react";
+import { Slot } from "radix-ui";
+import { cva, type VariantProps } from "class-variance-authority";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-none outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-[13px] font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 select-none",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
-        success: "bg-success text-success-foreground hover:bg-success/90",
-        outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline",
+        primary: "bg-accent text-accent-fg shadow-sm hover:bg-accent-strong disabled:opacity-100 disabled:bg-accent-soft disabled:text-muted disabled:shadow-none",
+        secondary: "bg-elevated text-fg hairline hover:bg-sunken",
+        ghost: "text-muted hover:bg-sunken hover:text-fg",
+        subtle: "bg-sunken text-fg hover:bg-line",
+        danger: "bg-danger text-danger-fg hover:opacity-90",
+        "danger-ghost": "text-danger hover:bg-danger-soft",
+        link: "text-info underline-offset-4 hover:underline px-0 h-auto",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8",
-        "icon-lg": "size-10",
+        sm: "h-7 px-2.5 text-xs rounded-[6px]",
+        md: "h-8 px-3",
+        lg: "h-9 px-4 text-sm",
+        icon: "h-8 w-8",
+        "icon-sm": "h-7 w-7 rounded-[6px]",
       },
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-)
+    defaultVariants: { variant: "secondary", size: "md" },
+    // Emitted after the size classes, so tailwind-merge keeps the inline-link box over `h-7 px-2.5` etc.
+    compoundVariants: [{ variant: "link", class: "h-auto px-0 py-0" }],
+  },
+);
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  asChild = false,
-  children,
-  ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-  }) {
-  const busy = props["aria-busy"] === true || props["aria-busy"] === "true"
-  const shared = {
-    "data-slot": "button",
-    "data-variant": variant,
-    "data-size": size,
-    className: cn(buttonVariants({ variant, size, className })),
-  }
-
-  if (asChild) {
-    return (
-      <Slot.Root {...shared} {...props}>
-        {children}
-      </Slot.Root>
-    )
-  }
-
-  return (
-    <button
-      {...shared}
-      {...props}
-      aria-busy={busy ? true : props["aria-busy"]}
-      disabled={props.disabled || busy}
-    >
-      {busy ? <LoaderCircleIcon className="size-3.5 animate-spin" aria-hidden="true" /> : null}
-      {children}
-    </button>
-  )
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+  loading?: boolean;
 }
 
-export { Button, buttonVariants }
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, loading = false, children, disabled, ...props }, ref) => {
+    const Comp = asChild ? Slot.Root : "button";
+    return (
+      <Comp
+        ref={ref}
+        className={cn(buttonVariants({ variant, size }), className)}
+        disabled={disabled || loading}
+        {...props}
+      >
+        {loading ? <Loader2 className="animate-spin" /> : null}
+        {children}
+      </Comp>
+    );
+  },
+);
+Button.displayName = "Button";
+
+export { buttonVariants };

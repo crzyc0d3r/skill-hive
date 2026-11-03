@@ -1,3 +1,0 @@
-$ bash automations/skill-hive-p5/code/n2_screens.sh
-(exit 0)
-

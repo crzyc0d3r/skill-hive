@@ -3,35 +3,27 @@ name = "skill-hive"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-authors.workspace = true
 rust-version.workspace = true
-description = "Skill Hive desktop shell"
+repository.workspace = true
+description = "Skill Hive desktop app"
 
 [lib]
 name = "skill_hive_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[[bin]]
-name = "skill-hive"
-path = "src/main.rs"
-
 [build-dependencies]
-tauri-build = { version = "2.5.4", features = [] }
+tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
+hive-core = { workspace = true }
+tauri = { version = "2.12", features = [] }
+tauri-plugin-dialog = "2.8"
+tauri-plugin-opener = "2.7"
+tauri-plugin-clipboard-manager = "2.3"
+tauri-plugin-window-state = "2.5"
+tauri-plugin-single-instance = "2.5"
 serde = { workspace = true }
 serde_json = { workspace = true }
-log = { workspace = true }
-tauri = { version = "2.10.0", features = ["tray-icon"] }
-tauri-plugin-log = "2"
-tauri-plugin-dialog = "2"
-tauri-plugin-opener = "2"
-tauri-plugin-clipboard-manager = "2"
-tauri-plugin-updater = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-window-state = "2"
-hive-core = { path = "../crates/hive-core" }
-anyhow = { workspace = true }
-
-[target.'cfg(windows)'.dependencies]
-webview2-com = "0.39"
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

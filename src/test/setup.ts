@@ -1,55 +1,31 @@
 import "@testing-library/jest-dom/vitest";
-import { beforeEach } from "vitest";
-import { clearLibraryMemory } from "@/lib/library-cache";
+import { afterEach, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 
-beforeEach(() => {
-  localStorage.removeItem("skill-hive-library-index");
-  clearLibraryMemory();
+afterEach(() => {
+  cleanup();
 });
 
-class ResizeObserverMock {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-globalThis.ResizeObserver = ResizeObserverMock;
-Element.prototype.scrollIntoView = () => {};
-import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import { vi } from "vitest";
-
-Object.defineProperty(window, "matchMedia", {
-  writable: true,
-  value: (query: string) => ({
+// jsdom lacks these.
+if (!window.matchMedia) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: false,
     media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }),
-});
-
-mockWindows("main");
-
-const settings = new Map<string, string>();
-
-mockIPC((cmd, args) => {
-  const record = (args ?? {}) as Record<string, string>;
-  if (cmd === "get_settings") return settings.get(record.key ?? "") ?? null;
-  if (cmd === "set_settings") {
-    settings.set(record.key, record.value);
-    return null;
-  }
-  if (cmd === "log_startup_event") return null;
-  if (cmd === "list_base_entries") return ["alpha-skill"];
-  return null;
-});
-
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(async () => () => {}),
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({
-    onThemeChanged: async () => () => {},
-  }),
-}));
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

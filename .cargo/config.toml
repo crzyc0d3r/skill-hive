@@ -1,0 +1,5 @@
+[env]
+# ts-rs writes TypeScript bindings here when `cargo test -p hive-core export_bindings` runs.
+TS_RS_EXPORT_DIR = { value = "src/lib/api/bindings", relative = true }
+# Timestamps and sizes are plain JS numbers, not bigint.
+TS_RS_LARGE_INT = "number"

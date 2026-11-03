@@ -1,20 +1,58 @@
-import * as React from "react"
-import { cn } from "cn"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
-  return (
+export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, type = "text", ...props }, ref) => (
     <input
+      ref={ref}
       type={type}
-      data-slot="input"
       className={cn(
-        "box-border h-8 w-full min-w-0 rounded-md border border-input bg-transparent px-3 pt-0 pb-[3px] text-sm leading-[calc(2rem-5px)] shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:leading-7 file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30",
-        "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        "aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
-        className
+        "h-8 w-full rounded-md bg-elevated px-2.5 text-[13px] text-fg hairline placeholder:text-subtle",
+        "focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] disabled:opacity-50",
+        "file:border-0 file:bg-transparent file:text-sm",
+        className,
       )}
       {...props}
     />
-  )
+  ),
+);
+Input.displayName = "Input";
+
+export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  ({ className, ...props }, ref) => (
+    <textarea
+      ref={ref}
+      className={cn(
+        "min-h-[80px] w-full rounded-md bg-elevated px-2.5 py-2 text-[13px] text-fg hairline placeholder:text-subtle",
+        "focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] disabled:opacity-50 resize-y",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+Textarea.displayName = "Textarea";
+
+export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
+  return <label className={cn("text-xs font-medium text-muted", className)} {...props} />;
 }
 
-export { Input }
+export function Field({
+  label,
+  hint,
+  children,
+  className,
+}: {
+  label: React.ReactNode;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      <Label>{label}</Label>
+      {children}
+      {hint ? <p className="text-xs text-subtle">{hint}</p> : null}
+    </div>
+  );
+}

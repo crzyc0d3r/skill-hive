@@ -1,30 +1,20 @@
-import { QueryClient } from "@tanstack/react-query";
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
-import { App } from "./App";
-import { logStartupEvent } from "./lib/ipc/settings";
-import { applyTheme, readStoredTheme } from "./lib/theme";
-import "./styles/tokens.css";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import { applyTheme, useUi } from "./lib/store";
+import "./styles/globals.css";
 
-const storedTheme = readStoredTheme();
-if (storedTheme) applyTheme(storedTheme);
+applyTheme(useUi.getState().theme);
 
-const queryClient = new QueryClient();
+// Desktop feel: no browser context menu except on text inputs.
+document.addEventListener("contextmenu", (e) => {
+  const target = e.target as HTMLElement | null;
+  if (target?.closest("input, textarea, [contenteditable], .selectable, pre, code")) return;
+  e.preventDefault();
+});
 
-const started = performance.now();
-try {
-  void logStartupEvent("first-paint", Math.round(performance.now() - started)).catch(() => {
-    /* The webview is not present under Vite alone. */
-  });
-} catch {
-  /* invoke can throw before it returns a promise outside the webview. */
-}
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <App client={queryClient} />
-    </BrowserRouter>
-  </StrictMode>,
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
 );
