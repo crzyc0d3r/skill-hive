@@ -27,6 +27,11 @@ export const keys = {
   run: (id: string) => ["run", id] as const,
   suite: (itemId: string) => ["suite", itemId] as const,
   history: (itemId: string) => ["history", itemId] as const,
+  analyze: (ids: readonly string[], targetId?: string | null) => ["analyze", [...ids].sort(), targetId ?? null] as const,
+  sourceSpec: (input: string) => ["source", "spec", input] as const,
+  sourcePreview: (input: string) => ["source", "preview", input] as const,
+  githubSearch: (query: string) => ["github", "search", query] as const,
+  doctor: ["doctor"] as const,
 };
 
 /** Subscribe once at the app root: backend events refresh the right queries. */
@@ -45,6 +50,7 @@ export function applyEventToCache(qc: QueryClient, event: T.HiveEvent) {
     case "library_changed":
       void qc.invalidateQueries({ queryKey: keys.itemsAll });
       void qc.invalidateQueries({ queryKey: ["item"] });
+      void qc.invalidateQueries({ queryKey: ["analyze"] });
       void qc.invalidateQueries({ queryKey: keys.stats });
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       break;
@@ -110,6 +116,42 @@ export const useSuite = (itemId: string | null) =>
   useQuery({ queryKey: keys.suite(itemId ?? ""), queryFn: () => api.evalSuite(itemId!), enabled: !!itemId });
 export const useHistory = (itemId: string | null) =>
   useQuery({ queryKey: keys.history(itemId ?? ""), queryFn: () => api.history(itemId!), enabled: !!itemId });
+export const useDoctor = () => useQuery({ queryKey: keys.doctor, queryFn: () => api.doctor(false), staleTime: 60_000 });
+export const useLoadout = (id: string | null) =>
+  useQuery({ queryKey: keys.loadout(id ?? ""), queryFn: () => api.loadout(id!), enabled: !!id });
+/** Conflicts among a set of library items, optionally against a target's budget. */
+export const useAnalyze = (ids: readonly string[], targetId?: string | null) =>
+  useQuery({
+    queryKey: keys.analyze(ids, targetId),
+    queryFn: () => api.analyzeItems([...ids], targetId),
+    enabled: ids.length > 0,
+    placeholderData: (prev) => prev,
+  });
+/** Parses what the user typed into a source spec; errors are the feedback, so no retries. */
+export const useSourceSpec = (input: string) =>
+  useQuery({
+    queryKey: keys.sourceSpec(input),
+    queryFn: () => api.parseSource(input),
+    enabled: input.trim().length > 0,
+    retry: false,
+    staleTime: 60_000,
+  });
+export const useSourcePreview = (input: string | null) =>
+  useQuery({
+    queryKey: keys.sourcePreview(input ?? ""),
+    queryFn: () => api.previewSource(input!),
+    enabled: !!input,
+    retry: false,
+    staleTime: Infinity,
+  });
+export const useGithubSearch = (query: string) =>
+  useQuery({
+    queryKey: keys.githubSearch(query),
+    queryFn: () => api.searchGithub(query),
+    enabled: query.trim().length > 0,
+    retry: false,
+    staleTime: 60_000,
+  });
 
 /** Generic mutation that invalidates a set of keys on success. */
 export function useApiMutation<TArgs, TResult>(
