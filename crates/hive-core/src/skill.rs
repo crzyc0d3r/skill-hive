@@ -325,9 +325,10 @@ pub fn validate_skill(doc: &ParsedDocument, dir_name: Option<&str>) -> Validatio
     } else {
         let len = fm.description.chars().count();
         if len > MAX_DESCRIPTION_LEN {
+            // Real collections exceed the specification's limit; agents still load them.
             findings.push(finding(
                 "description.too_long",
-                Severity::Error,
+                Severity::Warning,
                 format!("`description` is {len} characters; the limit is {MAX_DESCRIPTION_LEN}"),
                 Some("description"),
             ));
@@ -558,9 +559,7 @@ pub fn trigger_phrases(description: &str) -> Vec<String> {
         while let Some(idx) = lower[start..].find(marker) {
             let begin = start + idx + marker.len();
             let rest = &lower[begin..];
-            let end = rest
-                .find(|c: char| c == '.' || c == ';' || c == '\n')
-                .unwrap_or(rest.len());
+            let end = rest.find(['.', ';', '\n']).unwrap_or(rest.len());
             let phrase = rest[..end].trim().trim_end_matches(',').to_string();
             if phrase.split_whitespace().count() >= 2 {
                 out.push(phrase);

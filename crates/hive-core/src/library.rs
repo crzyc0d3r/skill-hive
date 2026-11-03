@@ -788,11 +788,10 @@ mod tests {
 
         let files = lib.files(&updated);
         assert_eq!(files.len(), 1);
-        assert_eq!(
+        assert!(
             lib.read_file(&updated, "SKILL.md")
                 .unwrap()
-                .contains("New body"),
-            true
+                .contains("New body")
         );
         assert!(lib.read_file(&updated, "../x").is_err());
 

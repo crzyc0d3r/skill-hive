@@ -13,7 +13,8 @@ pub const EVENT_NAME: &str = "hive://event";
 
 fn init_logging(hive: &Hive) {
     use tracing_subscriber::EnvFilter;
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,hive_core=debug"));
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,hive_core=debug"));
     let log_dir = hive.paths.logs_dir();
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -120,6 +121,24 @@ pub fn run() {
             commands::loadout_plan,
             commands::loadout_apply,
             commands::recommend,
+            commands::providers_list,
+            commands::provider_save,
+            commands::provider_delete,
+            commands::provider_probe,
+            commands::providers_detect,
+            commands::providers_ensure_defaults,
+            commands::eval_suite_get,
+            commands::eval_suite_save,
+            commands::eval_suite_draft,
+            commands::eval_default_config,
+            commands::eval_run_start,
+            commands::eval_run_cancel,
+            commands::eval_runs_list,
+            commands::eval_run_detail,
+            commands::eval_run_delete,
+            commands::eval_history,
+            commands::eval_benchmark_markdown,
+            commands::eval_case_transcript,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Skill Hive");

@@ -79,7 +79,10 @@ pub async fn library_read_file(hive: HiveState<'_>, id: String, path: String) ->
 }
 
 #[tauri::command]
-pub async fn library_import(hive: HiveState<'_>, request: ImportRequest) -> CmdResult<ImportResult> {
+pub async fn library_import(
+    hive: HiveState<'_>,
+    request: ImportRequest,
+) -> CmdResult<ImportResult> {
     blocking(&hive, move |h| h.import(&request)).await
 }
 
@@ -89,17 +92,29 @@ pub async fn library_remove(hive: HiveState<'_>, id: String) -> CmdResult<Librar
 }
 
 #[tauri::command]
-pub async fn library_set_tags(hive: HiveState<'_>, id: String, tags: Vec<String>) -> CmdResult<LibraryItem> {
+pub async fn library_set_tags(
+    hive: HiveState<'_>,
+    id: String,
+    tags: Vec<String>,
+) -> CmdResult<LibraryItem> {
     Ok(hive.set_tags(&id, &tags)?)
 }
 
 #[tauri::command]
-pub async fn library_set_favorite(hive: HiveState<'_>, id: String, favorite: bool) -> CmdResult<LibraryItem> {
+pub async fn library_set_favorite(
+    hive: HiveState<'_>,
+    id: String,
+    favorite: bool,
+) -> CmdResult<LibraryItem> {
     Ok(hive.set_favorite(&id, favorite)?)
 }
 
 #[tauri::command]
-pub async fn library_set_notes(hive: HiveState<'_>, id: String, notes: Option<String>) -> CmdResult<LibraryItem> {
+pub async fn library_set_notes(
+    hive: HiveState<'_>,
+    id: String,
+    notes: Option<String>,
+) -> CmdResult<LibraryItem> {
     Ok(hive.set_notes(&id, notes.as_deref())?)
 }
 
@@ -111,11 +126,18 @@ pub async fn library_create_skill(
     body: String,
     tags: Vec<String>,
 ) -> CmdResult<LibraryItem> {
-    blocking(&hive, move |h| h.create_skill(&name, &description, &body, &tags)).await
+    blocking(&hive, move |h| {
+        h.create_skill(&name, &description, &body, &tags)
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn library_write_document(hive: HiveState<'_>, id: String, text: String) -> CmdResult<LibraryItem> {
+pub async fn library_write_document(
+    hive: HiveState<'_>,
+    id: String,
+    text: String,
+) -> CmdResult<LibraryItem> {
     blocking(&hive, move |h| h.write_document(&id, &text)).await
 }
 
@@ -125,7 +147,11 @@ pub async fn library_refresh(hive: HiveState<'_>, id: String) -> CmdResult<Libra
 }
 
 #[tauri::command]
-pub async fn library_analyze(hive: HiveState<'_>, ids: Vec<String>, target_id: Option<String>) -> CmdResult<ConflictReport> {
+pub async fn library_analyze(
+    hive: HiveState<'_>,
+    ids: Vec<String>,
+    target_id: Option<String>,
+) -> CmdResult<ConflictReport> {
     blocking(&hive, move |h| h.analyze_items(&ids, target_id.as_deref())).await
 }
 
@@ -159,11 +185,16 @@ pub async fn source_import(
     tags: Vec<String>,
     overwrite: bool,
 ) -> CmdResult<ImportResult> {
-    Ok(hive.import_from_source(&input, paths.as_deref(), &tags, overwrite).await?)
+    Ok(hive
+        .import_from_source(&input, paths.as_deref(), &tags, overwrite)
+        .await?)
 }
 
 #[tauri::command]
-pub async fn source_check_updates(hive: HiveState<'_>, ids: Option<Vec<String>>) -> CmdResult<Vec<UpdateCheck>> {
+pub async fn source_check_updates(
+    hive: HiveState<'_>,
+    ids: Option<Vec<String>>,
+) -> CmdResult<Vec<UpdateCheck>> {
     Ok(hive.check_updates(ids.as_deref()).await?)
 }
 
@@ -178,7 +209,11 @@ pub async fn catalog_list(hive: HiveState<'_>, refresh: bool) -> CmdResult<Vec<C
 }
 
 #[tauri::command]
-pub async fn github_search(hive: HiveState<'_>, query: String, limit: Option<u32>) -> CmdResult<Vec<RepoSearchResult>> {
+pub async fn github_search(
+    hive: HiveState<'_>,
+    query: String,
+    limit: Option<u32>,
+) -> CmdResult<Vec<RepoSearchResult>> {
     Ok(hive.search_github(&query, limit.unwrap_or(20)).await?)
 }
 
@@ -206,7 +241,10 @@ pub async fn target_status(
     scope: Scope,
     project_path: Option<String>,
 ) -> CmdResult<TargetStatus> {
-    blocking(&hive, move |h| h.target_status(&target_id, scope, project_path.as_deref())).await
+    blocking(&hive, move |h| {
+        h.target_status(&target_id, scope, project_path.as_deref())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -220,7 +258,11 @@ pub async fn target_remove_custom(hive: HiveState<'_>, id: String) -> CmdResult<
 }
 
 #[tauri::command]
-pub async fn target_set_skills_dir(hive: HiveState<'_>, id: String, dir: Option<String>) -> CmdResult<()> {
+pub async fn target_set_skills_dir(
+    hive: HiveState<'_>,
+    id: String,
+    dir: Option<String>,
+) -> CmdResult<()> {
     Ok(hive.set_target_skills_dir(&id, dir.as_deref())?)
 }
 
@@ -287,7 +329,11 @@ pub async fn loadout_create(hive: HiveState<'_>, input: LoadoutInput) -> CmdResu
 }
 
 #[tauri::command]
-pub async fn loadout_update(hive: HiveState<'_>, id: String, input: LoadoutInput) -> CmdResult<Loadout> {
+pub async fn loadout_update(
+    hive: HiveState<'_>,
+    id: String,
+    input: LoadoutInput,
+) -> CmdResult<Loadout> {
     Ok(hive.update_loadout(&id, &input)?)
 }
 
@@ -297,16 +343,137 @@ pub async fn loadout_delete(hive: HiveState<'_>, id: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
-pub async fn loadout_plan(hive: HiveState<'_>, request: ApplyLoadoutRequest) -> CmdResult<LoadoutPlan> {
+pub async fn loadout_plan(
+    hive: HiveState<'_>,
+    request: ApplyLoadoutRequest,
+) -> CmdResult<LoadoutPlan> {
     blocking(&hive, move |h| h.plan_loadout(&request)).await
 }
 
 #[tauri::command]
-pub async fn loadout_apply(hive: HiveState<'_>, request: ApplyLoadoutRequest) -> CmdResult<ApplyLoadoutResult> {
+pub async fn loadout_apply(
+    hive: HiveState<'_>,
+    request: ApplyLoadoutRequest,
+) -> CmdResult<ApplyLoadoutResult> {
     blocking(&hive, move |h| h.apply_loadout(&request)).await
 }
 
 #[tauri::command]
-pub async fn recommend(hive: HiveState<'_>, request: RecommendRequest) -> CmdResult<RecommendResponse> {
+pub async fn recommend(
+    hive: HiveState<'_>,
+    request: RecommendRequest,
+) -> CmdResult<RecommendResponse> {
     Ok(hive.recommend(&request).await?)
+}
+
+// ---- providers --------------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn providers_list(hive: HiveState<'_>) -> CmdResult<Vec<ProviderConfig>> {
+    Ok(hive.list_providers()?)
+}
+
+#[tauri::command]
+pub async fn provider_save(
+    hive: HiveState<'_>,
+    id: Option<String>,
+    input: ProviderInput,
+) -> CmdResult<ProviderConfig> {
+    Ok(hive.save_provider(id.as_deref(), &input)?)
+}
+
+#[tauri::command]
+pub async fn provider_delete(hive: HiveState<'_>, id: String) -> CmdResult<()> {
+    Ok(hive.delete_provider(&id)?)
+}
+
+#[tauri::command]
+pub async fn provider_probe(hive: HiveState<'_>, id: String) -> CmdResult<ProviderProbe> {
+    Ok(hive.probe_provider(&id).await?)
+}
+
+#[tauri::command]
+pub async fn providers_detect() -> CmdResult<Vec<DetectedCli>> {
+    tauri::async_runtime::spawn_blocking(hive_core::providers::detect_clis)
+        .await
+        .map_err(|e| CommandError::from(format!("task failed: {e}")))
+}
+
+#[tauri::command]
+pub async fn providers_ensure_defaults(hive: HiveState<'_>) -> CmdResult<Vec<ProviderConfig>> {
+    blocking(&hive, |h| h.ensure_default_providers()).await
+}
+
+// ---- evaluations ------------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn eval_suite_get(hive: HiveState<'_>, item_id: String) -> CmdResult<EvalSuite> {
+    blocking(&hive, move |h| h.eval_suite(&item_id)).await
+}
+
+#[tauri::command]
+pub async fn eval_suite_save(hive: HiveState<'_>, suite: EvalSuite) -> CmdResult<EvalSuite> {
+    blocking(&hive, move |h| h.save_eval_suite(&suite)).await
+}
+
+#[tauri::command]
+pub async fn eval_suite_draft(hive: HiveState<'_>, item_id: String) -> CmdResult<EvalSuite> {
+    blocking(&hive, move |h| h.draft_eval_suite(&item_id)).await
+}
+
+#[tauri::command]
+pub async fn eval_default_config(hive: HiveState<'_>, item_id: String) -> CmdResult<RunConfig> {
+    Ok(hive.default_run_config(&item_id)?)
+}
+
+#[tauri::command]
+pub async fn eval_run_start(hive: HiveState<'_>, config: RunConfig) -> CmdResult<EvalRun> {
+    let hive: Arc<Hive> = hive.inner().clone();
+    Ok(hive.start_run(config).await?)
+}
+
+#[tauri::command]
+pub async fn eval_run_cancel(hive: HiveState<'_>, run_id: String) -> CmdResult<()> {
+    Ok(hive.cancel_run(&run_id)?)
+}
+
+#[tauri::command]
+pub async fn eval_runs_list(
+    hive: HiveState<'_>,
+    item_id: Option<String>,
+    limit: Option<u32>,
+) -> CmdResult<Vec<EvalRun>> {
+    Ok(hive.list_runs(item_id.as_deref(), limit.unwrap_or(50))?)
+}
+
+#[tauri::command]
+pub async fn eval_run_detail(hive: HiveState<'_>, run_id: String) -> CmdResult<EvalRunDetail> {
+    Ok(hive.run_detail(&run_id)?)
+}
+
+#[tauri::command]
+pub async fn eval_run_delete(hive: HiveState<'_>, run_id: String) -> CmdResult<()> {
+    blocking(&hive, move |h| h.delete_run(&run_id)).await
+}
+
+#[tauri::command]
+pub async fn eval_history(hive: HiveState<'_>, item_id: String) -> CmdResult<Vec<HistoryPoint>> {
+    Ok(hive.history(&item_id)?)
+}
+
+#[tauri::command]
+pub async fn eval_benchmark_markdown(hive: HiveState<'_>, run_id: String) -> CmdResult<String> {
+    Ok(hive.benchmark_markdown(&run_id)?)
+}
+
+#[tauri::command]
+pub async fn eval_case_transcript(
+    hive: HiveState<'_>,
+    run_id: String,
+    case_result_id: String,
+) -> CmdResult<String> {
+    blocking(&hive, move |h| {
+        h.read_case_transcript(&run_id, &case_result_id)
+    })
+    .await
 }

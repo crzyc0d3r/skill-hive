@@ -1634,6 +1634,7 @@ pub struct SettingsPatch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
+#[allow(clippy::large_enum_variant)]
 pub enum HiveEvent {
     Progress {
         /// Operation id (scan, import, fetch, run…).

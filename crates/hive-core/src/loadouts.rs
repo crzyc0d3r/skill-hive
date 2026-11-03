@@ -13,8 +13,8 @@ use crate::deploy::{Deployer, install_name};
 use crate::error::{HiveError, Result};
 use crate::hive::Hive;
 use crate::model::{
-    ApplyLoadoutRequest, ApplyLoadoutResult, ApplyStrategy, DeployFailure, HiveEvent, InstallState, LibraryItem, Loadout,
-    LoadoutInput, LoadoutPlan, PlannedItem, Scope,
+    ApplyLoadoutRequest, ApplyLoadoutResult, ApplyStrategy, DeployFailure, HiveEvent, InstallState,
+    LibraryItem, Loadout, LoadoutInput, LoadoutPlan, PlannedItem, Scope,
 };
 
 fn planned(item: &LibraryItem, path: Option<String>) -> PlannedItem {
@@ -64,7 +64,10 @@ impl Hive {
     pub fn create_loadout(&self, input: &LoadoutInput) -> Result<Loadout> {
         let input = self.validated_loadout_input(input)?;
         let loadout = self.db.create_loadout(&input)?;
-        self.db.audit("loadout.create", &serde_json::json!({"id": loadout.id, "name": loadout.name}))?;
+        self.db.audit(
+            "loadout.create",
+            &serde_json::json!({"id": loadout.id, "name": loadout.name}),
+        )?;
         Ok(loadout)
     }
 
@@ -102,7 +105,11 @@ impl Hive {
 
     pub fn remove_from_loadout(&self, id: &str, item_ids: &[String]) -> Result<Loadout> {
         let l = self.loadout(id)?;
-        let remaining: Vec<String> = l.item_ids.into_iter().filter(|i| !item_ids.contains(i)).collect();
+        let remaining: Vec<String> = l
+            .item_ids
+            .into_iter()
+            .filter(|i| !item_ids.contains(i))
+            .collect();
         self.db.update_loadout(
             id,
             &LoadoutInput {
@@ -179,7 +186,9 @@ impl Hive {
                         }
                     }
                 }
-                Some(asset) if asset.deployment_id.is_some() || asset.state == InstallState::Linked => {
+                Some(asset)
+                    if asset.deployment_id.is_some() || asset.state == InstallState::Linked =>
+                {
                     // Managed, but a different item with the same name: replace it.
                     adds.push(planned(item, Some(dest.clone())));
                     to_deploy.push((item.clone(), dest));
@@ -342,12 +351,24 @@ mod tests {
         hive.set_target_home(home).unwrap();
         let src = tmp.path().join("src");
         let items = [
-            ("pdf-tools", "Extract text and tables from PDF files when the user shares a PDF"),
-            ("git-commit", "Write conventional commit messages when committing changes"),
-            ("sql-tune", "Analyse slow SQL queries and propose indexes when a query is slow"),
+            (
+                "pdf-tools",
+                "Extract text and tables from PDF files when the user shares a PDF",
+            ),
+            (
+                "git-commit",
+                "Write conventional commit messages when committing changes",
+            ),
+            (
+                "sql-tune",
+                "Analyse slow SQL queries and propose indexes when a query is slow",
+            ),
         ]
         .iter()
-        .map(|(n, d)| hive.import_path(&write_skill(&src, n, d, "body"), &[], false).unwrap())
+        .map(|(n, d)| {
+            hive.import_path(&write_skill(&src, n, d, "body"), &[], false)
+                .unwrap()
+        })
         .collect();
         (tmp, hive, items)
     }
@@ -359,7 +380,11 @@ mod tests {
             .create_loadout(&LoadoutInput {
                 name: "Data work".into(),
                 description: "d".into(),
-                item_ids: vec![items[0].id.clone(), "git-commit".into(), items[0].id.clone()],
+                item_ids: vec![
+                    items[0].id.clone(),
+                    "git-commit".into(),
+                    items[0].id.clone(),
+                ],
                 color: None,
             })
             .unwrap();
@@ -367,16 +392,19 @@ mod tests {
         assert_eq!(hive.resolve_loadout("data WORK").unwrap().id, l.id);
         let l = hive.add_to_loadout(&l.id, &[items[2].id.clone()]).unwrap();
         assert_eq!(l.item_ids.len(), 3);
-        let l = hive.remove_from_loadout(&l.id, &[items[1].id.clone()]).unwrap();
+        let l = hive
+            .remove_from_loadout(&l.id, &[items[1].id.clone()])
+            .unwrap();
         assert_eq!(l.item_ids.len(), 2);
-        assert!(hive
-            .create_loadout(&LoadoutInput {
+        assert!(
+            hive.create_loadout(&LoadoutInput {
                 name: "x".into(),
                 description: String::new(),
                 item_ids: vec!["missing".into()],
                 color: None
             })
-            .is_err());
+            .is_err()
+        );
         hive.delete_loadout(&l.id).unwrap();
         assert!(hive.loadout(&l.id).is_err());
     }
@@ -395,7 +423,12 @@ mod tests {
         })
         .unwrap();
         // An unmanaged skill sits in the directory too.
-        write_skill(&tmp.path().join("home/.claude/skills"), "stranger", "An unmanaged skill nobody asked for", "x");
+        write_skill(
+            &tmp.path().join("home/.claude/skills"),
+            "stranger",
+            "An unmanaged skill nobody asked for",
+            "x",
+        );
 
         let l = hive
             .create_loadout(&LoadoutInput {
@@ -463,7 +496,12 @@ mod tests {
     #[test]
     fn plan_reports_unmanaged_collision_and_failure() {
         let (tmp, hive, items) = setup();
-        write_skill(&tmp.path().join("home/.claude/skills"), "pdf-tools", "Someone else's pdf tools for pdfs", "x");
+        write_skill(
+            &tmp.path().join("home/.claude/skills"),
+            "pdf-tools",
+            "Someone else's pdf tools for pdfs",
+            "x",
+        );
         let l = hive
             .create_loadout(&LoadoutInput {
                 name: "L".into(),
@@ -485,11 +523,12 @@ mod tests {
         let result = hive.apply_loadout(&req).unwrap();
         assert_eq!(result.failed.len(), 1);
         assert!(result.failed[0].reason.contains("not managed"));
-        assert!(hive
-            .plan_loadout(&ApplyLoadoutRequest {
+        assert!(
+            hive.plan_loadout(&ApplyLoadoutRequest {
                 scope: Scope::Project,
                 ..req.clone()
             })
-            .is_err());
+            .is_err()
+        );
     }
 }
