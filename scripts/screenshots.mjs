@@ -64,6 +64,21 @@ try {
       await page.screenshot({ path: join(outDir, `${name}-${theme}.png`) });
       console.log(`captured ${name}-${theme}`);
     }
+    if (!filter || "evals-skill".includes(filter)) {
+      await page.goto(`http://localhost:${port}/#/evals`);
+      await page.waitForTimeout(800);
+      const skill = page.getByRole("button", { name: /^pdf/ }).first();
+      if (await skill.count()) {
+        await skill.click();
+        await page.waitForTimeout(900);
+        await page.screenshot({ path: join(outDir, `evals-skill-${theme}.png`) });
+        console.log(`captured evals-skill-${theme}`);
+        await page.getByRole("tab", { name: /^Runs/ }).click();
+        await page.waitForTimeout(900);
+        await page.screenshot({ path: join(outDir, `evals-runs-${theme}.png`) });
+        console.log(`captured evals-runs-${theme}`);
+      }
+    }
     if (!filter || "item-detail".includes(filter)) {
       await page.goto(`http://localhost:${port}/#/library`);
       await page.waitForTimeout(800);

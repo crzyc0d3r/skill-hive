@@ -256,6 +256,9 @@ const targetSpecs: T.TargetSpec[] = [
   { id: "agents-shared", name: "Shared (.agents)", category: "coding", userSkillsDir: ".agents/skills", projectSkillsDir: ".agents/skills", detectDir: ".agents", descriptionBudgetChars: 15000, custom: false },
 ];
 
+/** Original user skills dir per target, so `target_set_skills_dir(id, null)` can reset an override. */
+const defaultSkillsDirs = new Map<string, string>();
+
 interface MockState {
   deployments: T.Deployment[];
   loadouts: T.Loadout[];
@@ -547,7 +550,6 @@ export function createMockBackend(): Backend {
   const state = initialState();
   const listeners = new Set<(e: T.HiveEvent) => void>();
   const emit = (e: T.HiveEvent) => listeners.forEach((l) => l(e));
-
   function targetStatus(targetId: string, scope: T.Scope, projectPath: string | null): T.TargetStatus {
     const spec = targetSpecs.find((t) => t.id === targetId);
     if (!spec) throw new ApiError("not_found", `target ${targetId}`);
@@ -642,7 +644,7 @@ export function createMockBackend(): Backend {
   }
 
   function candidate(name: string, description: string, path: string, status: T.CandidateStatus, source: T.SourceRef, kind: T.AssetKind = "skill"): T.Candidate {
-    return { id: nextId("cand"), kind, name, description, path, contentHash: Math.random().toString(16).slice(2), sizeBytes: 4000, tokenEstimate: 900, source, validation: { findings: status === "invalid" ? [{ code: "name.missing", severity: "error", message: "`name` is required", field: "name" }] : [] }, status, libraryItemId: status === "in_library" ? byName(name)?.id ?? null : null };
+    return { id: nextId("cand"), kind, name, description, path, contentHash: Math.random().toString(16).slice(2), sizeBytes: 4000, tokenEstimate: 900, source, validation: { findings: status === "invalid" ? [{ code: "name.missing", severity: "error", message: "`name` is required", field: "name" }] : [] }, status, libraryItemId: status === "in_library" || status === "modified" || status === "managed" ? items.find((i) => i.name === name)?.id ?? null : null };
   }
 
   async function simulateRun(run: T.EvalRun) {
@@ -712,15 +714,30 @@ export function createMockBackend(): Backend {
       await sleep(600);
       const req = request as T.ImportRequest;
       const imported: T.LibraryItem[] = [];
+      const skipped: T.ImportSkip[] = [];
       for (const p of req.paths) {
-        const name = p.split("/").pop() ?? "imported";
-        const it = item({ name, description: `Imported from ${p}. Use when working on ${name.replace(/-/g, " ")}.`, source: req.source, tags: req.tags }, "# Imported\n");
+        const name = (p.split("/").pop() ?? "imported").replace(/\.md$/, "");
+        const existing = items.find((i) => i.name === name);
+        if (existing && !req.overwrite) {
+          skipped.push({ path: p, reason: `'${name}' is already in the library (enable overwrite to replace it)` });
+          continue;
+        }
+        if (existing) {
+          items.splice(items.indexOf(existing), 1);
+          byId.delete(existing.id);
+        }
+        const unmanagedHit = Object.values(state.unmanaged).flat().find((a) => a.path === p);
+        const kind: T.AssetKind = unmanagedHit?.kind ?? (p.includes("/agents/") ? "agent" : p.includes("/commands/") ? "command" : "skill");
+        const description = unmanagedHit?.description || `Imported from ${p}. Use when working on ${name.replace(/-/g, " ")}.`;
+        const it = item({ name, kind, description, source: { ...req.source, locator: req.source.kind === "agent_dir" ? p : req.source.locator }, tags: req.tags }, "# Imported\n");
         items.push(it);
         byId.set(it.id, it);
         imported.push(stripBody(it));
+        if (unmanagedHit) unmanagedHit.libraryItemId = it.id;
       }
       emit({ type: "library_changed" });
-      return { imported, skipped: [] };
+      if (imported.length) emit({ type: "deployments_changed" });
+      return { imported, skipped } satisfies T.ImportResult;
     },
     library_remove: ({ id }) => {
       const idx = items.findIndex((i) => i.id === id);
@@ -768,7 +785,11 @@ export function createMockBackend(): Backend {
       return stripBody(it);
     },
     library_refresh: ({ id }) => stripBody(byId.get(id as string)!),
-    library_analyze: ({ ids }) => conflictsFor((ids as string[]).map((id) => byId.get(id)!).filter(Boolean)),
+    library_analyze: ({ ids, targetId }) =>
+      conflictsFor(
+        (ids as string[]).map((id) => byId.get(id)!).filter(Boolean),
+        targetSpecs.find((t) => t.id === targetId)?.descriptionBudgetChars ?? state.settings.defaultDescriptionBudgetChars,
+      ),
 
     scan_local: async () => {
       await sleep(900);
@@ -780,6 +801,7 @@ export function createMockBackend(): Backend {
           candidate("pdf", byName("pdf").description, `${HOME}/.claude/skills/pdf`, "managed", agentSrc(`${HOME}/.claude/skills/pdf`)),
           candidate("terraform-review", "Review Terraform plans for risky changes before apply. Use when the user shares a plan output.", `${HOME}/.cursor/skills/terraform-review`, "new", { ...src("agent_dir", `${HOME}/.cursor/skills/terraform-review`), targetId: "cursor" }),
           candidate("release-notes", "Draft release notes from merged PRs since the last tag.", `${HOME}/.codex/skills/release-notes`, "new", { ...src("agent_dir", `${HOME}/.codex/skills/release-notes`), targetId: "codex" }),
+          candidate("xlsx", `${byName("xlsx").description} Also converts CSV files.`, `${HOME}/.codex/skills/xlsx`, "modified", { ...src("agent_dir", `${HOME}/.codex/skills/xlsx`), targetId: "codex" }),
           candidate("broken", "", `${HOME}/dev/team-skills/broken`, "invalid", src("local_path", `${HOME}/dev/team-skills/broken`)),
           candidate("security-auditor", "Audits dependencies and configs for known vulnerabilities. Delegate for security reviews.", `${HOME}/.claude/agents/security-auditor.md`, "new", agentSrc(`${HOME}/.claude/agents/security-auditor.md`), "agent"),
         ],
@@ -839,6 +861,7 @@ export function createMockBackend(): Backend {
     github_search: async ({ query }) => {
       await sleep(600);
       const q = (query as string).toLowerCase();
+      if (q.includes("ratelimit")) throw new ApiError("rate_limited", "GitHub API rate limit exceeded (60 requests per hour without a token). Add a GitHub token in Settings to raise the limit, or try again in a few minutes.");
       return CATALOG.filter((c) => !q || `${c.name} ${c.description} ${c.tags.join(" ")}`.toLowerCase().includes(q)).map((c, i) => ({ fullName: c.source, description: c.description, url: c.homepage ?? "", stars: 12000 - i * 900, topics: c.tags, updatedAt: new Date(now - i * day).toISOString() } satisfies T.RepoSearchResult));
     },
     source_clear_cache: () => 184_000_000,
@@ -848,14 +871,23 @@ export function createMockBackend(): Backend {
     target_status: ({ targetId, scope, projectPath }) => targetStatus(targetId as string, scope as T.Scope, (projectPath as string | null) ?? null),
     target_add_custom: ({ spec }) => {
       const s = { ...(spec as T.TargetSpec), custom: true };
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(s.id)) throw new ApiError("invalid", "id must be lowercase letters, digits and single hyphens");
+      if (targetSpecs.some((t) => t.id === s.id)) throw new ApiError("already_exists", `target '${s.id}' already exists`);
       targetSpecs.push(s);
+      emit({ type: "deployments_changed" });
       return s;
     },
     target_remove_custom: ({ id }) => {
       const i = targetSpecs.findIndex((t) => t.id === id && t.custom);
       if (i >= 0) targetSpecs.splice(i, 1);
+      emit({ type: "deployments_changed" });
     },
-    target_set_skills_dir: () => undefined,
+    target_set_skills_dir: ({ id, dir }) => {
+      const spec = targetSpecs.find((t) => t.id === id);
+      if (!spec) throw new ApiError("not_found", `target ${id}`);
+      if (!defaultSkillsDirs.has(spec.id)) defaultSkillsDirs.set(spec.id, spec.userSkillsDir);
+      spec.userSkillsDir = (dir as string | null) ?? defaultSkillsDirs.get(spec.id) ?? spec.userSkillsDir;
+    },
     projects_list: () => state.projects,
     project_add: ({ path }) => {
       const p = { path: path as string, name: (path as string).split("/").pop() ?? "project", addedAt: Date.now() };

@@ -28,7 +28,7 @@ describe("api client", () => {
   it("delivers backend events to subscribers and supports disposal", async () => {
     const listeners = new Set<(e: HiveEvent) => void>();
     const backend: Backend = {
-      call: async () => undefined,
+      call: async <R,>() => undefined as unknown as R,
       onEvent: (handler) => {
         listeners.add(handler);
         return () => listeners.delete(handler);

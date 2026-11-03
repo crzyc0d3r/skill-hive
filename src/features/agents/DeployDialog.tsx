@@ -27,12 +27,18 @@ export function DeployDialog({
   onOpenChange,
   itemIds,
   defaultTarget,
+  defaultScope,
+  defaultProject,
   onDone,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   itemIds: string[];
   defaultTarget?: string;
+  /** Preselected scope (e.g. the scope currently shown on the Agents screen). */
+  defaultScope?: T.Scope;
+  /** Preselected project path for project scope. */
+  defaultProject?: string | null;
   onDone?: () => void;
 }) {
   const { data: targets } = useTargets();
@@ -40,9 +46,9 @@ export function DeployDialog({
   const { data: settings } = useSettings();
   const [targetOverride, setTargetId] = React.useState<string | null>(null);
   const targetId = targetOverride ?? defaultTarget ?? "claude-code";
-  const [scope, setScope] = React.useState<T.Scope>("user");
+  const [scope, setScope] = React.useState<T.Scope>(defaultScope ?? "user");
   const [projectOverride, setProjectPath] = React.useState<string | null>(null);
-  const projectPath = projectOverride ?? projects?.[0]?.path ?? null;
+  const projectPath = projectOverride ?? defaultProject ?? projects?.[0]?.path ?? null;
   const [mode, setMode] = React.useState<T.LinkMode | null>(null);
   const [force, setForce] = React.useState(false);
 
