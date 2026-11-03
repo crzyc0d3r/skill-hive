@@ -76,7 +76,7 @@ file names, so the macOS and Windows files arrive as `Skill.Hive_0.1.1_...`.
 | --- | --- | --- |
 | macOS Apple Silicon | `Skill Hive_0.1.1_aarch64.dmg` | drag to Applications |
 | macOS Intel | `Skill Hive_0.1.1_x64.dmg` | |
-| macOS (both) | `Skill Hive_0.1.1_aarch64.app.tar.gz`, `Skill Hive_0.1.1_x64.app.tar.gz` | the `.app` as an archive, uploaded by tauri-action alongside the `.dmg` |
+| macOS (both) | `Skill Hive_aarch64.app.tar.gz`, `Skill Hive_x64.app.tar.gz` | the `.app` as an archive, uploaded by tauri-action alongside the `.dmg`; no version in the name |
 | Windows | `Skill Hive_0.1.1_x64-setup.exe` | NSIS installer, per-user, no admin rights needed |
 | Windows | `Skill Hive_0.1.1_x64_en-US.msi` | WiX installer |
 | Linux Debian/Ubuntu | `Skill Hive_0.1.1_amd64.deb` | package `skill-hive`, depends on `libwebkit2gtk-4.1-0` and `libgtk-3-0` |
