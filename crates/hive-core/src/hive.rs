@@ -892,11 +892,10 @@ mod tests {
         assert_eq!(item.tags, vec!["meetings"]);
         let item = hive.set_notes(&item.id, Some("  my note ")).unwrap();
         assert_eq!(item.notes.as_deref(), Some("my note"));
-        assert_eq!(
+        assert!(
             hive.read_item_file(&item.id, "SKILL.md")
                 .unwrap()
-                .contains("# Notes"),
-            true
+                .contains("# Notes")
         );
         hive.remove_project(&p.path).unwrap();
     }

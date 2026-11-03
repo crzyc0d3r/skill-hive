@@ -10,7 +10,8 @@ use crate::conflicts::{self, AnalysisOptions, AssetProfile};
 use crate::error::Result;
 use crate::hive::Hive;
 use crate::model::{
-    AssetKind, ConflictSeverity, LibraryItem, RecommendRequest, RecommendResponse, Recommendation, ValidationStatus,
+    AssetKind, ConflictSeverity, LibraryItem, RecommendRequest, RecommendResponse, Recommendation,
+    ValidationStatus,
 };
 use crate::skill;
 
@@ -27,14 +28,22 @@ struct Scored {
 }
 
 /// Lexical score of a task against one item: name, tags, trigger phrases, description cosine.
-pub fn lexical_score(task_tokens: &[String], item: &LibraryItem, idf: Option<&conflicts::Idf>) -> (f64, Vec<String>, BTreeSet<String>) {
+pub fn lexical_score(
+    task_tokens: &[String],
+    item: &LibraryItem,
+    idf: Option<&conflicts::Idf>,
+) -> (f64, Vec<String>, BTreeSet<String>) {
     let task_set: BTreeSet<&String> = task_tokens.iter().collect();
     let mut reasons = Vec::new();
     let mut matched: BTreeSet<String> = BTreeSet::new();
     let mut score = 0.0;
 
     // Description similarity.
-    let desc_tokens = conflicts::tokens(&format!("{} {}", item.name.replace('-', " "), item.description));
+    let desc_tokens = conflicts::tokens(&format!(
+        "{} {}",
+        item.name.replace('-', " "),
+        item.description
+    ));
     let sims = conflicts::similarity_matrix(&[task_tokens.to_vec(), desc_tokens.clone()], idf);
     let cosine = sims[0][1];
     score += 0.55 * cosine;
@@ -44,9 +53,12 @@ pub fn lexical_score(task_tokens: &[String], item: &LibraryItem, idf: Option<&co
 
     // Name tokens.
     let name_tokens = conflicts::tokens(&item.name.replace('-', " "));
-    let name_hits: Vec<&String> = name_tokens.iter().filter(|t| task_set.contains(t)).collect();
+    let name_hits: Vec<&String> = name_tokens
+        .iter()
+        .filter(|t| task_set.contains(t))
+        .collect();
     if !name_hits.is_empty() {
-        score += 0.15 * name_hits.len().min(3) as f64;
+        score += 0.25 * name_hits.len().min(3) as f64;
         reasons.push(format!("Name matches: {}", item.name));
     }
 
@@ -58,7 +70,14 @@ pub fn lexical_score(task_tokens: &[String], item: &LibraryItem, idf: Option<&co
         .collect();
     if !tag_hits.is_empty() {
         score += 0.1 * tag_hits.len().min(3) as f64;
-        reasons.push(format!("Tags: {}", tag_hits.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")));
+        reasons.push(format!(
+            "Tags: {}",
+            tag_hits
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
 
     // Trigger phrases ("use when …").
@@ -77,7 +96,10 @@ pub fn lexical_score(task_tokens: &[String], item: &LibraryItem, idf: Option<&co
     if let Some((frac, phrase)) = best_phrase {
         if frac >= 0.34 {
             score += 0.2 * frac;
-            reasons.push(format!("Trigger: \"{}\"", crate::util::truncate_chars(&phrase, 60)));
+            reasons.push(format!(
+                "Trigger: \"{}\"",
+                crate::util::truncate_chars(&phrase, 60)
+            ));
         }
     }
 
@@ -90,7 +112,11 @@ impl Hive {
         let limit = req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, 50) as usize;
         let task = req.task.trim();
         let task_tokens = conflicts::tokens(task);
-        let kinds: Vec<AssetKind> = if req.kinds.is_empty() { vec![AssetKind::Skill, AssetKind::Agent, AssetKind::Command] } else { req.kinds.clone() };
+        let kinds: Vec<AssetKind> = if req.kinds.is_empty() {
+            vec![AssetKind::Skill, AssetKind::Agent, AssetKind::Command]
+        } else {
+            req.kinds.clone()
+        };
         let idf = self.library_idf()?;
         let idf_ref = (idf.n >= conflicts::Idf::MIN_DOCS).then_some(&idf);
 
@@ -99,7 +125,12 @@ impl Hive {
         let fts_best = fts.iter().map(|(_, r)| -r).fold(0.0_f64, f64::max);
         let fts_scores: HashMap<String, f64> = fts
             .iter()
-            .map(|(id, r)| (id.clone(), if fts_best > 0.0 { (-r) / fts_best } else { 0.0 }))
+            .map(|(id, r)| {
+                (
+                    id.clone(),
+                    if fts_best > 0.0 { (-r) / fts_best } else { 0.0 },
+                )
+            })
             .collect();
         let all = self.db.all_items()?;
 
@@ -120,11 +151,17 @@ impl Hive {
             match item.effectiveness.as_ref() {
                 Some(e) if e.delta > 0.05 => {
                     score += (0.15 * e.delta).min(0.15);
-                    reasons.push(format!("Measured: {:+.0}% pass rate with this skill", e.delta * 100.0));
+                    reasons.push(format!(
+                        "Measured: {:+.0}% pass rate with this skill",
+                        e.delta * 100.0
+                    ));
                 }
                 Some(e) if e.delta < -0.05 => {
                     score -= 0.15;
-                    reasons.push(format!("Measured: {:+.0}% pass rate (it hurt)", e.delta * 100.0));
+                    reasons.push(format!(
+                        "Measured: {:+.0}% pass rate (it hurt)",
+                        e.delta * 100.0
+                    ));
                 }
                 _ => {}
             }
@@ -135,7 +172,11 @@ impl Hive {
             if item.deployment_count > 0 {
                 reasons.push("Already deployed".into());
             }
-            let body = self.db.get_item_record(&item.id)?.map(|r| r.body).unwrap_or_default();
+            let body = self
+                .db
+                .get_item_record(&item.id)?
+                .map(|r| r.body)
+                .unwrap_or_default();
             scored.push(Scored {
                 item,
                 body,
@@ -144,24 +185,39 @@ impl Hive {
                 matched,
             });
         }
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scored.truncate(limit);
         let top = scored.iter().map(|s| s.score).fold(0.0_f64, f64::max);
 
         // 2. Pairwise conflicts among the results.
-        let budget_chars = req
-            .target_id
-            .as_deref()
-            .and_then(|t| self.resolver().get(t).and_then(|s| s.description_budget_chars));
+        let budget_chars = req.target_id.as_deref().and_then(|t| {
+            self.resolver()
+                .get(t)
+                .and_then(|s| s.description_budget_chars)
+        });
         let options: AnalysisOptions = self.analysis_options(budget_chars)?;
-        let profiles: Vec<AssetProfile> = scored.iter().map(|s| AssetProfile::from_item(&s.item, &s.body)).collect();
+        let profiles: Vec<AssetProfile> = scored
+            .iter()
+            .map(|s| AssetProfile::from_item(&s.item, &s.body))
+            .collect();
         let report = conflicts::analyze(&profiles, &options);
         let mut conflicts_with: HashMap<String, BTreeSet<String>> = HashMap::new();
-        for c in report.conflicts.iter().filter(|c| c.severity >= ConflictSeverity::Medium) {
+        for c in report
+            .conflicts
+            .iter()
+            .filter(|c| c.severity >= ConflictSeverity::Medium)
+        {
             for a in &c.item_ids {
                 for b in &c.item_ids {
                     if a != b {
-                        conflicts_with.entry(a.clone()).or_default().insert(b.clone());
+                        conflicts_with
+                            .entry(a.clone())
+                            .or_default()
+                            .insert(b.clone());
                     }
                 }
             }
@@ -182,26 +238,34 @@ impl Hive {
             if clashes {
                 continue;
             }
-            let mut trial: Vec<AssetProfile> = selected.iter().map(|&j| profiles[j].clone()).collect();
+            let mut trial: Vec<AssetProfile> =
+                selected.iter().map(|&j| profiles[j].clone()).collect();
             trial.push(profiles[i].clone());
             let trial_budget = conflicts::budget(&trial, options.budget_chars);
             if trial_budget.over_budget {
                 continue;
             }
             // Only the strongest few unless the task clearly wants breadth.
-            if selected.len() >= 5 || (top > 0.0 && s.score < top * 0.25) {
+            if selected.len() >= 5 || (top > 0.0 && s.score < top * 0.45) {
                 continue;
             }
             selected.push(i);
         }
-        let selected_ids: Vec<String> = selected.iter().map(|&i| scored[i].item.id.clone()).collect();
-        let selected_profiles: Vec<AssetProfile> = selected.iter().map(|&i| profiles[i].clone()).collect();
+        let selected_ids: Vec<String> = selected
+            .iter()
+            .map(|&i| scored[i].item.id.clone())
+            .collect();
+        let selected_profiles: Vec<AssetProfile> =
+            selected.iter().map(|&i| profiles[i].clone()).collect();
         let budget = conflicts::budget(&selected_profiles, options.budget_chars);
 
-        let results: Vec<Recommendation> = scored
+        let mut results: Vec<Recommendation> = scored
             .into_iter()
             .map(|s| Recommendation {
-                conflicts_with: conflicts_with.get(&s.item.id).map(|set| set.iter().cloned().collect()).unwrap_or_default(),
+                conflicts_with: conflicts_with
+                    .get(&s.item.id)
+                    .map(|set| set.iter().cloned().collect())
+                    .unwrap_or_default(),
                 selected: selected_ids.contains(&s.item.id),
                 score: if top > 0.0 { s.score / top } else { 0.0 },
                 reasons: s.reasons,
@@ -210,13 +274,100 @@ impl Hive {
             })
             .collect();
 
+        // 4. Optional model re-ranking: a provider with the recommender role reorders the
+        //    lexical candidates and explains the choice. Failures degrade to the lexical order.
+        let llm_notes = if req.use_llm && !results.is_empty() {
+            match self.llm_rerank(task, &mut results).await {
+                Ok(notes) => Some(notes),
+                Err(err) => Some(format!("Model re-ranking unavailable: {err}")),
+            }
+        } else {
+            None
+        };
+
         Ok(RecommendResponse {
             results,
             suggested_ids: selected_ids,
             conflicts: report,
             budget,
-            llm_notes: None,
+            llm_notes,
         })
+    }
+
+    /// Ask the recommender provider to reorder `results` for `task`. Returns its notes.
+    async fn llm_rerank(&self, task: &str, results: &mut [Recommendation]) -> Result<String> {
+        use crate::model::ProviderRole;
+        use crate::providers::CompletionRequest;
+
+        let config = self
+            .default_provider_for(ProviderRole::Recommender)?
+            .ok_or_else(|| {
+                crate::error::HiveError::invalid("no provider has the recommender role")
+            })?;
+        let provider = self.provider(&config.id)?;
+        let listing: String = results
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                format!(
+                    "{}. {} ({}): {}",
+                    i + 1,
+                    r.item.name,
+                    r.item.kind.label().to_lowercase(),
+                    crate::util::truncate_chars(&r.item.description, 300)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let prompt = format!(
+            "A user described a job for an AI coding agent. Rank the candidate skills by how useful each would be for exactly this job. Prefer specific, directly applicable skills; put irrelevant ones last.\n\nJob:\n{task}\n\nCandidates:\n{listing}\n\nAnswer with JSON only: {{\"ranking\": [names in best-first order], \"notes\": \"one or two sentences on why the top picks fit\"}}"
+        );
+        let request = CompletionRequest::new(prompt)
+            .with_system(
+                "You rank tools for software agents. Reply with strict JSON and nothing else.",
+            )
+            .with_timeout(std::time::Duration::from_secs(60));
+        let response = provider.complete(request).await?;
+        let text = response.text.trim();
+        let json_text = match (text.find('{'), text.rfind('}')) {
+            (Some(a), Some(b)) if b > a => &text[a..=b],
+            _ => {
+                return Err(crate::error::HiveError::invalid(
+                    "the model did not return JSON",
+                ));
+            }
+        };
+        let parsed: serde_json::Value = serde_json::from_str(json_text)?;
+        let ranking: Vec<String> = parsed
+            .get("ranking")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !ranking.is_empty() {
+            let position = |name: &str| {
+                ranking
+                    .iter()
+                    .position(|n| n.eq_ignore_ascii_case(name))
+                    .unwrap_or(usize::MAX)
+            };
+            results.sort_by_key(|r| position(&r.item.name));
+            let n = results.len().max(1) as f64;
+            for (i, r) in results.iter_mut().enumerate() {
+                if position(&r.item.name) != usize::MAX {
+                    r.reasons.insert(0, format!("Model rank #{}", i + 1));
+                    r.score = (r.score * 0.4 + (1.0 - i as f64 / n) * 0.6).clamp(0.0, 1.0);
+                }
+            }
+        }
+        Ok(parsed
+            .get("notes")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("Re-ranked by {}", config.name)))
     }
 }
 
@@ -231,21 +382,50 @@ mod tests {
         let hive = Hive::open_temp(tmp.path()).unwrap();
         let src = tmp.path().join("src");
         for (n, d) in [
-            ("pdf-extract", "Extract text and tables from PDF documents. Use when the user shares a PDF or asks about a PDF file."),
-            ("pdf-reader", "Read and extract text and tables from PDF documents when the user shares a PDF file."),
-            ("git-commit", "Write conventional commit messages. Use when committing changes."),
-            ("sql-tune", "Analyse slow SQL queries and propose indexes. Use when a database query is slow."),
-            ("xlsx", "Create and edit Excel spreadsheets with formulas. Use when the user asks for a spreadsheet."),
-            ("docx", "Create Word documents with headings and tables. Use when the user asks for a .docx report."),
-            ("pptx", "Build PowerPoint decks. Use when the user asks for slides or a presentation."),
-            ("web-test", "Test web apps with Playwright. Use when verifying a web page works."),
-            ("brand", "Apply company brand colours and fonts. Use when designing marketing material."),
+            (
+                "pdf-extract",
+                "Extract text and tables from PDF documents. Use when the user shares a PDF or asks about a PDF file.",
+            ),
+            (
+                "pdf-reader",
+                "Read and extract text and tables from PDF documents when the user shares a PDF file.",
+            ),
+            (
+                "git-commit",
+                "Write conventional commit messages. Use when committing changes.",
+            ),
+            (
+                "sql-tune",
+                "Analyse slow SQL queries and propose indexes. Use when a database query is slow.",
+            ),
+            (
+                "xlsx",
+                "Create and edit Excel spreadsheets with formulas. Use when the user asks for a spreadsheet.",
+            ),
+            (
+                "docx",
+                "Create Word documents with headings and tables. Use when the user asks for a .docx report.",
+            ),
+            (
+                "pptx",
+                "Build PowerPoint decks. Use when the user asks for slides or a presentation.",
+            ),
+            (
+                "web-test",
+                "Test web apps with Playwright. Use when verifying a web page works.",
+            ),
+            (
+                "brand",
+                "Apply company brand colours and fonts. Use when designing marketing material.",
+            ),
         ] {
-            hive.import_path(&write_skill(&src, n, d, "body"), &["docs".into()], false).unwrap();
+            hive.import_path(&write_skill(&src, n, d, "body"), &["docs".into()], false)
+                .unwrap();
         }
         let resp = hive
             .recommend(&RecommendRequest {
-                task: "pull the tables out of this PDF invoice and put them in a spreadsheet".into(),
+                task: "pull the tables out of this PDF invoice and put them in a spreadsheet"
+                    .into(),
                 kinds: vec![],
                 limit: Some(5),
                 target_id: Some("claude-code".into()),
@@ -266,9 +446,26 @@ mod tests {
             .iter()
             .filter(|r| r.item.name.starts_with("pdf") && r.selected)
             .count();
-        assert_eq!(pdf_selected, 1, "{:?}", resp.results.iter().map(|r| (&r.item.name, r.selected, &r.conflicts_with)).collect::<Vec<_>>());
-        assert!(resp.conflicts.conflicts.iter().any(|c| c.kind == crate::model::ConflictKind::DescriptionOverlap));
-        assert!(resp.suggested_ids.iter().any(|id| resp.results.iter().any(|r| &r.item.id == id && r.item.name == "xlsx")));
+        assert_eq!(
+            pdf_selected,
+            1,
+            "{:?}",
+            resp.results
+                .iter()
+                .map(|r| (&r.item.name, r.selected, &r.conflicts_with))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            resp.conflicts
+                .conflicts
+                .iter()
+                .any(|c| c.kind == crate::model::ConflictKind::DescriptionOverlap)
+        );
+        assert!(resp.suggested_ids.iter().any(|id| {
+            resp.results
+                .iter()
+                .any(|r| &r.item.id == id && r.item.name == "xlsx")
+        }));
         assert!(!resp.budget.over_budget);
 
         // Excluding and limiting works; nonsense tasks return nothing.

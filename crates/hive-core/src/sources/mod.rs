@@ -406,7 +406,7 @@ impl Hive {
                 lib.candidate_for(kind, &path, source)
             })
             .collect();
-        out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        out.sort_by_key(|c| c.name.to_lowercase());
         out
     }
 
