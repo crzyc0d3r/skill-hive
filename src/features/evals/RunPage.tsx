@@ -292,7 +292,7 @@ function ArmStatsTable({ bench }: { bench: T.Benchmark }) {
         <tbody>
           {bench.arms.map((a) => (
             <tr key={a.label} className="border-b last:border-b-0">
-              <td className="px-2 py-1.5">
+              <td className="whitespace-nowrap px-2 py-1.5">
                 <span className="inline-flex items-center gap-1.5 font-medium">
                   <ArmSwatch color={colors[a.label]} /> {armLabel(a.label)}
                   {a.label === bench.baseline ? <span className="text-[10.5px] font-normal text-subtle">baseline</span> : null}
@@ -364,7 +364,7 @@ function ExpectationMatrix({ bench }: { bench: T.Benchmark }) {
             <tr className="border-b">
               <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-subtle">Expectation</th>
               {arms.map((a) => (
-                <th key={a} className="w-28 px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wide text-subtle">
+                <th key={a} className="w-28 whitespace-nowrap px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wide text-subtle">
                   <span className="inline-flex items-center gap-1.5">
                     <ArmSwatch color={colors[a]} /> {armLabel(a)}
                   </span>

@@ -72,7 +72,7 @@ export function RunsTable({ runs, showSkill = false }: { runs: T.EvalRun[]; show
   });
   const providerName = (id: string | null | undefined) => (id ? (providers?.find((p) => p.id === id)?.name ?? id) : null);
 
-  const cols = cn("grid items-center gap-3 px-3", showSkill ? "grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_auto_auto]");
+  const cols = cn("grid items-center gap-3 px-3", showSkill ? "grid-cols-[minmax(0,1.5fr)_minmax(0,0.9fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]");
 
   return (
     <>
@@ -85,7 +85,7 @@ export function RunsTable({ runs, showSkill = false }: { runs: T.EvalRun[]; show
           <span className="text-right">Repeats</span>
           <span>Executor</span>
           <span>Verdict</span>
-          <span className="text-right">With / baseline</span>
+          <span className="whitespace-nowrap text-right">With / baseline</span>
           <span className="w-14 text-right">Δ</span>
           <span className="w-7" />
         </div>
