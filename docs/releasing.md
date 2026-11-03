@@ -69,19 +69,19 @@ assets already uploaded are kept.
 
 ## Assets
 
-Names are for version 0.1.0. GitHub replaces the space in `Skill Hive` with a dot in download
-file names, so the macOS and Windows files arrive as `Skill.Hive_0.1.0_...`.
+Names are for version 0.1.1. GitHub replaces the space in `Skill Hive` with a dot in download
+file names, so the macOS and Windows files arrive as `Skill.Hive_0.1.1_...`.
 
 | Platform | Asset | Notes |
 | --- | --- | --- |
-| macOS Apple Silicon | `Skill Hive_0.1.0_aarch64.dmg` | drag to Applications |
-| macOS Intel | `Skill Hive_0.1.0_x64.dmg` | |
-| macOS (both) | `Skill Hive_0.1.0_aarch64.app.tar.gz`, `Skill Hive_0.1.0_x64.app.tar.gz` | the `.app` as an archive, uploaded by tauri-action alongside the `.dmg` |
-| Windows | `Skill Hive_0.1.0_x64-setup.exe` | NSIS installer, per-user, no admin rights needed |
-| Windows | `Skill Hive_0.1.0_x64_en-US.msi` | WiX installer |
-| Linux Debian/Ubuntu | `Skill Hive_0.1.0_amd64.deb` | package `skill-hive`, depends on `libwebkit2gtk-4.1-0` and `libgtk-3-0` |
-| Linux Fedora/RHEL | `Skill Hive-0.1.0-1.x86_64.rpm` | depends on `webkit2gtk4.1` |
-| Linux any | `Skill Hive_0.1.0_amd64.AppImage` | `chmod +x` then run |
+| macOS Apple Silicon | `Skill Hive_0.1.1_aarch64.dmg` | drag to Applications |
+| macOS Intel | `Skill Hive_0.1.1_x64.dmg` | |
+| macOS (both) | `Skill Hive_0.1.1_aarch64.app.tar.gz`, `Skill Hive_0.1.1_x64.app.tar.gz` | the `.app` as an archive, uploaded by tauri-action alongside the `.dmg` |
+| Windows | `Skill Hive_0.1.1_x64-setup.exe` | NSIS installer, per-user, no admin rights needed |
+| Windows | `Skill Hive_0.1.1_x64_en-US.msi` | WiX installer |
+| Linux Debian/Ubuntu | `Skill Hive_0.1.1_amd64.deb` | package `skill-hive`, depends on `libwebkit2gtk-4.1-0` and `libgtk-3-0` |
+| Linux Fedora/RHEL | `Skill Hive-0.1.1-1.x86_64.rpm` | depends on `webkit2gtk4.1` |
+| Linux any | `Skill Hive_0.1.1_amd64.AppImage` | `chmod +x` then run |
 | CLI Linux x86_64 | `hive-x86_64-unknown-linux-gnu.tar.gz` | contains `hive` |
 | CLI macOS Apple Silicon | `hive-aarch64-apple-darwin.tar.gz` | |
 | CLI macOS Intel | `hive-x86_64-apple-darwin.tar.gz` | |
@@ -104,6 +104,10 @@ Open Anyway on macOS 15 and later, or
 | `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | notarization of the macOS app (needs the three above) |
 | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | signatures for Tauri updater artifacts; unused until `bundle.createUpdaterArtifacts` is turned on |
 
+The workflow exports a secret to the build only when it has a value. Tauri starts signing as
+soon as `APPLE_CERTIFICATE` is set, even to an empty string, so passing missing secrets
+through would break every macOS build.
+
 Windows code signing is not configured. Adding it means a certificate plus
 `bundle.windows.certificateThumbprint` or `bundle.windows.signCommand` in
 `src-tauri/tauri.conf.json`.
@@ -113,5 +117,5 @@ Windows code signing is not configured. Adding it means a certificate plus
 ```bash
 npm run build
 npx tauri build --bundles deb
-dpkg-deb -I "target/release/bundle/deb/Skill Hive_0.1.0_amd64.deb"
+dpkg-deb -I "target/release/bundle/deb/Skill Hive_0.1.1_amd64.deb"
 ```
