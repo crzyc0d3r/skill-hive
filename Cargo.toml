@@ -6,7 +6,7 @@ members = ["crates/hive-core", "crates/hive-cli", "src-tauri"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-rust-version = "1.85"
+rust-version = "1.90"
 repository = "https://github.com/crzyc0d3r/skill-hive"
 description = "Skill Hive: collect, curate, deploy and measure agent skills"
 
