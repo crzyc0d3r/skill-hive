@@ -173,7 +173,8 @@ function SkillEvals({ item, runs }: { item: T.LibraryItem; runs: T.EvalRun[] }) 
         </LineTabsList>
       </PageHeader>
 
-      <TabsContent value="suite" className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
+      {/* Kept mounted so unsaved suite edits survive a visit to the Runs tab. */}
+      <TabsContent value="suite" forceMount className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
         {suite.isLoading ? (
           <div className="flex flex-col gap-3 px-6 pt-4">
             <Skeleton className="h-4 w-80" />

@@ -152,7 +152,7 @@ export function ArmPassRateChart({ arms, height = 220 }: { arms: T.ArmSummary[];
                 );
               }}
             />
-            <Bar dataKey="rate" radius={[4, 4, 0, 0]} maxBarSize={64} isAnimationActive={false}>
+            <Bar dataKey="rate" radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={false}>
               {data.map((d) => (
                 <Cell key={d.key} fill={colors[d.key]} />
               ))}
