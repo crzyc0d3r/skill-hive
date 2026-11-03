@@ -450,10 +450,35 @@ async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Scan(args) => cmd_scan(&hive, &out, args)?,
         Command::Add(args) => {
+            // With --name, preview first and import only the matching candidates.
+            let paths: Option<Vec<String>> = if args.name.is_empty() {
+                None
+            } else {
+                let preview = hive.preview_source(&args.source).await?;
+                let wanted: Vec<String> = preview
+                    .candidates
+                    .iter()
+                    .filter(|c| args.name.iter().any(|n| n.eq_ignore_ascii_case(&c.name)))
+                    .map(|c| c.path.clone())
+                    .collect();
+                if wanted.is_empty() {
+                    bail!(
+                        "no candidate named {} in {} (available: {})",
+                        args.name.join(", "),
+                        args.source,
+                        preview
+                            .candidates
+                            .iter()
+                            .map(|c| c.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                Some(wanted)
+            };
             let result = hive
-                .import_from_source(&args.source, None, &args.tag, args.overwrite)
-                .await
-                .map(|r| filter_import(r, &args.name))?;
+                .import_from_source(&args.source, paths.as_deref(), &args.tag, args.overwrite)
+                .await?;
             report_import(&out, &result)?;
         }
         Command::Preview { source } => {
@@ -950,15 +975,6 @@ fn resolve_ids(hive: &Hive, refs: &[String]) -> Result<Vec<String>> {
         .collect()
 }
 
-fn filter_import(result: ImportResult, names: &[String]) -> ImportResult {
-    if names.is_empty() {
-        return result;
-    }
-    // `import_from_source` imports everything; when names were requested, remove the rest.
-    // (Kept simple: the preview/paths path is used by the UI; the CLI filters by name afterwards.)
-    result
-}
-
 fn report_import(out: &Out, result: &ImportResult) -> Result<()> {
     out.emit(result, || {
         for i in &result.imported {
@@ -1295,10 +1311,6 @@ fn cmd_loadout(hive: &Hive, out: &Out, cmd: LoadoutCmd) -> Result<()> {
             hive.delete_loadout(&l.id)?;
             out.ok(format!("deleted {}", l.name));
             Ok(())
-        }
-        LoadoutCmd::Plan(args) | LoadoutCmd::Apply(args) if false => {
-            let _ = args;
-            unreachable!()
         }
         LoadoutCmd::Plan(args) => {
             let req = apply_request(hive, &args)?;
