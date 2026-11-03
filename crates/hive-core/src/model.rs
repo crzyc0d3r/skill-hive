@@ -1689,3 +1689,18 @@ pub struct DoctorReport {
     pub detected_clis: Vec<DetectedCli>,
     pub notes: Vec<String>,
 }
+
+/// A repository returned by an online search (GitHub).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RepoSearchResult {
+    /// `owner/repo`
+    pub full_name: String,
+    pub description: String,
+    pub url: String,
+    pub stars: u32,
+    pub topics: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}

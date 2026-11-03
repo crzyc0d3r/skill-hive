@@ -20,3 +20,6 @@ Thumbs.db
 /test-results/
 /playwright-report/
 /screenshots/
+
+# Agent worktrees
+.claude/worktrees/
