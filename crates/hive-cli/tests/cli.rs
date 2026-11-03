@@ -29,6 +29,7 @@ impl Env {
         let mut c = Command::cargo_bin("hive").unwrap();
         c.env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
+            .env("HIVE_TARGET_HOME", &self.home)
             .env("HIVE_HOME", &self.hive_home)
             .env("HIVE_NO_KEYRING", "1")
             .env("NO_COLOR", "1");
