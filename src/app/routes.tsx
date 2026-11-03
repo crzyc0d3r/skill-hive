@@ -1,4 +1,4 @@
-import { createHashRouter, Navigate } from "react-router-dom";
+import { createHashRouter, createMemoryRouter, Navigate } from "react-router-dom";
 import { AppShell } from "./shell/AppShell";
 import { HomePage } from "@/features/home/HomePage";
 import { LibraryPage } from "@/features/library/LibraryPage";
@@ -11,7 +11,10 @@ import { RunPage } from "@/features/evals/RunPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { RouteError } from "./shell/RouteError";
 
-export const router = createHashRouter([
+// Hash routing in the desktop app; an in-memory router for hosted previews that forbid hash paths.
+const createRouter = import.meta.env.VITE_ROUTER === "memory" ? createMemoryRouter : createHashRouter;
+
+export const router = createRouter([
   {
     path: "/",
     element: <AppShell />,
