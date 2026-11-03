@@ -103,10 +103,33 @@ impl HivePaths {
 
     /// True when `path` lives inside the library directory (after resolving symlinks where possible).
     pub fn is_in_library(&self, path: &Path) -> bool {
-        let lib = dunce::canonicalize(self.library_dir()).unwrap_or_else(|_| self.library_dir());
-        let candidate = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        candidate.starts_with(&lib)
+        let lib = canonicalize_lenient(&self.library_dir());
+        canonicalize_lenient(path).starts_with(&lib)
     }
+}
+
+/// Canonicalize a path even when its tail does not exist yet: the nearest existing ancestor is
+/// resolved (so `/var` → `/private/var` on macOS) and the remaining components are re-appended.
+pub fn canonicalize_lenient(path: &Path) -> PathBuf {
+    if let Ok(p) = dunce::canonicalize(path) {
+        return p;
+    }
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut current = path.to_path_buf();
+    while let Some(parent) = current.parent() {
+        if let Some(name) = current.file_name() {
+            tail.push(name.to_os_string());
+        }
+        if let Ok(base) = dunce::canonicalize(parent) {
+            let mut out = base;
+            for part in tail.iter().rev() {
+                out.push(part);
+            }
+            return out;
+        }
+        current = parent.to_path_buf();
+    }
+    path.to_path_buf()
 }
 
 /// Expand a leading `~` to the user's home directory.
@@ -149,6 +172,28 @@ mod tests {
         assert!(paths.workspaces_dir().is_dir());
         assert!(paths.is_in_library(&paths.skills_dir().join("x")));
         assert!(!paths.is_in_library(tmp.path()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn library_membership_survives_symlinked_homes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let real = tmp.path().join("real-home");
+        std::fs::create_dir_all(&real).unwrap();
+        let link = tmp.path().join("linked-home");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let paths = HivePaths::new(link.join("hive"));
+        paths.ensure().unwrap();
+        // A not-yet-existing path under the (symlinked) library still counts as inside it.
+        assert!(paths.is_in_library(&link.join("hive/library/skills/new-skill")));
+        assert!(paths.is_in_library(&real.join("hive/library/skills/new-skill")));
+        assert!(!paths.is_in_library(&link.join("elsewhere")));
+        assert_eq!(
+            canonicalize_lenient(&link.join("hive/library/skills/a/b")),
+            dunce::canonicalize(&real)
+                .unwrap()
+                .join("hive/library/skills/a/b")
+        );
     }
 
     #[test]
