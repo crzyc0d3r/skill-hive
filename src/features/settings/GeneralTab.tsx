@@ -44,7 +44,7 @@ export function GeneralTab() {
   return (
     <div className="flex max-w-3xl flex-col gap-5">
       <SettingsSection title="Library" description="Where Skill Hive keeps its database, the library and run workspaces.">
-        <SettingsRow label="Home directory" description="Read-only. Set SKILL_HIVE_HOME before launching to move it.">
+        <SettingsRow label="Home directory" description="Read-only. Set HIVE_HOME before launching to move it.">
           <InlineCode className="inline-block max-w-xs truncate align-middle" title={settings.home}>
             {displayPath(settings.home)}
           </InlineCode>
