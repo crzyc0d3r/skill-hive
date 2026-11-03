@@ -114,7 +114,11 @@ pub fn remove_path(path: &Path) -> Result<()> {
     if meta.file_type().is_symlink() {
         #[cfg(windows)]
         {
-            if meta.is_dir() {
+            // Directory symlinks and junctions both report `is_symlink()`, but `is_dir()` is
+            // false for symlink metadata, so ask the file type directly and use `remove_dir`,
+            // which unlinks the reparse point without touching what it points at.
+            use std::os::windows::fs::FileTypeExt;
+            if meta.file_type().is_symlink_dir() {
                 return std::fs::remove_dir(path).at(path);
             }
         }
