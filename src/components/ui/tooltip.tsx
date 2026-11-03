@@ -27,7 +27,7 @@ export function Tooltip({
           align={align}
           sideOffset={6}
           className={cn(
-            "z-[70] max-w-xs rounded-md bg-fg px-2 py-1 text-[11.5px] leading-4 text-bg shadow-md animate-fade-in",
+            "z-[70] max-w-xs break-words rounded-md bg-fg px-2 py-1 text-[11.5px] leading-4 text-bg shadow-md animate-fade-in",
           )}
         >
           {content}

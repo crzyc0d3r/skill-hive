@@ -12,6 +12,7 @@ import { keys, useApiMutation, useProviders } from "@/lib/api/hooks";
 import { cn, displayPath, formatDuration, pluralize } from "@/lib/utils";
 import { Badge, Button, Checkbox, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Field, Input, Label, SimpleSelect, Skeleton, Switch, pickDirectory } from "@/components/ui";
 import { ErrorNote } from "@/components/app/common";
+import { Segmented } from "@/features/settings/bits";
 import { ArmSwatch } from "./bits";
 import { armColors, armLabel } from "./shared";
 
@@ -155,7 +156,7 @@ function RunForm({ initial, suite, runs, onClose }: { initial: T.RunConfig; suit
         <section className="flex flex-col gap-2">
           <Label>Arms</Label>
           <div className="surface divide-y overflow-hidden">
-            <ArmRow color={colors.with_skill} title="With skill" description="The skill is installed in the sandbox; the agent decides whether to use it." right={<Badge tone="accent">always</Badge>} />
+            <ArmRow color={colors.with_skill} title="With skill" description="The skill is installed in the sandbox; the agent decides whether to use it." right={<Badge tone="accent">Always</Badge>} />
             <ArmRow
               color={colors.without_skill ?? "var(--chart-2)"}
               title="Without skill"
@@ -212,13 +213,15 @@ function RunForm({ initial, suite, runs, onClose }: { initial: T.RunConfig; suit
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <Label>Cases</Label>
-            <div className="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
-              {(["all", "subset"] as const).map((m) => (
-                <button key={m} type="button" onClick={() => setCaseMode(m)} className={cn("h-6 rounded-md px-2 text-xs font-medium transition-colors", caseMode === m ? "bg-elevated text-fg shadow-sm" : "text-muted hover:text-fg")}>
-                  {m === "all" ? `All ${cases.length}` : "Choose"}
-                </button>
-              ))}
-            </div>
+            <Segmented<"all" | "subset">
+              ariaLabel="Cases"
+              value={caseMode}
+              onChange={setCaseMode}
+              options={[
+                { value: "all", label: `All ${cases.length}` },
+                { value: "subset", label: "Choose" },
+              ]}
+            />
           </div>
           {cases.length === 0 ? (
             <p className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted">No cases in the suite. Draft or write a suite in the Suite tab and save it first.</p>

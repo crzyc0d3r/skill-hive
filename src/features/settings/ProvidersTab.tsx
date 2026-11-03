@@ -74,7 +74,7 @@ export function ProvidersTab() {
       <ErrorNote error={error ?? detect.error} />
 
       {isLoading ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-36" />
           ))}
@@ -96,7 +96,7 @@ export function ProvidersTab() {
           }
         />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {list.map((p) => {
             const meta = PROVIDER_KIND_META[p.kind];
             const isExec = settings?.defaultExecutorId === p.id;
@@ -111,14 +111,14 @@ export function ProvidersTab() {
                       {isExec ? (
                         <Tooltip content="Used by default to execute eval tasks">
                           <Badge tone="accent">
-                            <Star /> executor
+                            <Star /> Executor
                           </Badge>
                         </Tooltip>
                       ) : null}
                       {isGrader ? (
                         <Tooltip content="Used by default to grade results">
                           <Badge tone="accent">
-                            <Star /> grader
+                            <Star /> Grader
                           </Badge>
                         </Tooltip>
                       ) : null}
@@ -275,7 +275,7 @@ function ProbeStatus({ probe }: { probe: T.ProviderProbe | null }) {
     );
   }
   return (
-    <Tooltip content={probe.message}>
+    <Tooltip content={`${probe.ok ? "Reachable" : "Unreachable"} · ${probe.latencyMs} ms${probe.version ? ` · ${probe.version}` : ""}${probe.message ? ` · ${probe.message}` : ""}`}>
       <span className={cn("flex min-w-0 items-center gap-1.5 text-xs", probe.ok ? "text-muted" : "text-danger")}>
         <Dot tone={probe.ok ? "ok" : "danger"} />
         <span className="truncate">

@@ -1,21 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Compass, Crosshair, FlaskConical, Layers, Monitor, Plus, ScanSearch, Sparkles, TerminalSquare } from "lucide-react";
-import type * as T from "@/lib/api/bindings";
 import { useDashboard } from "@/lib/api/hooks";
 import { useUi } from "@/lib/store";
 import { cn, formatPercent, pluralize, relativeTime } from "@/lib/utils";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, SectionTitle, Skeleton, Stat } from "@/components/ui";
 import { BudgetMeter, ErrorNote, KindIcon, Page, PageBody, PageHeader, VerdictBadge } from "@/components/app/common";
 import { ItemCard } from "@/features/library/ItemCard";
-
-const RUN_TONE: Record<T.RunStatus, "ok" | "warn" | "danger" | "info" | "neutral"> = {
-  queued: "neutral",
-  running: "info",
-  grading: "info",
-  done: "ok",
-  failed: "danger",
-  cancelled: "warn",
-};
+import { RUN_STATUS_META } from "@/features/evals/shared";
 
 export function HomePage() {
   const { data, isLoading, error } = useDashboard();
@@ -27,8 +18,8 @@ export function HomePage() {
       <Page>
         <PageHeader title="Home" description="Loading your hive…" />
         <PageBody>
-          <div className="grid grid-cols-4 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-20" />
             ))}
           </div>
@@ -78,12 +69,12 @@ export function HomePage() {
           />
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <Stat label="Skills" value={stats.skills} hint={`${stats.agents} agents · ${stats.commands} commands`} />
+        <div className="grid grid-cols-5 gap-3">
+          <Stat label="Skills" value={stats.skills} hint={`${pluralize(stats.agents, "agent")} · ${pluralize(stats.commands, "command")}`} />
           <Stat label="Deployed" value={stats.deployed} hint={`across ${pluralize(targets.length, "agent")}`} tone="accent" />
           <Stat label="Measured" value={stats.tested} hint={stats.tested ? "with comparative evals" : "run an eval to start"} />
           <Stat label="Conflicts" value={conflictsTotal} hint={highConflicts ? `${highConflicts} high severity` : "across installed sets"} tone={highConflicts ? "danger" : conflictsTotal ? "warn" : "ok"} />
-          <Stat label="Validation issues" value={stats.withErrors} hint={stats.withErrors ? "items with errors" : "all items valid"} tone={stats.withErrors ? "warn" : undefined} />
+          <Stat label="Validation issues" value={stats.withErrors} hint={stats.withErrors ? "items with errors" : "all items valid"} tone={stats.withErrors ? "danger" : undefined} />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
@@ -111,7 +102,7 @@ export function HomePage() {
                       {t.conflicts.conflicts.length ? (
                         <Badge tone={t.conflicts.conflicts.some((c) => c.severity === "high") ? "danger" : "warn"}>{pluralize(t.conflicts.conflicts.length, "conflict")}</Badge>
                       ) : (
-                        <Badge tone="ok">clean</Badge>
+                        <Badge tone="ok">Clean</Badge>
                       )}
                     </CardHeader>
                     <CardContent>
@@ -153,7 +144,7 @@ export function HomePage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-[13px] font-medium">
                           {r.skillName}
-                          <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge>
+                          <Badge tone={RUN_STATUS_META[r.status].tone}>{RUN_STATUS_META[r.status].label}</Badge>
                         </div>
                         <div className="text-subtle">{relativeTime(r.finishedAt ?? r.createdAt)} · {r.config.repeats}× repeats · {r.config.arms.length} arms</div>
                       </div>

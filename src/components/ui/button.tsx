@@ -9,7 +9,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-accent text-accent-fg shadow-sm hover:bg-accent-strong",
+        primary: "bg-accent text-accent-fg shadow-sm hover:bg-accent-strong disabled:opacity-100 disabled:bg-accent-soft disabled:text-muted disabled:shadow-none",
         secondary: "bg-elevated text-fg hairline hover:bg-sunken",
         ghost: "text-muted hover:bg-sunken hover:text-fg",
         subtle: "bg-sunken text-fg hover:bg-line",
@@ -26,6 +26,8 @@ const buttonVariants = cva(
       },
     },
     defaultVariants: { variant: "secondary", size: "md" },
+    // Emitted after the size classes, so tailwind-merge keeps the inline-link box over `h-7 px-2.5` etc.
+    compoundVariants: [{ variant: "link", class: "h-auto px-0 py-0" }],
   },
 );
 

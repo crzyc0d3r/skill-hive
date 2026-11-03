@@ -93,7 +93,7 @@ function CatalogCard({ entry, onPreview }: { entry: T.CatalogEntry; onPreview: (
                 <ExternalLink /> Homepage
               </Button>
             ) : null}
-            <Button size="sm" variant="primary" onClick={onPreview}>
+            <Button size="sm" variant="secondary" onClick={onPreview}>
               <Eye /> Preview
             </Button>
           </span>

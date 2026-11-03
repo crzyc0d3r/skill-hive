@@ -36,8 +36,8 @@ export function CommandPalette() {
             {items.map((item) => (
               <CommandItem key={item.id} value={`${item.name} ${item.description}`} onSelect={() => go(() => openItem(item.id))}>
                 <KindIcon kind={item.kind} />
-                <span className="font-medium">{item.name}</span>
-                <span className="truncate text-muted">{item.description}</span>
+                <span className="shrink-0 font-medium">{item.name}</span>
+                <span className="min-w-0 flex-1 truncate text-muted">{item.description}</span>
               </CommandItem>
             ))}
           </CommandGroup>

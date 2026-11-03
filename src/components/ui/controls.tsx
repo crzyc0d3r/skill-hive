@@ -139,7 +139,7 @@ export function EmptyState({
       ) : null}
       <div>
         <div className="text-sm font-medium">{title}</div>
-        {description ? <div className="mt-1 max-w-sm text-xs text-muted text-balance">{description}</div> : null}
+        {description ? <div className="mt-1 max-w-sm break-words text-xs text-muted text-balance">{description}</div> : null}
       </div>
       {action ? <div className="mt-1 flex items-center gap-2">{action}</div> : null}
     </div>

@@ -210,7 +210,7 @@ function LiveCard({ run }: { run: T.EvalRun }) {
           <Progress value={frac} tone="info" className="mt-2" />
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-subtle">Case results stream in below as each sandbox finishes. The benchmark is computed when every arm is graded.</p>
+      <p className="mt-2 text-xs text-muted">Case results stream in below as each sandbox finishes. The benchmark is computed when every arm is graded.</p>
     </section>
   );
 }
@@ -447,7 +447,7 @@ function TriggerSection({ trigger }: { trigger: T.TriggerSummary }) {
               <tr key={i} className="border-b last:border-b-0">
                 <td className="px-2 py-1.5 selectable">{r.query}</td>
                 <td className="px-2 py-1.5">
-                  <Badge tone={r.shouldTrigger ? "accent" : "neutral"}>{r.shouldTrigger ? "should trigger" : "should not"}</Badge>
+                  <Badge tone={r.shouldTrigger ? "accent" : "neutral"}>{r.shouldTrigger ? "Should trigger" : "Should not"}</Badge>
                 </td>
                 <td className="px-2 py-1.5">{r.chosen ? <InlineCode>{r.chosen}</InlineCode> : <span className="text-subtle">no skill</span>}</td>
                 <td className="px-2 py-1.5">

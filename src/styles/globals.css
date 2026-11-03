@@ -241,47 +241,50 @@
   .scroll-y { overflow-y: auto; overscroll-behavior: contain; }
 }
 
-/* Markdown rendering inside the app (skill bodies, READMEs, reports). */
-.prose-hive {
-  font-size: 13.5px;
-  line-height: 1.65;
-  color: var(--fg);
-  user-select: text;
+/* Markdown rendering inside the app (skill bodies, READMEs, reports).
+   In the components layer so utilities passed through `className` (text-xs, …) still win. */
+@layer components {
+  .prose-hive {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--fg);
+    user-select: text;
+  }
+  .prose-hive > :first-child { margin-top: 0; }
+  .prose-hive h1, .prose-hive h2, .prose-hive h3, .prose-hive h4 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 1.4em 0 0.5em;
+    line-height: 1.25;
+  }
+  .prose-hive h1 { font-size: 1.45em; }
+  .prose-hive h2 { font-size: 1.2em; }
+  .prose-hive h3 { font-size: 1.05em; }
+  .prose-hive p, .prose-hive ul, .prose-hive ol, .prose-hive pre, .prose-hive table, .prose-hive blockquote { margin: 0.7em 0; }
+  .prose-hive ul { padding-left: 1.3em; list-style: disc; }
+  .prose-hive ol { padding-left: 1.3em; list-style: decimal; }
+  .prose-hive li + li { margin-top: 0.2em; }
+  .prose-hive a { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
+  .prose-hive code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--bg-sunken);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 0.1em 0.35em;
+  }
+  .prose-hive pre {
+    background: var(--bg-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 12px 14px;
+    overflow-x: auto;
+  }
+  .prose-hive pre code { background: none; border: 0; padding: 0; font-size: 12.5px; }
+  .prose-hive blockquote { border-left: 3px solid var(--line-strong); padding-left: 12px; color: var(--fg-muted); }
+  .prose-hive table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+  .prose-hive th, .prose-hive td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+  .prose-hive th { background: var(--bg-sunken); font-weight: 600; }
+  .prose-hive hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
+  .prose-hive img { max-width: 100%; border-radius: var(--radius-md); }
 }
-.prose-hive > :first-child { margin-top: 0; }
-.prose-hive h1, .prose-hive h2, .prose-hive h3, .prose-hive h4 {
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 1.4em 0 0.5em;
-  line-height: 1.25;
-}
-.prose-hive h1 { font-size: 1.45em; }
-.prose-hive h2 { font-size: 1.2em; }
-.prose-hive h3 { font-size: 1.05em; }
-.prose-hive p, .prose-hive ul, .prose-hive ol, .prose-hive pre, .prose-hive table, .prose-hive blockquote { margin: 0.7em 0; }
-.prose-hive ul { padding-left: 1.3em; list-style: disc; }
-.prose-hive ol { padding-left: 1.3em; list-style: decimal; }
-.prose-hive li + li { margin-top: 0.2em; }
-.prose-hive a { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
-.prose-hive code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 0.1em 0.35em;
-}
-.prose-hive pre {
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 12px 14px;
-  overflow-x: auto;
-}
-.prose-hive pre code { background: none; border: 0; padding: 0; font-size: 12.5px; }
-.prose-hive blockquote { border-left: 3px solid var(--line-strong); padding-left: 12px; color: var(--fg-muted); }
-.prose-hive table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
-.prose-hive th, .prose-hive td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
-.prose-hive th { background: var(--bg-sunken); font-weight: 600; }
-.prose-hive hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
-.prose-hive img { max-width: 100%; border-radius: var(--radius-md); }

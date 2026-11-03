@@ -339,7 +339,7 @@ function CaseCard({
           </Button>
         </Tooltip>
         <Tooltip content="Remove case">
-          <Button variant="ghost" size="icon-sm" aria-label="Remove case" onClick={onRemove}>
+          <Button variant="danger-ghost" size="icon-sm" aria-label="Remove case" onClick={onRemove}>
             <Trash2 />
           </Button>
         </Tooltip>

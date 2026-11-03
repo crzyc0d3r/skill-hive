@@ -15,7 +15,18 @@ const slugify = (s: string) =>
     .replace(/^-+|-+$/g, "");
 
 /** Describe an agent tool Skill Hive does not know about, so it can deploy there and track its budget. */
-export function AddTargetDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated?: (spec: T.TargetSpec) => void }) {
+export function AddTargetDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  existingIds = [],
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onCreated?: (spec: T.TargetSpec) => void;
+  /** Ids already in use; a colliding id is refused before the backend sees it. */
+  existingIds?: string[];
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -23,13 +34,13 @@ export function AddTargetDialog({ open, onOpenChange, onCreated }: { open: boole
           <DialogTitle>Add a custom agent</DialogTitle>
           <DialogDescription>Tell Skill Hive where another agent tool reads its skills. Paths are relative to your home folder or to a project root.</DialogDescription>
         </DialogHeader>
-        <AddTargetForm onCreated={onCreated} onCancel={() => onOpenChange(false)} />
+        <AddTargetForm onCreated={onCreated} onCancel={() => onOpenChange(false)} existingIds={existingIds} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function AddTargetForm({ onCreated, onCancel }: { onCreated?: (spec: T.TargetSpec) => void; onCancel: () => void }) {
+function AddTargetForm({ onCreated, onCancel, existingIds }: { onCreated?: (spec: T.TargetSpec) => void; onCancel: () => void; existingIds: string[] }) {
   const [name, setName] = React.useState("");
   const [idOverride, setIdOverride] = React.useState<string | null>(null);
   const id = idOverride ?? slugify(name);
@@ -48,7 +59,8 @@ function AddTargetForm({ onCreated, onCancel }: { onCreated?: (spec: T.TargetSpe
     onCreated?.(spec);
   });
 
-  const idOk = ID_RE.test(id);
+  const idTaken = existingIds.includes(id);
+  const idOk = ID_RE.test(id) && !idTaken;
   const budgetNum = budget.trim() ? Number(budget) : null;
   const budgetOk = budgetNum === null || (Number.isFinite(budgetNum) && budgetNum > 0);
   const valid = !!name.trim() && idOk && !!userSkillsDir.trim() && !!detectDir.trim() && budgetOk;
@@ -83,7 +95,7 @@ function AddTargetForm({ onCreated, onCancel }: { onCreated?: (spec: T.TargetSpe
           <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Aider" />
         </Field>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Id" hint={id && !idOk ? "Lowercase letters, digits and single hyphens" : "Used in paths and commands"}>
+          <Field label="Id" hint={id && idTaken ? "That id is already used." : id && !idOk ? "Lowercase letters, digits and single hyphens" : "Used in paths and commands"}>
             <Input value={id} onChange={(e) => setIdOverride(e.target.value)} placeholder="aider" className="mono" spellCheck={false} />
           </Field>
           <Field label="Category">

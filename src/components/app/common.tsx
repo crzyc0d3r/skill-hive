@@ -20,7 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type * as T from "@/lib/api/bindings";
-import { cn, formatDelta, formatPercent } from "@/lib/utils";
+import { cn, formatDelta, formatPercent, titleCase } from "@/lib/utils";
 import { Badge, Progress, Tooltip } from "@/components/ui";
 
 export const KIND_ICON: Record<T.AssetKind, LucideIcon> = { skill: Puzzle, agent: Bot, command: TerminalSquare };
@@ -49,9 +49,9 @@ const SOURCE_ICON: Record<T.SourceKind, LucideIcon> = {
   url: Cloud,
   authored: PenLine,
 };
-const SOURCE_LABEL: Record<T.SourceKind, string> = {
+export const SOURCE_LABEL: Record<T.SourceKind, string> = {
   local_path: "Local",
-  agent_dir: "Agent",
+  agent_dir: "Agent folder",
   git: "Git",
   github: "GitHub",
   catalog: "Catalog",
@@ -169,7 +169,7 @@ export function ConflictList({ report, compact, className }: { report: T.Conflic
       {report.conflicts.map((c, i) => (
         <li key={i} className={cn("rounded-lg px-3 py-2 text-xs", compact ? "bg-sunken" : "hairline bg-elevated")}>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge tone={SEVERITY_TONE[c.severity]}>{c.severity}</Badge>
+            <Badge tone={SEVERITY_TONE[c.severity]}>{titleCase(c.severity)}</Badge>
             <span className="font-medium">{CONFLICT_LABEL[c.kind]}</span>
             {c.names.length ? <span className="text-muted">· {c.names.join(" ↔ ")}</span> : null}
           </div>
@@ -207,9 +207,9 @@ export function BudgetMeter({
   const tone = frac > 1 ? "danger" : frac > 0.8 ? "warn" : "ok";
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-subtle font-medium uppercase tracking-wide">{label}</span>
-        <span className={cn("num", tone === "danger" ? "text-danger" : tone === "warn" ? "text-warn" : "text-muted")}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[11px]">
+        <span className="shrink-0 whitespace-nowrap text-subtle font-medium uppercase tracking-wide">{label}</span>
+        <span className={cn("num ml-auto text-right", tone === "danger" ? "text-danger" : tone === "warn" ? "text-warn" : "text-muted")}>
           {chars.toLocaleString()} / {budget.toLocaleString()} chars
           {tokens !== undefined ? ` · ~${tokens.toLocaleString()} tokens` : ""}
         </span>
@@ -234,8 +234,8 @@ export function PageHeader({
 }) {
   return (
     <header className={cn("flex flex-col gap-3 px-6 pt-5 pb-3", className)}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-64 flex-1">
           <h1 className="text-lg font-semibold tracking-[-0.015em]">{title}</h1>
           {description ? <p className="mt-0.5 text-xs text-muted text-balance">{description}</p> : null}
         </div>
@@ -255,23 +255,22 @@ export function PageBody({ children, className, scroll = true }: { children: Rea
 }
 
 export function TagChip({ tag, onClick, active }: { tag: string; onClick?: () => void; active?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] transition-colors",
-        active ? "bg-accent text-accent-fg" : "bg-sunken text-muted hover:text-fg",
-        !onClick && "pointer-events-none",
-      )}
-    >
+  const cls = cn("rounded-full px-2 py-0.5 text-[11px] transition-colors", active ? "bg-accent text-accent-fg" : "bg-sunken text-muted", onClick && "hover:text-fg");
+  return onClick ? (
+    <button type="button" aria-pressed={active} onClick={onClick} className={cls}>
       {tag}
     </button>
+  ) : (
+    <span className={cls}>{tag}</span>
   );
 }
 
-export function InlineCode({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <code className={cn("mono rounded bg-sunken px-1 py-0.5 text-[11.5px] selectable", className)}>{children}</code>;
+export function InlineCode({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
+  return (
+    <code className={cn("mono rounded bg-sunken px-1 py-0.5 text-[11.5px] selectable", className)} title={title}>
+      {children}
+    </code>
+  );
 }
 
 export function ErrorNote({ error, className }: { error: unknown; className?: string }) {
@@ -280,7 +279,7 @@ export function ErrorNote({ error, className }: { error: unknown; className?: st
   return (
     <div className={cn("flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger", className)}>
       <XCircle className="mt-0.5 size-3.5 shrink-0" />
-      <span className="selectable">{message}</span>
+      <span className="min-w-0 break-words selectable">{message}</span>
     </div>
   );
 }

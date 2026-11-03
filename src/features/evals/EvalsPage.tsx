@@ -42,10 +42,9 @@ export function EvalsPage() {
   return (
     <Page>
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[272px] shrink-0 flex-col border-r">
+        <aside className="flex w-64 shrink-0 flex-col border-r">
           <div className="px-4 pt-5 pb-3">
-            <h1 className="text-lg font-semibold tracking-[-0.015em]">Evals</h1>
-            <p className="mt-0.5 text-xs text-muted">Measure whether a skill helps.</p>
+            <div className="px-0.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-subtle">Skills</div>
             <div className="relative mt-3">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-subtle" />
               <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter skills…" aria-label="Filter skills" className="pl-8 pr-7" />

@@ -72,11 +72,17 @@ export function RunsTable({ runs, showSkill = false }: { runs: T.EvalRun[]; show
   });
   const providerName = (id: string | null | undefined) => (id ? (providers?.find((p) => p.id === id)?.name ?? id) : null);
 
-  const cols = cn("grid items-center gap-3 px-3", showSkill ? "grid-cols-[minmax(0,1.5fr)_minmax(0,0.9fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]");
+  // Header and rows share one minimum width, so the surface scrolls sideways instead of the columns collapsing.
+  const cols = cn(
+    "grid items-center gap-3 px-3",
+    showSkill
+      ? "min-w-[820px] grid-cols-[minmax(0,1.5fr)_minmax(0,0.9fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]"
+      : "min-w-[700px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1.2fr)_auto_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]",
+  );
 
   return (
     <>
-      <div className="surface overflow-hidden">
+      <div className="surface overflow-x-auto">
         <div className={cn(cols, "border-b bg-sunken/60 py-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle")}>
           {showSkill ? <span>Skill</span> : null}
           <span>Created</span>
@@ -111,7 +117,11 @@ export function RunsTable({ runs, showSkill = false }: { runs: T.EvalRun[]; show
               }}
               className={cn(cols, "border-b py-2 text-xs last:border-b-0 hover:bg-sunken/60 focus-visible:bg-sunken/60")}
             >
-              {showSkill ? <span className="truncate text-[13px] font-medium">{r.skillName}</span> : null}
+              {showSkill ? (
+                <span className="truncate text-[13px] font-medium" title={r.skillName}>
+                  {r.skillName}
+                </span>
+              ) : null}
               <Tooltip content={formatDate(r.createdAt)}>
                 <span className="truncate text-fg">{relativeTime(r.createdAt)}</span>
               </Tooltip>
@@ -156,7 +166,7 @@ export function RunsTable({ runs, showSkill = false }: { runs: T.EvalRun[]; show
               <span className="flex w-7 justify-end">
                 <Tooltip content="Delete run">
                   <Button
-                    variant="ghost"
+                    variant="danger-ghost"
                     size="icon-sm"
                     aria-label={`Delete run ${r.id}`}
                     onClick={(e) => {

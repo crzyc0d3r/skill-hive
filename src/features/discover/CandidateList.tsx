@@ -142,7 +142,7 @@ function CandidateRow({ candidate: c, selected, onToggle }: { candidate: T.Candi
       onClick={() => importable && onToggle()}
       className={cn(
         "flex items-center gap-3 border-b px-3 py-2 text-xs transition-colors last:border-b-0",
-        importable ? "hover:bg-sunken/60" : "opacity-70",
+        importable && "hover:bg-sunken/60",
         selected && "bg-accent-soft/35",
       )}
     >
@@ -156,7 +156,9 @@ function CandidateRow({ candidate: c, selected, onToggle }: { candidate: T.Candi
       </Tooltip>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="truncate text-[13px] font-medium">{c.name || "(unnamed)"}</span>
+          <span className={cn("truncate text-[13px] font-medium", !importable && "text-muted")} title={c.name}>
+            {c.name || "(unnamed)"}
+          </span>
           <CandidateStatusBadge candidate={c} />
           {c.libraryItemId ? (
             <Tooltip content="Open the library item">

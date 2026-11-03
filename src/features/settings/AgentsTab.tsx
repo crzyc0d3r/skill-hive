@@ -5,8 +5,9 @@ import type * as T from "@/lib/api/bindings";
 import { api } from "@/lib/api/client";
 import { keys, useApiMutation, useTargets } from "@/lib/api/hooks";
 import { cn } from "@/lib/utils";
-import { Badge, Button, ConfirmDialog, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, EmptyState, Field, Input, SimpleSelect, Skeleton, Tooltip, openExternal, pickDirectory } from "@/components/ui";
+import { Badge, Button, ConfirmDialog, EmptyState, Skeleton, Tooltip, openExternal, pickDirectory } from "@/components/ui";
 import { ErrorNote } from "@/components/app/common";
+import { AddTargetDialog } from "@/features/agents/AddTargetDialog";
 
 const INVALIDATE = [keys.targets, keys.installedTargets, ["targets"], keys.dashboard, keys.deployments] as const;
 
@@ -64,7 +65,7 @@ export function AgentsTab() {
                   <td className={td}>
                     <div className="flex items-center gap-2 text-[13px] font-medium">
                       {t.name}
-                      {t.custom ? <Badge tone="accent">custom</Badge> : null}
+                      {t.custom ? <Badge tone="outline">Custom</Badge> : null}
                       {t.docsUrl ? (
                         <Tooltip content="Documentation">
                           <Button variant="ghost" size="icon-sm" aria-label={`${t.name} documentation`} onClick={() => void openExternal(t.docsUrl!)}>
@@ -93,7 +94,7 @@ export function AgentsTab() {
                     </Tooltip>
                     {t.custom ? (
                       <Tooltip content="Remove custom agent">
-                        <Button variant="ghost" size="icon-sm" aria-label={`Remove ${t.name}`} onClick={() => setPendingRemove(t)}>
+                        <Button variant="danger-ghost" size="icon-sm" aria-label={`Remove ${t.name}`} onClick={() => setPendingRemove(t)}>
                           <Trash2 />
                         </Button>
                       </Tooltip>
@@ -105,7 +106,7 @@ export function AgentsTab() {
           </table>
         </div>
       )}
-      <AddAgentDialog open={addOpen} onOpenChange={setAddOpen} existingIds={(targets ?? []).map((t) => t.id)} />
+      <AddTargetDialog open={addOpen} onOpenChange={setAddOpen} onCreated={() => setAddOpen(false)} existingIds={(targets ?? []).map((t) => t.id)} />
       <ConfirmDialog
         open={!!pendingRemove}
         onOpenChange={(o) => !o && setPendingRemove(null)}
@@ -119,100 +120,5 @@ export function AgentsTab() {
         }}
       />
     </div>
-  );
-}
-
-function AddAgentDialog({ open, onOpenChange, existingIds }: { open: boolean; onOpenChange: (o: boolean) => void; existingIds: string[] }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>Add custom agent</DialogTitle>
-          <DialogDescription>Describe where the tool reads skills from. Paths are relative to your home folder or to a project root.</DialogDescription>
-        </DialogHeader>
-        {open ? <AddAgentForm existingIds={existingIds} onClose={() => onOpenChange(false)} /> : null}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AddAgentForm({ existingIds, onClose }: { existingIds: string[]; onClose: () => void }) {
-  const [id, setId] = React.useState("");
-  const [name, setName] = React.useState("");
-  const [category, setCategory] = React.useState<T.TargetCategory>("coding");
-  const [userDir, setUserDir] = React.useState("");
-  const [projectDir, setProjectDir] = React.useState("");
-  const [detectDir, setDetectDir] = React.useState("");
-  const [budget, setBudget] = React.useState("15000");
-
-  const add = useApiMutation((spec: T.TargetSpec) => api.addCustomTarget(spec), INVALIDATE, (spec) => {
-    toast.success(`Added ${spec.name}`);
-    onClose();
-  });
-
-  const idOk = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(id) && !existingIds.includes(id);
-  const problems: string[] = [];
-  if (!idOk) problems.push(existingIds.includes(id) ? "That id is already used." : "Id must be a slug, e.g. my-agent.");
-  if (!name.trim()) problems.push("Name is required.");
-  if (!userDir.trim()) problems.push("User skills directory is required.");
-  const budgetN = Number(budget);
-  if (budget.trim() && (!Number.isFinite(budgetN) || budgetN < 100)) problems.push("Budget must be a number of characters (or blank if unknown).");
-
-  const clean = (s: string) => s.trim().replace(/^~\//, "").replace(/^\.\//, "").replace(/\/+$/, "");
-  const submit = () =>
-    add.mutate({
-      id,
-      name: name.trim(),
-      category,
-      userSkillsDir: clean(userDir),
-      projectSkillsDir: clean(projectDir) || null,
-      userAgentsDir: null,
-      projectAgentsDir: null,
-      userCommandsDir: null,
-      projectCommandsDir: null,
-      detectDir: clean(detectDir) || clean(userDir).split("/")[0],
-      descriptionBudgetChars: budget.trim() ? Math.round(budgetN) : null,
-      docsUrl: null,
-      custom: true,
-    });
-
-  return (
-    <>
-      <DialogBody className="flex flex-col gap-4 pb-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Id" hint="Stable identifier used in deployments and the CLI.">
-            <Input value={id} onChange={(e) => setId(e.target.value.toLowerCase())} placeholder="my-agent" aria-label="Agent id" className="mono" autoFocus />
-          </Field>
-          <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Agent" aria-label="Agent name" />
-          </Field>
-          <Field label="Category">
-            <SimpleSelect value={category} onChange={(v) => setCategory(v as T.TargetCategory)} options={[{ value: "coding", label: "Coding agent" }, { value: "assistant", label: "Assistant" }]} />
-          </Field>
-          <Field label="Description budget (chars)" hint="How much skill-description text the agent loads before truncating. Blank if unknown.">
-            <Input type="number" min={100} step={500} value={budget} onChange={(e) => setBudget(e.target.value)} aria-label="Description budget" />
-          </Field>
-          <Field label="User skills directory" hint="Relative to your home folder.">
-            <Input value={userDir} onChange={(e) => setUserDir(e.target.value)} placeholder=".my-agent/skills" aria-label="User skills directory" className="mono" spellCheck={false} />
-          </Field>
-          <Field label="Project skills directory" hint="Relative to a project root; blank if the agent has no project scope.">
-            <Input value={projectDir} onChange={(e) => setProjectDir(e.target.value)} placeholder=".my-agent/skills" aria-label="Project skills directory" className="mono" spellCheck={false} />
-          </Field>
-          <Field label="Detect directory" hint="Its presence under home means the tool is installed. Defaults to the first segment of the skills directory.">
-            <Input value={detectDir} onChange={(e) => setDetectDir(e.target.value)} placeholder=".my-agent" aria-label="Detect directory" className="mono" spellCheck={false} />
-          </Field>
-        </div>
-        {id || name ? problems.length ? <ul className="list-disc pl-4 text-xs text-warn">{problems.map((p) => <li key={p}>{p}</li>)}</ul> : null : null}
-        <ErrorNote error={add.error} />
-      </DialogBody>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button variant="primary" disabled={problems.length > 0} loading={add.isPending} onClick={submit}>
-          Add agent
-        </Button>
-      </DialogFooter>
-    </>
   );
 }

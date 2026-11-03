@@ -45,7 +45,9 @@ export function GeneralTab() {
     <div className="flex max-w-3xl flex-col gap-5">
       <SettingsSection title="Library" description="Where Skill Hive keeps its database, the library and run workspaces.">
         <SettingsRow label="Home directory" description="Read-only. Set SKILL_HIVE_HOME before launching to move it.">
-          <InlineCode className="max-w-xs truncate">{displayPath(settings.home)}</InlineCode>
+          <InlineCode className="inline-block max-w-xs truncate align-middle" title={settings.home}>
+            {displayPath(settings.home)}
+          </InlineCode>
           <Tooltip content="Copy path">
             <Button variant="ghost" size="icon-sm" aria-label="Copy home path" onClick={() => void copyText(settings.home).then(() => toast("Path copied"))}>
               <Copy />

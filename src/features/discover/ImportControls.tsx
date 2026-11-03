@@ -1,7 +1,7 @@
 import { AlertTriangle, Download } from "lucide-react";
 import { cn, pluralize } from "@/lib/utils";
 import { Button, Switch } from "@/components/ui";
-import { TagsInput } from "./TagsInput";
+import { TagsInput } from "@/components/app/TagsInput";
 
 /** Tags, overwrite toggle and the import button shared by local scans and online previews. */
 export function ImportControls({

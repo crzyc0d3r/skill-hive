@@ -7,6 +7,8 @@ export type Theme = "system" | "light" | "dark";
 interface UiState {
   theme: Theme;
   setTheme: (t: Theme) => void;
+  /** What `theme` resolves to on <html> right now ("system" follows the OS). Kept by applyTheme. */
+  resolvedTheme: "light" | "dark";
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
   sidebarCollapsed: boolean;
@@ -40,6 +42,7 @@ export const useUi = create<UiState>((set) => ({
     }
     set({ theme });
   },
+  resolvedTheme: "light",
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   sidebarCollapsed: false,
@@ -59,4 +62,5 @@ export function applyTheme(theme: Theme) {
   const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
   const dark = theme === "dark" || (theme === "system" && prefersDark);
   root.classList.toggle("dark", dark);
+  useUi.setState({ resolvedTheme: dark ? "dark" : "light" });
 }

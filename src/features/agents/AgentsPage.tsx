@@ -171,7 +171,7 @@ function TargetRail({
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">{spec.name}</span>
-                      {spec.custom ? <Badge tone="outline">custom</Badge> : null}
+                      {spec.custom ? <Badge tone="outline">Custom</Badge> : null}
                     </button>
                   );
                 })}
@@ -197,7 +197,7 @@ function InstalledRow({ status: t, active, onClick }: { status: T.TargetStatus; 
     >
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{t.spec.name}</span>
-        {n ? <Badge tone={high ? "danger" : "warn"}>{pluralize(n, "conflict")}</Badge> : <Badge tone="ok">clean</Badge>}
+        {n ? <Badge tone={high ? "danger" : "warn"}>{pluralize(n, "conflict")}</Badge> : <Badge tone="ok">Clean</Badge>}
       </div>
       <div className="flex items-center gap-2 text-[11px] text-subtle">
         <span>{pluralize(t.assets.length, "asset")}</span>
@@ -378,7 +378,7 @@ function TargetPanel({ targetId }: { targetId: string }) {
           <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr]">
             <div className="surface p-3">
               <BudgetMeter chars={s.contextChars} budgetChars={spec.descriptionBudgetChars} tokens={s.contextTokens} />
-              <p className="mt-2 text-[11px] text-subtle">
+              <p className="mt-2 text-xs text-muted">
                 Every installed skill's name and description is loaded into the prompt up front. Past the budget the list is truncated and skills silently stop triggering.
               </p>
             </div>
@@ -470,9 +470,10 @@ export function AssetTable({
   onDeploy?: () => void;
   busyPath?: string;
 }) {
-  const cols = "grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1.6fr)_auto_auto_auto]";
+  // Fixed trailing tracks so State / Managed / Actions line up across rows and with the header.
+  const cols = "min-w-[640px] grid-cols-[1rem_minmax(0,1.1fr)_minmax(0,1.6fr)_6.5rem_6.5rem_10rem]";
   return (
-    <div className="surface overflow-hidden" role="table" aria-label="Installed assets">
+    <div className="surface overflow-x-auto" role="table" aria-label="Installed assets">
       <div role="row" className={cn("grid items-center gap-3 border-b bg-sunken/60 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle", cols)}>
         <span className="w-4" />
         <span role="columnheader">Name</span>
@@ -536,8 +537,8 @@ export function AssetTable({
                   </Button>
                 ) : null}
                 <Tooltip content={managed ? "Remove from this agent" : "Delete this unmanaged file"}>
-                  <Button size="icon-sm" variant="ghost" aria-label={`Remove ${a.name}`} onClick={() => onRemove(a)}>
-                    <Trash2 className="text-danger" />
+                  <Button size="icon-sm" variant="danger-ghost" aria-label={`Remove ${a.name}`} onClick={() => onRemove(a)}>
+                    <Trash2 />
                   </Button>
                 </Tooltip>
               </span>

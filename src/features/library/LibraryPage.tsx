@@ -24,7 +24,7 @@ import {
   Input,
   Tooltip,
 } from "@/components/ui";
-import { KIND_LABEL, Page, PageBody, PageHeader, TagChip } from "@/components/app/common";
+import { KIND_LABEL, Page, PageBody, PageHeader, SOURCE_LABEL, TagChip } from "@/components/app/common";
 import { ItemCard, ItemCardSkeleton, ItemRow } from "./ItemCard";
 import { CreateSkillDialog } from "./CreateSkillDialog";
 import { DeployDialog } from "@/features/agents/DeployDialog";
@@ -110,7 +110,9 @@ export function LibraryPage() {
       <PageHeader
         title="Library"
         description={
-          stats ? `${stats.skills} skills · ${stats.agents} agents · ${stats.commands} commands · ${stats.deployed} deployed · ${stats.tested} measured` : "Everything you have collected, in one place."
+          stats
+            ? `${pluralize(stats.skills, "skill")} · ${pluralize(stats.agents, "agent")} · ${pluralize(stats.commands, "command")} · ${stats.deployed} deployed · ${stats.tested} measured`
+            : "Everything you have collected, in one place."
         }
         actions={
           <>
@@ -140,12 +142,13 @@ export function LibraryPage() {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
+          <div className="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5" role="group" aria-label="Kinds">
             {(["skill", "agent", "command"] as T.AssetKind[]).map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => toggleKind(k)}
+                aria-pressed={kinds.includes(k)}
                 className={cn(
                   "h-7 rounded-md px-2.5 text-xs font-medium transition-colors",
                   kinds.includes(k) ? "bg-elevated text-fg shadow-sm" : "text-muted hover:text-fg",
@@ -172,7 +175,7 @@ export function LibraryPage() {
               <DropdownMenuLabel>Source</DropdownMenuLabel>
               {(["github", "git", "local_path", "agent_dir", "authored", "url", "catalog"] as T.SourceKind[]).map((s) => (
                 <DropdownMenuCheckboxItem key={s} checked={sources.includes(s)} onCheckedChange={() => toggleSource(s)}>
-                  {s.replace("_", " ")}
+                  {SOURCE_LABEL[s]}
                 </DropdownMenuCheckboxItem>
               ))}
               <DropdownMenuSeparator />
@@ -216,12 +219,24 @@ export function LibraryPage() {
 
           <div className="ml-auto flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
             <Tooltip content="Grid">
-              <button type="button" onClick={() => setView("grid")} className={cn("flex size-7 items-center justify-center rounded-md", view === "grid" ? "bg-elevated shadow-sm" : "text-muted")}>
+              <button
+                type="button"
+                onClick={() => setView("grid")}
+                aria-label="Grid view"
+                aria-pressed={view === "grid"}
+                className={cn("flex size-7 items-center justify-center rounded-md", view === "grid" ? "bg-elevated shadow-sm" : "text-muted hover:text-fg")}
+              >
                 <LayoutGrid className="size-3.5" />
               </button>
             </Tooltip>
             <Tooltip content="List">
-              <button type="button" onClick={() => setView("list")} className={cn("flex size-7 items-center justify-center rounded-md", view === "list" ? "bg-elevated shadow-sm" : "text-muted")}>
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                aria-label="List view"
+                aria-pressed={view === "list"}
+                className={cn("flex size-7 items-center justify-center rounded-md", view === "list" ? "bg-elevated shadow-sm" : "text-muted hover:text-fg")}
+              >
                 <Rows3 className="size-3.5" />
               </button>
             </Tooltip>
@@ -305,8 +320,8 @@ export function LibraryPage() {
             ))}
           </div>
         ) : (
-          <div className="surface overflow-hidden">
-            <div className="grid grid-cols-[auto_minmax(0,1.2fr)_minmax(0,2fr)_auto_auto_auto] gap-3 border-b bg-sunken/60 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle">
+          <div className="surface overflow-x-auto">
+            <div className="grid min-w-[900px] grid-cols-[1rem_minmax(0,1.2fr)_minmax(0,2fr)_12.5rem_10rem_13rem] gap-3 border-b bg-sunken/60 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle">
               <span className="w-4" />
               <span>Name</span>
               <span>Description</span>

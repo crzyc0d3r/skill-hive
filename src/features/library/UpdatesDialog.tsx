@@ -61,7 +61,7 @@ export function UpdatesDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                         <ArrowUpCircle /> Update
                       </Button>
                     ) : c.error ? (
-                      <Badge tone="danger">error</Badge>
+                      <Badge tone="danger">Error</Badge>
                     ) : (
                       <Badge tone="ok">
                         <CheckCircle2 /> Up to date

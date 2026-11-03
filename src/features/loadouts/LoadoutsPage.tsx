@@ -207,7 +207,7 @@ function LoadoutDetail({ id, initialTarget }: { id: string; initialTarget: strin
                       {it ? <KindIcon kind={it.kind} className="size-4 shrink-0 text-muted" /> : <span className="size-4 shrink-0" />}
                       <div className="min-w-0 flex-1">
                         {it ? (
-                          <button type="button" onClick={() => openItem(it.id)} className="truncate text-[13px] font-medium hover:underline">
+                          <button type="button" onClick={() => openItem(it.id)} title={it.name} className="truncate text-[13px] font-medium hover:underline">
                             {it.name}
                           </button>
                         ) : (
@@ -240,10 +240,10 @@ function LoadoutDetail({ id, initialTarget }: { id: string; initialTarget: strin
             )}
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3">
             <div className="surface p-3">
               <BudgetMeter chars={chars} budgetChars={target?.descriptionBudgetChars} tokens={tokens} />
-              <p className="mt-2 text-[11px] text-subtle">
+              <p className="mt-2 text-xs text-muted">
                 The loadout's descriptions alone, against {target?.name ?? targetId}'s budget. The plan on the right accounts for whatever else is installed.
               </p>
             </div>

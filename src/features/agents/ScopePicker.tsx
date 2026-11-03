@@ -3,7 +3,7 @@ import type * as T from "@/lib/api/bindings";
 import { api } from "@/lib/api/client";
 import { keys, useApiMutation, useProjects } from "@/lib/api/hooks";
 import { cn } from "@/lib/utils";
-import { Button, SimpleSelect, Tabs, TabsList, TabsTrigger, Tooltip, pickDirectory } from "@/components/ui";
+import { Button, SimpleSelect, Tabs, TabsList, TabsTrigger, pickDirectory } from "@/components/ui";
 
 /** User / Project switch with a project chooser and "Add project…" (registers the picked folder). */
 export function ScopePicker({
@@ -30,13 +30,13 @@ export function ScopePicker({
       <Tabs value={scope} onValueChange={(v) => onScopeChange(v as T.Scope)}>
         <TabsList aria-label="Scope">
           <TabsTrigger value="user">User</TabsTrigger>
-          <Tooltip content={projectDisabled ? projectDisabledReason : null}>
-            <TabsTrigger value="project" disabled={projectDisabled}>
-              Project
-            </TabsTrigger>
-          </Tooltip>
+          <TabsTrigger value="project" disabled={projectDisabled}>
+            Project
+          </TabsTrigger>
         </TabsList>
       </Tabs>
+      {/* Inline, not a tooltip: disabled buttons emit no pointer events in WebKit and are skipped by the roving tab index. */}
+      {projectDisabled ? <span className="text-[11px] text-subtle">{projectDisabledReason}</span> : null}
       {scope === "project" ? (
         <>
           <SimpleSelect

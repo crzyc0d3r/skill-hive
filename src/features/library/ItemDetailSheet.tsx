@@ -38,7 +38,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Input,
   LineTabsList,
   LineTabsTrigger,
   Markdown,
@@ -52,6 +51,7 @@ import {
   revealPath,
 } from "@/components/ui";
 import { EffectivenessBadge, ErrorNote, InlineCode, InstallStateBadge, KindBadge, SourceBadge, VerdictBadge, sourceDisplay } from "@/components/app/common";
+import { TagsInput } from "@/components/app/TagsInput";
 import { DeployDialog } from "@/features/agents/DeployDialog";
 import { HistorySparkline } from "@/features/evals/HistorySparkline";
 
@@ -126,12 +126,20 @@ function ItemDetail({ id, onClose }: { id: string; onClose: () => void }) {
               </Badge>
             ) : null}
           </div>
-          <h2 className="mt-1.5 truncate text-lg font-semibold tracking-[-0.015em] selectable">{item.name}</h2>
+          <h2 className="mt-1.5 truncate text-lg font-semibold tracking-[-0.015em] selectable" title={item.name}>
+            {item.name}
+          </h2>
           <p className="mt-0.5 text-xs text-muted selectable">{item.description}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Tooltip content={item.favorite ? "Unfavourite" : "Favourite"}>
-            <Button variant="ghost" size="icon-sm" onClick={() => favorite.mutate(!item.favorite)}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={item.favorite ? "Remove from favourites" : "Add to favourites"}
+              aria-pressed={item.favorite}
+              onClick={() => favorite.mutate(!item.favorite)}
+            >
               <Star className={cn(item.favorite && "fill-accent text-accent")} />
             </Button>
           </Tooltip>
@@ -221,7 +229,7 @@ function ItemDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <TabsContent value="overview" className="mt-0 flex flex-col gap-5">
               <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-xs">
                 <dt className="text-subtle">Source</dt>
-                <dd className="selectable">{sourceDisplay(item.source)}</dd>
+                <dd className={cn("selectable break-all", item.source.kind !== "authored" && "mono")}>{sourceDisplay(item.source)}</dd>
                 {item.source.revision ? (
                   <>
                     <dt className="text-subtle">Revision</dt>
@@ -242,7 +250,7 @@ function ItemDetail({ id, onClose }: { id: string; onClose: () => void }) {
 
               <section>
                 <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle">Tags</div>
-                <TagEditor tags={item.tags} onChange={(tags) => setTags.mutate(tags)} />
+                <TagsInput tags={item.tags} onChange={(tags) => setTags.mutate(tags)} />
               </section>
 
               {item.kind === "skill" ? (
@@ -335,7 +343,7 @@ function ItemDetail({ id, onClose }: { id: string; onClose: () => void }) {
                       </Tooltip>
                     ) : null}
                     <Tooltip content="Remove from this agent">
-                      <Button size="icon-sm" variant="ghost" onClick={() => undeploy.mutate(d.id)}>
+                      <Button size="icon-sm" variant="ghost" aria-label="Remove from this agent" onClick={() => undeploy.mutate(d.id)}>
                         <Unlink />
                       </Button>
                     </Tooltip>
@@ -372,35 +380,6 @@ function ItemDetail({ id, onClose }: { id: string; onClose: () => void }) {
         destructive
         loading={remove.isPending}
         onConfirm={() => remove.mutate(undefined)}
-      />
-    </div>
-  );
-}
-
-function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
-  const [value, setValue] = React.useState("");
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {tags.map((t) => (
-        <span key={t} className="inline-flex items-center gap-1 rounded-full bg-sunken pl-2 pr-1 text-[11px] text-muted">
-          {t}
-          <button type="button" className="rounded-full p-0.5 hover:text-fg" onClick={() => onChange(tags.filter((x) => x !== t))} aria-label={`Remove tag ${t}`}>
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
-      <Input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === ",") && value.trim()) {
-            e.preventDefault();
-            onChange([...tags, value.trim().toLowerCase()]);
-            setValue("");
-          }
-        }}
-        placeholder="Add tag…"
-        className="h-6 w-28 text-[11px]"
       />
     </div>
   );
@@ -458,10 +437,10 @@ function FileBrowser({ itemId, files }: { itemId: string; files: T.FileEntry[] }
           <div className="flex items-center justify-between border-b bg-sunken/60 px-3 py-1.5 text-[11px]">
             <span className="mono">{open}</span>
             <span className="flex items-center gap-1">
-              <Button size="icon-sm" variant="ghost" onClick={() => void copyText(content)}>
+              <Button size="icon-sm" variant="ghost" aria-label="Copy file contents" onClick={() => void copyText(content)}>
                 <Copy />
               </Button>
-              <Button size="icon-sm" variant="ghost" onClick={() => setOpen(null)}>
+              <Button size="icon-sm" variant="ghost" aria-label="Close file" onClick={() => setOpen(null)}>
                 <X />
               </Button>
             </span>

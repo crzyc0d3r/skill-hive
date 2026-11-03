@@ -189,6 +189,7 @@ function useGlobalShortcuts() {
 
 export function AppShell() {
   const theme = useUi((s) => s.theme);
+  const resolvedTheme = useUi((s) => s.resolvedTheme);
   const location = useLocation();
   useGlobalShortcuts();
 
@@ -225,9 +226,12 @@ export function AppShell() {
         <ItemDetailSheet />
         <Toaster
           position="bottom-right"
-          theme={document.documentElement.classList.contains("dark") ? "dark" : "light"}
+          theme={resolvedTheme}
           toastOptions={{
-            className: "!bg-elevated !text-fg !border-line !shadow-md !rounded-xl !text-[13px]",
+            classNames: {
+              toast: "!bg-elevated !text-fg !border-line !shadow-md !rounded-xl !text-[13px]",
+              description: "!text-muted",
+            },
           }}
         />
       </div>
