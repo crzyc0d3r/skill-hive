@@ -84,11 +84,27 @@ cargo clippy --workspace --all-targets -- -D warnings
 npm run typecheck && npm run lint && npm test && npm run build
 npm run bindings && node scripts/gen-bindings-index.mjs   # regenerate TypeScript types from Rust
 npm run build && node scripts/screenshots.mjs             # screenshots of every screen (mock data)
+npm run build && npm run audit:ui                         # contrast / font / overflow audit of every screen, both themes
 ```
+
+The UI audit (`scripts/ui-audit.mjs`) loads every route and the main dialogs, sheets and menus
+at three window widths in both themes, measures every visible text node against its real
+background and fails under WCAG AA contrast, on fallback fonts, on text under 11px and on
+horizontal overflow. CI runs it on every push.
 
 CI runs the Rust suite on Linux, macOS and Windows, the web checks, and a Linux desktop
 bundle. Pushing a `v*` tag builds installers for every platform and the CLI binaries into a
 draft release.
+
+### Linux rendering
+
+The desktop app renders through WebKitGTK. On some GPU, driver and compositor combinations
+(NVIDIA on Wayland most often) WebKitGTK's DMA-BUF renderer paints windows partially or with
+wrong colours in popovers and scrolling panels. Skill Hive therefore starts with
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` unless you set that variable (or
+`WEBKIT_DISABLE_COMPOSITING_MODE`) yourself. If a window still looks wrong, launch with
+`WEBKIT_DISABLE_COMPOSITING_MODE=1 skill-hive`, and if that fixes it please open an issue
+with your distribution, GPU and WebKitGTK version.
 
 ## Status
 

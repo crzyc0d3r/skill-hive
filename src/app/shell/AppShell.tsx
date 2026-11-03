@@ -80,7 +80,7 @@ function Sidebar() {
         {!collapsed ? (
           <div className="no-drag leading-tight">
             <div className="text-[13px] font-semibold tracking-[-0.01em]">Skill Hive</div>
-            <div className="text-[10.5px] text-subtle">v{info?.version ?? "…"}</div>
+            <div className="text-[11px] text-subtle">v{info?.version ?? "…"}</div>
           </div>
         ) : null}
       </div>

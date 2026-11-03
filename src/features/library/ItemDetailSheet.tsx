@@ -292,7 +292,7 @@ function ItemDetail({ id, onClose }: { id: string; onClose: () => void }) {
               {Object.keys(item.frontmatter).filter((k) => !["name", "description"].includes(k)).length ? (
                 <section>
                   <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle">Frontmatter</div>
-                  <pre className="mono selectable overflow-x-auto rounded-lg bg-sunken p-3 text-[11.5px] leading-5">
+                  <pre className="mono selectable overflow-x-auto rounded-lg bg-sunken p-3 text-[11.5px] leading-5 text-fg">
                     {Object.entries(item.frontmatter)
                       .filter(([k]) => !["name", "description"].includes(k))
                       .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
@@ -353,7 +353,7 @@ function ItemDetail({ id, onClose }: { id: string; onClose: () => void }) {
                       {f.message}
                       {f.field ? <InlineCode className="ml-1.5">{f.field}</InlineCode> : null}
                     </div>
-                    <div className="mono text-[10.5px] opacity-70">{f.code}</div>
+                    <div className="mono text-[11px] text-muted">{f.code}</div>
                   </div>
                 </div>
               ))}

@@ -297,7 +297,7 @@ function ArmStatsTable({ bench }: { bench: T.Benchmark }) {
                   <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                     <ArmSwatch color={colors[a.label]} /> {armLabel(a.label)}
                   </span>
-                  {a.label === bench.baseline ? <span className="text-[10.5px] font-normal text-subtle">baseline</span> : null}
+                  {a.label === bench.baseline ? <span className="text-[11px] font-normal text-subtle">baseline</span> : null}
                 </span>
               </td>
               <td className={cell}>{a.runs}</td>

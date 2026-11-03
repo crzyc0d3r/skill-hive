@@ -14,7 +14,7 @@ export const SelectTrigger = React.forwardRef<
   <Primitive.Trigger
     ref={ref}
     className={cn(
-      "flex w-full items-center justify-between gap-2 rounded-md bg-elevated px-2.5 text-[13px] hairline",
+      "flex w-full items-center justify-between gap-2 rounded-md bg-elevated px-2.5 text-[13px] text-fg hairline",
       "focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] disabled:opacity-50 data-[placeholder]:text-subtle [&>span]:truncate",
       size === "sm" ? "h-7 text-xs" : "h-8",
       className,
@@ -37,7 +37,7 @@ export const SelectContent = React.forwardRef<HTMLDivElement, React.ComponentPro
         position={position}
         sideOffset={6}
         className={cn(
-          "z-[60] max-h-[320px] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg bg-elevated text-[13px] shadow-md hairline animate-slide-up",
+          "z-[60] max-h-[320px] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg bg-elevated text-[13px] text-fg shadow-md hairline animate-slide-up",
           className,
         )}
         {...props}

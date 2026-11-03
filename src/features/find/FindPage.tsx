@@ -232,7 +232,7 @@ function ResultsView({ response, targetId }: { response: T.RecommendResponse; ta
                 <Tooltip content={`Score ${Math.round(r.score * 100)} of 100`}>
                   <span className="flex w-14 shrink-0 flex-col gap-1 pt-1.5">
                     <Progress value={r.score} size="sm" tone={on ? "accent" : "info"} />
-                    <span className="num text-[10.5px] text-subtle">{Math.round(r.score * 100)}</span>
+                    <span className="num text-[11px] text-subtle">{Math.round(r.score * 100)}</span>
                   </span>
                 </Tooltip>
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-sunken text-muted">
@@ -264,14 +264,14 @@ function ResultsView({ response, targetId }: { response: T.RecommendResponse; ta
                         </Badge>
                       ))}
                       {r.matchedTerms.map((t) => (
-                        <InlineCode key={t} className="text-[10.5px]">
+                        <InlineCode key={t} className="text-[11px]">
                           {t}
                         </InlineCode>
                       ))}
                     </div>
                   ) : null}
                 </div>
-                <label className="flex shrink-0 flex-col items-center gap-1 pt-0.5 text-[10.5px] text-subtle">
+                <label className="flex shrink-0 flex-col items-center gap-1 pt-0.5 text-[11px] text-subtle">
                   <Switch checked={on} onCheckedChange={() => toggle(r.item.id)} aria-label={`Include ${r.item.name}`} />
                   {on ? "in set" : "excluded"}
                 </label>

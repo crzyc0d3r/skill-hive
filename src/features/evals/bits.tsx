@@ -11,7 +11,7 @@ export function MiniStat({ label, value, hint, tone, className }: { label: React
   const toneClass = tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : tone === "danger" ? "text-danger" : "";
   return (
     <div className={cn("rounded-lg bg-sunken px-3 py-2", className)}>
-      <div className="text-[10.5px] font-medium uppercase tracking-wide text-subtle">{label}</div>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-subtle">{label}</div>
       <div className={cn("mt-0.5 text-lg font-semibold tracking-tight", toneClass)}>{value}</div>
       {hint ? <div className="text-[11px] text-muted">{hint}</div> : null}
     </div>

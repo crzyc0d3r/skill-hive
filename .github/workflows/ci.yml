@@ -61,6 +61,16 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: Browser for the UI audit
+        run: npx playwright install --with-deps chromium
+      - name: UI audit (contrast, fonts, overflow on every screen in both themes)
+        run: node scripts/ui-audit.mjs --quick --out ui-audit
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ui-audit
+          path: ui-audit
+          if-no-files-found: ignore
 
   desktop-build:
     name: Desktop build check (Linux)

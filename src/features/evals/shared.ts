@@ -121,12 +121,13 @@ export function interpretBenchmark(b: T.Benchmark): string {
 /** Diverging ok ↔ danger fill for a pass fraction, with a near-transparent midpoint at 50 %. */
 export function passFractionFill(fraction: number): string {
   const f = Math.max(0, Math.min(1, fraction));
+  // Capped at 42% so the cell's label (the normal text colour) stays above 4.5:1 in both themes.
   if (f >= 0.5) {
     const t = (f - 0.5) * 2;
-    return `color-mix(in oklab, var(--ok) ${Math.round(10 + t * 50)}%, transparent)`;
+    return `color-mix(in oklab, var(--ok) ${Math.round(10 + t * 32)}%, transparent)`;
   }
   const t = (0.5 - f) * 2;
-  return `color-mix(in oklab, var(--danger) ${Math.round(10 + t * 50)}%, transparent)`;
+  return `color-mix(in oklab, var(--danger) ${Math.round(10 + t * 32)}%, transparent)`;
 }
 
 /** Quote-aware split of a command line into arguments. */

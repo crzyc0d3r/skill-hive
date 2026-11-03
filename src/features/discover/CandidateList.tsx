@@ -174,7 +174,7 @@ function CandidateRow({ candidate: c, selected, onToggle }: { candidate: T.Candi
           ) : null}
         </div>
         <p className={cn("line-clamp-1 text-muted", !c.description && "italic text-subtle")}>{c.description || "No description"}</p>
-        <p className="mono truncate text-[10.5px] text-subtle">{displayPath(c.path)}</p>
+        <p className="mono truncate text-[11px] text-subtle">{displayPath(c.path)}</p>
       </div>
       <Tooltip content="Estimated tokens of the instructions">
         <span className="num shrink-0 text-[11px] text-subtle">{formatTokens(c.tokenEstimate)} tok</span>

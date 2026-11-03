@@ -31,7 +31,7 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 surface shadow-lg animate-slide-up outline-none",
+          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 surface text-fg shadow-lg animate-slide-up outline-none",
           "max-h-[85vh] flex flex-col",
           sizes[size],
           className,
@@ -94,7 +94,7 @@ export const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
         ref={ref}
         style={{ width, ...style }}
         className={cn(
-          "fixed top-0 z-50 h-full bg-elevated border-l shadow-lg outline-none flex flex-col",
+          "fixed top-0 z-50 h-full bg-elevated text-fg border-l shadow-lg outline-none flex flex-col",
           side === "right" ? "right-0 animate-slide-in-right" : "left-0 border-l-0 border-r",
           className,
         )}

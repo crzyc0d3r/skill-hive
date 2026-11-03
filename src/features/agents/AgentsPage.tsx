@@ -506,7 +506,7 @@ export function AssetTable({
               </Tooltip>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-[13px] font-medium">{a.name}</span>
-                <span className="mono truncate text-[10.5px] text-subtle" title={a.path}>
+                <span className="mono truncate text-[11px] text-subtle" title={a.path}>
                   {displayPath(a.path)}
                 </span>
               </span>

@@ -95,7 +95,7 @@ export function VerdictBadge({ verdict, delta }: { verdict: T.Verdict; delta?: n
     <Badge tone={meta.tone}>
       <Icon />
       {meta.label}
-      {delta !== undefined ? <span className="num opacity-80">{formatDelta(delta)}</span> : null}
+      {delta !== undefined ? <span className="num">{formatDelta(delta)}</span> : null}
     </Badge>
   );
 }

@@ -149,7 +149,7 @@ export function PlanView({ plan, budgetChars }: { plan: T.LoadoutPlan; budgetCha
                   <KindIcon kind={it.kind} className="size-3.5 shrink-0 text-muted" />
                   <span className="truncate font-medium">{it.name}</span>
                   {it.path ? (
-                    <span className="mono min-w-0 truncate text-[10.5px] text-subtle" title={it.path}>
+                    <span className="mono min-w-0 truncate text-[11px] text-subtle" title={it.path}>
                       {displayPath(it.path)}
                     </span>
                   ) : null}

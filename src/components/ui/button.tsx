@@ -13,7 +13,7 @@ const buttonVariants = cva(
         secondary: "bg-elevated text-fg hairline hover:bg-sunken",
         ghost: "text-muted hover:bg-sunken hover:text-fg",
         subtle: "bg-sunken text-fg hover:bg-line",
-        danger: "bg-danger text-white hover:opacity-90",
+        danger: "bg-danger text-danger-fg hover:opacity-90",
         "danger-ghost": "text-danger hover:bg-danger-soft",
         link: "text-info underline-offset-4 hover:underline px-0 h-auto",
       },

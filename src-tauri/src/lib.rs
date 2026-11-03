@@ -35,7 +35,22 @@ fn init_logging(hive: &Hive) {
     }
 }
 
+/// WebKitGTK's DMA-BUF renderer misbehaves on a number of GPU, driver and compositor
+/// combinations (partially painted windows, wrong colours in composited layers). Prefer the
+/// older rendering path unless the user has chosen explicitly through either WebKit variable.
+#[cfg(target_os = "linux")]
+fn configure_webkit() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+        && std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none()
+    {
+        // SAFETY: runs first thing in `run()`, before any other thread exists.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+    }
+}
+
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    configure_webkit();
     let hive = Hive::open_default().expect("failed to open the Skill Hive home directory");
     init_logging(&hive);
     tracing::info!(home = %hive.paths.home.display(), version = hive_core::version(), "starting Skill Hive");
