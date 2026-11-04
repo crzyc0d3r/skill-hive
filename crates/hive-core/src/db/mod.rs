@@ -1,12 +1,13 @@
 //! SQLite persistence. One connection behind a mutex: every call is short, and long work
 //! (cloning, running evaluations) happens outside the lock.
 
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, params};
 
-use crate::error::{HiveError, Result};
+use crate::error::{HiveError, IoContext, Result};
 use crate::model::ProjectRef;
 
 pub mod deployments;
@@ -17,6 +18,28 @@ pub mod runs;
 
 const SCHEMA: &str = include_str!("schema.sql");
 pub const SCHEMA_VERSION: i64 = 1;
+
+/// Every table of [`SCHEMA`]. A file that has tables but lacks any of these was not written by
+/// this program: an earlier incarnation of Skill Hive kept a different schema under the same
+/// `hive.db` name and also set `user_version`, so the version number alone cannot be trusted.
+const REQUIRED_TABLES: &[&str] = &[
+    "meta",
+    "items",
+    "item_tags",
+    "items_search",
+    "deployments",
+    "projects",
+    "custom_targets",
+    "target_overrides",
+    "loadouts",
+    "loadout_items",
+    "providers",
+    "eval_runs",
+    "eval_case_results",
+    "settings",
+    "cache",
+    "audit",
+];
 
 pub struct Database {
     conn: Mutex<Connection>,
@@ -32,6 +55,11 @@ impl Database {
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| HiveError::io(parent, e))?;
+        }
+        if path.exists() {
+            if let Some(reason) = foreign_database(path) {
+                quarantine(path, &reason)?;
+            }
         }
         let conn = Connection::open(path)?;
         Self::init(conn)
@@ -57,7 +85,10 @@ impl Database {
     fn migrate(&self) -> Result<()> {
         let conn = self.lock();
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version < 1 {
+        // The schema is written with IF NOT EXISTS, so applying it to a database that already
+        // has every table is harmless; the table check covers files whose version number was
+        // set by something else.
+        if version < SCHEMA_VERSION || !missing_tables(&conn)?.is_empty() {
             conn.execute_batch(SCHEMA)?;
             conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         }
@@ -256,6 +287,80 @@ impl Database {
     }
 }
 
+/// Names of the [`REQUIRED_TABLES`] that `conn` does not have.
+fn missing_tables(conn: &Connection) -> Result<Vec<&'static str>> {
+    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")?;
+    let present: HashSet<String> = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(REQUIRED_TABLES
+        .iter()
+        .copied()
+        .filter(|t| !present.contains(*t))
+        .collect())
+}
+
+/// Why an existing `hive.db` cannot be used as it is, or `None` when it is ours (or still empty).
+/// A file that cannot be opened or read counts as foreign too: the index is rebuildable from the
+/// library directory, so starting over beats refusing to start.
+fn foreign_database(path: &Path) -> Option<String> {
+    let conn = match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+        Ok(conn) => conn,
+        Err(e) => return Some(format!("it cannot be opened: {e}")),
+    };
+    let tables: Vec<String> = match conn
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .and_then(|mut s| {
+            s.query_map([], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()
+        }) {
+        Ok(tables) => tables,
+        Err(e) => return Some(format!("it cannot be read: {e}")),
+    };
+    if tables.is_empty() {
+        return None; // a fresh file: the schema goes in next
+    }
+    let present: HashSet<&str> = tables.iter().map(String::as_str).collect();
+    let missing: Vec<&str> = REQUIRED_TABLES
+        .iter()
+        .copied()
+        .filter(|t| !present.contains(t))
+        .collect();
+    if missing.is_empty() {
+        return None;
+    }
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap_or(-1);
+    Some(format!(
+        "it has user_version {version} and {} tables but none called {}",
+        tables.len(),
+        missing.join(", ")
+    ))
+}
+
+/// Move a database that is not ours out of the way (with its WAL and shared-memory files, which
+/// SQLite names after the main file) so a fresh one can be created in its place.
+fn quarantine(path: &Path, reason: &str) -> Result<()> {
+    let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let base = path.to_string_lossy();
+    for suffix in ["", "-wal", "-shm"] {
+        let from = PathBuf::from(format!("{base}{suffix}"));
+        if from.exists() {
+            let to = PathBuf::from(format!("{base}.old-{stamp}{suffix}"));
+            std::fs::rename(&from, &to).at(&from)?;
+        }
+    }
+    tracing::warn!(
+        path = %path.display(),
+        reason,
+        "moved aside a database that was not written by this version of Skill Hive (kept as \
+         {}.old-{stamp}); a fresh one is created, run `hive doctor --reindex` to re-index the library",
+        base
+    );
+    Ok(())
+}
+
 /// Build an FTS5 MATCH expression from free text. Each token becomes a quoted prefix term.
 /// `require_all` joins with AND (library filtering); otherwise OR (ranking for recommendations).
 pub fn fts_query(text: &str, require_all: bool) -> Option<String> {
@@ -323,6 +428,76 @@ mod tests {
             fts_query("say \"hi\"", true).unwrap(),
             "\"say\"* AND \"hi\"*"
         );
+    }
+
+    fn old_files(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.contains(".old-"))
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn database_from_another_program_is_moved_aside() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("hive.db");
+        {
+            // What an earlier incarnation of the app left behind: its own tables and a
+            // user_version that happens to be higher than ours.
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE skills (id TEXT PRIMARY KEY, name TEXT); \
+                 INSERT INTO skills VALUES ('a', 'old'); \
+                 PRAGMA user_version = 7;",
+            )
+            .unwrap();
+        }
+        let db = Database::open(&path).unwrap();
+        assert!(db.list_custom_targets().unwrap().is_empty());
+        db.with(|c| {
+            let v: i64 = c.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+            assert_eq!(v, SCHEMA_VERSION);
+            let old: i64 = c.query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name = 'skills'",
+                [],
+                |r| r.get(0),
+            )?;
+            assert_eq!(
+                old, 0,
+                "the foreign table must not survive into the new file"
+            );
+            Ok(())
+        })
+        .unwrap();
+        let moved = old_files(tmp.path());
+        assert_eq!(moved.len(), 1, "{moved:?}");
+        assert!(moved[0].starts_with("hive.db.old-"));
+    }
+
+    #[test]
+    fn own_database_is_reused_and_a_damaged_file_is_replaced() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("hive.db");
+        {
+            let db = Database::open(&path).unwrap();
+            db.set_setting("theme", &"dark").unwrap();
+        }
+        let db = Database::open(&path).unwrap();
+        assert_eq!(
+            db.get_setting::<String>("theme").unwrap().as_deref(),
+            Some("dark")
+        );
+        assert!(old_files(tmp.path()).is_empty());
+        drop(db);
+
+        std::fs::write(&path, b"this is not a database").unwrap();
+        let db = Database::open(&path).unwrap();
+        assert!(db.get_setting::<String>("theme").unwrap().is_none());
+        assert_eq!(old_files(tmp.path()).len(), 1);
     }
 
     #[test]

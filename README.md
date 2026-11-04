@@ -30,15 +30,15 @@ Installers and CLI binaries for every release are attached to
 [the latest GitHub release](https://github.com/crzyc0d3r/skill-hive/releases/latest). The desktop
 app is called `Skill Hive`; the CLI binary is called `hive`. Builds are not code-signed yet, so
 macOS and Windows show a warning the first time (the steps to get past it are below). In the
-asset names, replace `0.1.2` with the version you download; the downloaded file names have a
+asset names, replace `0.1.3` with the version you download; the downloaded file names have a
 dot where the space in "Skill Hive" is.
 
 ### macOS (11.0 or later)
 
 | Mac | Desktop app | CLI |
 | --- | --- | --- |
-| Apple Silicon (M1 and later) | `Skill.Hive_0.1.2_aarch64.dmg` | `hive-aarch64-apple-darwin.tar.gz` |
-| Intel | `Skill.Hive_0.1.2_x64.dmg` | `hive-x86_64-apple-darwin.tar.gz` |
+| Apple Silicon (M1 and later) | `Skill.Hive_0.1.3_aarch64.dmg` | `hive-aarch64-apple-darwin.tar.gz` |
+| Intel | `Skill.Hive_0.1.3_x64.dmg` | `hive-x86_64-apple-darwin.tar.gz` |
 
 Open the `.dmg` and drag `Skill Hive` into `Applications`. Because the app is unsigned, Gatekeeper
 refuses a normal double-click. On macOS 14 and earlier, right-click (or Control-click) the app in
@@ -55,7 +55,7 @@ xattr -dr com.apple.quarantine "/Applications/Skill Hive.app"
 
 | Installer | CLI |
 | --- | --- |
-| `Skill.Hive_0.1.2_x64-setup.exe` (NSIS) or `Skill.Hive_0.1.2_x64_en-US.msi` (MSI) | `hive-x86_64-pc-windows-msvc.zip` |
+| `Skill.Hive_0.1.3_x64-setup.exe` (NSIS) or `Skill.Hive_0.1.3_x64_en-US.msi` (MSI) | `hive-x86_64-pc-windows-msvc.zip` |
 
 SmartScreen shows "Windows protected your PC" for an unsigned installer. Click **More info**, then
 **Run anyway**. The app needs the WebView2 runtime. Windows 11 and up-to-date Windows 10
@@ -65,9 +65,9 @@ installations already have it; otherwise the installer downloads it.
 
 | Package | File | Install |
 | --- | --- | --- |
-| Debian, Ubuntu and derivatives | `Skill.Hive_0.1.2_amd64.deb` | `sudo apt install ./Skill.Hive_0.1.2_amd64.deb` (or `sudo dpkg -i` the file, then `sudo apt-get install -f`) |
-| Fedora, RHEL, openSUSE | `Skill.Hive-0.1.2-1.x86_64.rpm` | `sudo dnf install ./Skill.Hive-0.1.2-1.x86_64.rpm` |
-| Any distribution | `Skill.Hive_0.1.2_amd64.AppImage` | `chmod +x Skill.Hive_0.1.2_amd64.AppImage && ./Skill.Hive_0.1.2_amd64.AppImage` |
+| Debian, Ubuntu and derivatives | `Skill.Hive_0.1.3_amd64.deb` | `sudo apt install ./Skill.Hive_0.1.3_amd64.deb` (or `sudo dpkg -i` the file, then `sudo apt-get install -f`) |
+| Fedora, RHEL, openSUSE | `Skill.Hive-0.1.3-1.x86_64.rpm` | `sudo dnf install ./Skill.Hive-0.1.3-1.x86_64.rpm` |
+| Any distribution | `Skill.Hive_0.1.3_amd64.AppImage` | `chmod +x Skill.Hive_0.1.3_amd64.AppImage && ./Skill.Hive_0.1.3_amd64.AppImage` |
 | CLI | `hive-x86_64-unknown-linux-gnu.tar.gz` | see below |
 
 The `.deb` depends on `libwebkit2gtk-4.1-0` and the `.rpm` on `webkit2gtk4.1`; the package manager
@@ -513,6 +513,16 @@ finally `ui: ready v<version>` once the interface has rendered and the backend a
 issue with that log and the crash file if there is one. On Windows the WebView2 runtime must be
 present (the installer downloads it when it is missing); on Linux see the next section.
 
+### "database error: no such table ..."
+
+`~/.skill-hive/hive.db` was written by something other than this version of Skill Hive, for
+example the earlier incarnation of the app, which kept a different schema under the same file
+name. Since 0.1.3 the app notices this at startup, moves the file aside as
+`hive.db.old-<timestamp>` (together with its `-wal` and `-shm` companions) and starts with a
+fresh database; the library directory is re-indexed with `hive doctor --reindex` or
+**Settings > About > Re-index library**. On an older build, close the app and rename or delete
+those files by hand. Nothing from the old program is migrated.
+
 ### Linux rendering
 
 The desktop app renders through WebKitGTK. On some GPU, driver and compositor combinations
@@ -640,7 +650,7 @@ Details are in [docs/releasing.md](docs/releasing.md).
 
 ## Status and limitations
 
-- Version 0.1.2 is the current release. Expect rough edges and report them in
+- Version 0.1.3 is the current release. Expect rough edges and report them in
   [the issue tracker](https://github.com/crzyc0d3r/skill-hive/issues).
 - The core, CLI, sources, deployment, conflict analysis, recommender, loadouts and evaluation
   engine are covered by automated tests that run offline, using temporary homes, local git
