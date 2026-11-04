@@ -676,6 +676,7 @@ export function createMockBackend(): Backend {
 
   const handlers: Record<string, (args: Record<string, unknown>) => unknown | Promise<unknown>> = {
     app_info: () => ({ version: "0.1.0", platform: "mock", arch: "wasm" }),
+    ui_report: () => null,
     dashboard: () => ({
       stats: stats(),
       targets: ["claude-code", "codex", "cursor"].map((t) => targetStatus(t, "user", null)),

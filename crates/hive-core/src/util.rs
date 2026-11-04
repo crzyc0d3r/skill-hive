@@ -196,6 +196,29 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     out
 }
 
+/// Windows gives every child of a windowed process a console of its own, so each `git` or
+/// agent CLI the desktop app spawns would flash a black window over it. `CREATE_NO_WINDOW`
+/// prevents that; the flag is meaningless elsewhere.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Keep a child process from opening a console window (Windows only; no-op elsewhere).
+pub fn hide_console(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
+/// [`hide_console`] for a blocking `std::process::Command`.
+pub fn hide_console_std(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Truncate a string to at most `max` characters, appending an ellipsis.
 pub fn truncate_chars(text: &str, max: usize) -> String {
     if text.chars().count() <= max {

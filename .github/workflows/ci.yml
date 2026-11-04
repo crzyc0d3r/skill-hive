@@ -73,7 +73,7 @@ jobs:
           if-no-files-found: ignore
 
   desktop-build:
-    name: Desktop build check (Linux)
+    name: Desktop build and smoke test (Linux)
     runs-on: ubuntu-24.04
     needs: [rust, web]
     steps:
@@ -86,10 +86,18 @@ jobs:
           cache: npm
       - run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf build-essential pkg-config libxdo-dev libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf build-essential pkg-config libxdo-dev libssl-dev xvfb
       - run: npm ci
       - name: Build the app bundle (deb + AppImage)
         run: npx tauri build --bundles deb,appimage
+      - name: Launch the built app and wait for the interface
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/smoke-desktop.mjs --out smoke-desktop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-linux
+          path: smoke-desktop
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: skill-hive-linux
@@ -97,3 +105,44 @@ jobs:
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
+
+  # Nothing else ever runs the real desktop app on Windows or macOS, so build the bare binary and
+  # start it: the job fails unless the interface renders and the backend answers.
+  desktop-smoke:
+    name: Desktop smoke test (${{ matrix.name }})
+    needs: [rust, web]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            tauri_platform: windows
+          - name: macOS
+            os: macos-latest
+            tauri_platform: darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          save-if: ${{ runner.os != 'Windows' }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The Tauri CLI, not plain cargo: it builds the interface for this platform and enables
+      # tauri/custom-protocol, without which the binary would load the dev server URL instead of
+      # the embedded assets.
+      - name: Build the desktop binary
+        run: npx tauri build --no-bundle
+      - name: Launch the app and wait for the interface
+        run: node scripts/smoke-desktop.mjs --out smoke-desktop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.tauri_platform }}
+          path: smoke-desktop
+          if-no-files-found: ignore

@@ -36,6 +36,18 @@ pub async fn app_info() -> CmdResult<serde_json::Value> {
     }))
 }
 
+/// Lets the interface put a line in the desktop log: `ready <version>` once it has rendered and
+/// the backend answered, or an error when it failed to start. The desktop smoke test reads these.
+#[tauri::command]
+pub async fn ui_report(level: String, message: String) -> CmdResult<()> {
+    match level.as_str() {
+        "error" => tracing::error!("ui: {message}"),
+        "warn" => tracing::warn!("ui: {message}"),
+        _ => tracing::info!("ui: {message}"),
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn dashboard(hive: HiveState<'_>) -> CmdResult<Dashboard> {
     blocking(&hive, |h| h.dashboard()).await

@@ -265,13 +265,7 @@ pub fn detect_clis() -> Vec<DetectedCli> {
         (ProviderKind::Codex, "codex"),
     ] {
         if let Ok(path) = which::which(command) {
-            let version = StdCommand::new(&path)
-                .arg("--version")
-                .output()
-                .ok()
-                .filter(|o| o.status.success())
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                .filter(|v| !v.is_empty());
+            let version = probe_version(&path);
             out.push(DetectedCli {
                 kind,
                 command: command.to_string(),
@@ -281,6 +275,43 @@ pub fn detect_clis() -> Vec<DetectedCli> {
         }
     }
     out
+}
+
+/// How long `<cli> --version` may take before it is killed and the version left unknown.
+const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Run `<path> --version` with a bounded wait. The dashboard calls this on every load, so a CLI
+/// that hangs without a terminal (first-run checks, a broken npm shim) must not hang the app,
+/// and on Windows the child must not open a console window over it.
+fn probe_version(path: &std::path::Path) -> Option<String> {
+    let mut cmd = StdCommand::new(path);
+    cmd.arg("--version")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    crate::util::hide_console_std(&mut cmd);
+    let mut child = cmd.spawn().ok()?;
+    let deadline = Instant::now() + VERSION_PROBE_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let output = child.wait_with_output().ok()?;
+                if !status.success() {
+                    return None;
+                }
+                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return (!version.is_empty()).then_some(version);
+            }
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
 }
 
 fn all_roles() -> Vec<ProviderRole> {

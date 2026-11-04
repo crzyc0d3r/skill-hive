@@ -41,6 +41,7 @@ async fn run_git(args: &[&str], cwd: Option<&Path>, timeout: Duration) -> Result
         .env("GIT_LFS_SKIP_SMUDGE", "1")
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
+    crate::util::hide_console(&mut cmd);
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
