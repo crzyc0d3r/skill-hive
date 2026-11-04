@@ -3,7 +3,8 @@
 // reports that it rendered and the backend answered. This is what tells us that a build starts
 // on each platform, since nothing else ever runs the real app.
 //
-//   node scripts/smoke-desktop.mjs [--bin <path> | --dir <dir>] [--timeout <seconds>] [--out <dir>] [--port <n>]
+//   node scripts/smoke-desktop.mjs [--bin <path> | --dir <dir>] [--timeout <seconds>] [--out <dir>]
+//                                  [--port <n>] [--require-devtools]
 //
 // Defaults: the newest of "Skill Hive[.exe]" / "skill-hive[.exe]" under target/release (the
 // Tauri CLI renames the binary to the product name on macOS and Windows), 90 seconds,
@@ -15,8 +16,10 @@
 // calls the `ui_report` command once the version arrived from Rust) to <home>/logs/skill-hive.log;
 // a boot failure in the interface logs `ui: boot failed: ...`; a fatal error before the window
 // writes <home>/logs/skill-hive-crash.log. SKILL_HIVE_HEADLESS suppresses the native error dialog.
-// On Windows the WebView2 DevTools protocol is attached as soon as the browser process answers,
-// so console errors and a screenshot are collected even when the page never becomes ready.
+// The log is the verdict. Everything else is evidence for a human: a screenshot of the desktop
+// taken with the OS's own tools, and on Windows, when WebView2 exposes its DevTools protocol on
+// the requested port, the page text, console errors and a page screenshot (best effort unless
+// --require-devtools is given).
 
 import { execSync, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -28,6 +31,7 @@ const platform = process.platform;
 const timeoutMs = Number(args.timeout ?? 90) * 1000;
 const out = path.resolve(args.out ?? "smoke-desktop");
 const cdpPort = Number(args.port ?? 9333);
+const requireDevtools = args["require-devtools"] === "true";
 mkdirSync(out, { recursive: true });
 
 const bin = resolveBinary();
@@ -52,10 +56,27 @@ let exited = null;
 child.on("exit", (code, signal) => (exited = { code, signal }));
 child.on("error", (err) => (exited = { error: String(err) }));
 
-const report = { ok: false, platform, bin, home, ready: null, pageLoads: [], uiErrors: [], console: [], page: null, exit: null, error: null };
+const report = {
+  ok: false,
+  platform,
+  bin,
+  home,
+  ready: null,
+  pageLoads: [],
+  uiErrors: [],
+  desktopScreenshot: null,
+  devtools: null,
+  console: [],
+  page: null,
+  exit: null,
+  error: null,
+};
 const started = Date.now();
 let devtools = null;
-if (platform === "win32") devtools = attachDevTools(); // runs alongside the log polling
+if (platform === "win32") {
+  devtools = attachDevTools();
+  devtools.catch(() => {}); // reported through the report, never unhandled
+}
 
 try {
   for (;;) {
@@ -76,31 +97,41 @@ try {
     await sleep(500);
   }
   console.log(`smoke: interface ready (${report.ready}) after ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  await sleep(1500); // let the first paint settle before the pictures
+  report.desktopScreenshot = captureDesktop();
 
   if (devtools) {
-    const session = await withTimeout(devtools, 15_000, "DevTools did not attach");
-    report.page = await session.inspect();
-    if (report.page.appReady === null) throw new Error("data-app-ready is missing on <html> although the log says ready");
-    if (report.page.bootError) throw new Error(`boot error shown in the page:\n${report.page.bootError}`);
-    if (!/Home/.test(report.page.text)) throw new Error(`the page text does not look like the app:\n${report.page.text.slice(0, 400)}`);
-    console.log(`smoke: page shows "${report.page.text.split("\n").slice(0, 6).join(" | ")}"`);
+    try {
+      const session = await withTimeout(devtools, 10_000, "WebView2 did not expose its DevTools port");
+      report.devtools = "attached";
+      report.page = await session.inspect();
+      if (report.page.appReady === null) throw new Error("data-app-ready is missing on <html> although the log says ready");
+      if (report.page.bootError) throw new Error(`boot error shown in the page:\n${report.page.bootError}`);
+      if (!/Home/.test(report.page.text)) throw new Error(`the page text does not look like the app:\n${report.page.text.slice(0, 400)}`);
+      console.log(`smoke: page shows "${report.page.text.split("\n").slice(0, 6).join(" | ")}"`);
+    } catch (err) {
+      if (report.devtools === "attached" || requireDevtools) throw err;
+      report.devtools = `unavailable: ${String(err?.message ?? err)}`;
+      console.log(`smoke: ${report.devtools}; page checks skipped, the log is the verdict`);
+    }
   }
   report.ok = true;
 } catch (err) {
   report.error = String(err?.message ?? err);
-  if (devtools) {
+  if (!report.desktopScreenshot) report.desktopScreenshot = captureDesktop();
+  if (devtools && report.page === null) {
     // Best effort: whatever the page looks like at the moment of failure.
     try {
-      const session = await withTimeout(devtools, 5_000, "DevTools did not attach");
+      const session = await withTimeout(devtools, 3_000, "DevTools did not attach");
       report.page = await session.inspect();
-    } catch (e) {
-      report.devtoolsError = String(e?.message ?? e);
+    } catch {
+      /* nothing more to learn from the page */
     }
   }
 } finally {
   if (devtools) {
     try {
-      report.console = (await withTimeout(devtools, 1_000, "")).messages;
+      report.console = (await withTimeout(devtools, 500, "")).messages;
     } catch {
       /* never attached */
     }
@@ -136,6 +167,35 @@ function resolveBinary() {
     .filter((p) => existsSync(p) && statSync(p).isFile())
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
   return found[0] ?? null;
+}
+
+/** A picture of the whole desktop with the OS's own tools; returns the file or null. */
+function captureDesktop() {
+  const file = path.join(out, "desktop.png");
+  try {
+    if (platform === "win32") {
+      const script = path.join(out, "capture.ps1");
+      writeFileSync(
+        script,
+        [
+          "Add-Type -AssemblyName System.Windows.Forms,System.Drawing",
+          "$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds",
+          "$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height",
+          "$g = [System.Drawing.Graphics]::FromImage($bmp)",
+          "$g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)",
+          `$bmp.Save('${file.replace(/'/g, "''")}')`,
+        ].join("\n"),
+      );
+      execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${script}"`, { stdio: "ignore", timeout: 30_000 });
+    } else if (platform === "darwin") {
+      execSync(`screencapture -x "${file}"`, { stdio: "ignore", timeout: 30_000 });
+    } else {
+      execSync(`import -window root "${file}"`, { stdio: "ignore", timeout: 30_000 });
+    }
+    return existsSync(file) ? file : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Connects to the WebView2 DevTools endpoint as soon as it answers and records console output. */

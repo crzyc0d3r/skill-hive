@@ -615,8 +615,9 @@ screenshots and `report.json` go; `--filter <text>` limits the routes.
 differ from the generated ones, so run both and commit the result after changing a model type.
 
 **Desktop smoke test.** `scripts/smoke-desktop.mjs` starts the built binary against an empty
-home directory and fails unless the log reports `ui: ready` within the timeout; on Windows it
-also reads the page through WebView2's DevTools protocol and saves a screenshot. Build the
+home directory and fails unless the log reports `ui: ready` within the timeout. It also saves a
+screenshot of the desktop, and on Windows it tries to read the page through WebView2's DevTools
+protocol (`--require-devtools` makes that mandatory). Build the
 binary with `npx tauri build --no-bundle` first: a plain `cargo build` leaves out the
 `tauri/custom-protocol` feature and the binary would try to load the dev server instead of the
 embedded interface. On a Linux machine without a display wrap the script in `xvfb-run -a`.
