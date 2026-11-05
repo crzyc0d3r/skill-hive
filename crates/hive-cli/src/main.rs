@@ -127,6 +127,9 @@ enum Command {
     /// Comparative evaluations.
     #[command(subcommand)]
     Eval(EvalCmd),
+    /// The instruction files agents load on every session (CLAUDE.md, AGENTS.md, rules folders).
+    #[command(subcommand)]
+    Instructions(InstructionsCmd),
 }
 
 #[derive(Args)]
@@ -389,6 +392,39 @@ enum RoleArg {
     Executor,
     Grader,
     Recommender,
+}
+
+#[derive(Subcommand)]
+enum InstructionsCmd {
+    /// List the instruction locations of the detected agents, whether they exist or not.
+    List {
+        /// Project root for project-scope files; omitted lists the user-scope files.
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Print an instruction file (or one of its backups).
+    Show {
+        path: String,
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Write an instruction file from a file (`--from`) or standard input. A backup of the
+    /// previous content is kept under the Hive home.
+    Write {
+        path: String,
+        #[arg(long)]
+        from: Option<PathBuf>,
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Delete an instruction file (a backup is kept).
+    Delete {
+        path: String,
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Backups Hive kept of an instruction file, oldest first.
+    Backups { path: String },
 }
 
 #[derive(Subcommand)]
@@ -984,6 +1020,7 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Command::Provider(cmd) => cmd_provider(&hive, &out, cmd).await?,
         Command::Eval(cmd) => cmd_eval(&hive, &out, cmd).await?,
+        Command::Instructions(cmd) => cmd_instructions(&hive, &out, cmd)?,
     }
     Ok(())
 }
@@ -1411,6 +1448,120 @@ fn print_plan(plan: &LoadoutPlan) {
             .unwrap_or_default()
     );
     print_conflicts(&plan.conflicts);
+}
+
+fn cmd_instructions(hive: &Hive, out: &Out, cmd: InstructionsCmd) -> Result<()> {
+    match cmd {
+        InstructionsCmd::List { project } => {
+            let scope = if project.is_some() {
+                Scope::Project
+            } else {
+                Scope::User
+            };
+            let files = hive.instruction_files(scope, project.as_deref())?;
+            out.emit(&files, || {
+                if files.is_empty() {
+                    out.note("No agent with instruction files is detected on this machine.");
+                    return;
+                }
+                out.table(
+                    &["Agents", "File", "What", "Status", "Tokens"],
+                    files
+                        .iter()
+                        .map(|f| {
+                            vec![
+                                f.target_names.join(", "),
+                                f.display.clone(),
+                                f.label.clone(),
+                                match (f.kind, f.exists) {
+                                    (InstructionKind::Directory, true) => "folder".into(),
+                                    (InstructionKind::Directory, false) => "no folder".into(),
+                                    (InstructionKind::File, true) => {
+                                        format!("{} lines", f.lines)
+                                    }
+                                    (InstructionKind::File, false) => "missing".into(),
+                                },
+                                if f.exists && f.kind == InstructionKind::File {
+                                    f.tokens.to_string()
+                                } else {
+                                    String::new()
+                                },
+                            ]
+                        })
+                        .collect(),
+                );
+                out.note(
+                    "Write one with `hive instructions write <path> --from file.md` (or from stdin); a backup is kept.",
+                );
+            })?;
+        }
+        InstructionsCmd::Show { path, project } => {
+            let doc = hive.read_instruction_file(&path, project.as_deref())?;
+            out.emit(&doc, || {
+                if !doc.file.exists {
+                    out.warn(format!("{} does not exist yet", doc.file.display));
+                } else {
+                    print!("{}", doc.text);
+                    if !doc.text.ends_with('\n') {
+                        println!();
+                    }
+                }
+            })?;
+        }
+        InstructionsCmd::Write {
+            path,
+            from,
+            project,
+        } => {
+            let text = match from {
+                Some(file) => std::fs::read_to_string(&file)
+                    .with_context(|| format!("reading {}", file.display()))?,
+                None => {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)
+                        .context("reading standard input")?;
+                    buf
+                }
+            };
+            let doc = hive.write_instruction_file(&path, &text, project.as_deref())?;
+            out.emit(&doc, || {
+                out.ok(format!(
+                    "wrote {} ({} lines, ~{} tokens)",
+                    doc.file.path, doc.file.lines, doc.file.tokens
+                ))
+            })?;
+        }
+        InstructionsCmd::Delete { path, project } => {
+            let file = hive.delete_instruction_file(&path, project.as_deref())?;
+            out.emit(&file, || {
+                out.ok(format!("deleted {} (backup kept)", file.path))
+            })?;
+        }
+        InstructionsCmd::Backups { path } => {
+            let backups = hive.instruction_backups(&path)?;
+            out.emit(&backups, || {
+                if backups.is_empty() {
+                    out.note("No backups yet.");
+                    return;
+                }
+                out.table(
+                    &["Saved", "Size", "Backup"],
+                    backups
+                        .iter()
+                        .map(|b| {
+                            vec![
+                                hive_core::util::iso_from_ms(b.saved_at),
+                                hive_core::util::human_bytes(b.size_bytes),
+                                b.path.clone(),
+                            ]
+                        })
+                        .collect(),
+                );
+                out.note("Restore one with `hive instructions show <backup> | hive instructions write <path>`.");
+            })?;
+        }
+    }
+    Ok(())
 }
 
 async fn cmd_merge(hive: &Hive, out: &Out, args: MergeArgs) -> Result<()> {

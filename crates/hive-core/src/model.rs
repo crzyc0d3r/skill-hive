@@ -1000,6 +1000,77 @@ pub struct RecommendResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Standing instruction files (CLAUDE.md, AGENTS.md, rules folders)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum InstructionKind {
+    /// One markdown (or plain text) file the agent reads on every session.
+    File,
+    /// A folder of rule files the agent reads together; its members are listed as files.
+    Directory,
+}
+
+/// An instruction file an agent loads into every session: Claude Code's `CLAUDE.md`, Codex's
+/// `AGENTS.md`, Gemini's `GEMINI.md`, Cursor's rules folder and so on. Listed whether or not it
+/// exists yet, so a missing one can be created.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct InstructionFile {
+    /// Absolute path.
+    pub path: String,
+    /// `~/.claude/CLAUDE.md` for user scope, `CLAUDE.md` for project scope.
+    pub display: String,
+    pub scope: Scope,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_path: Option<String>,
+    /// Targets that read this exact path (`AGENTS.md` is shared by several).
+    pub target_ids: Vec<String>,
+    pub target_names: Vec<String>,
+    /// What the file is to the agent ("User memory", "Rules folder", "Project instructions").
+    pub label: String,
+    pub kind: InstructionKind,
+    /// For a directory: the file-name suffix its members need (`.mdc`, `.md`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    /// For a member of a rules folder: the folder's path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    pub exists: bool,
+    pub size_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified_at: Option<i64>,
+    /// Estimated tokens the file costs on every session (0 when missing or a directory).
+    pub tokens: u32,
+    pub lines: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// An instruction file with its text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct InstructionDocument {
+    pub file: InstructionFile,
+    pub text: String,
+}
+
+/// A copy Hive kept before overwriting or deleting an instruction file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct InstructionBackup {
+    /// Absolute path of the backup copy (readable through the same read command).
+    pub path: String,
+    pub saved_at: i64,
+    pub size_bytes: u64,
+}
+
+// ---------------------------------------------------------------------------
 // Merging overlapping skills
 // ---------------------------------------------------------------------------
 
@@ -1996,6 +2067,8 @@ pub enum HiveEvent {
     },
     LibraryChanged,
     DeploymentsChanged,
+    /// An instruction file (CLAUDE.md, AGENTS.md, …) was written or deleted.
+    InstructionsChanged,
     Log {
         level: String,
         message: String,

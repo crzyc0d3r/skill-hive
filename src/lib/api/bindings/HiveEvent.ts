@@ -10,4 +10,4 @@ export type HiveEvent = { "type": "progress",
 /**
  * Operation id (scan, import, fetch, run…).
  */
-op: string, message: string, done?: number | null, total?: number | null, } | { "type": "run_updated", run_id: string, status: RunStatus, progress: RunProgress, } | { "type": "case_finished", run_id: string, result: CaseResult, } | { "type": "library_changed" } | { "type": "deployments_changed" } | { "type": "log", level: string, message: string, };
+op: string, message: string, done?: number | null, total?: number | null, } | { "type": "run_updated", run_id: string, status: RunStatus, progress: RunProgress, } | { "type": "case_finished", run_id: string, result: CaseResult, } | { "type": "library_changed" } | { "type": "deployments_changed" } | { "type": "instructions_changed" } | { "type": "log", level: string, message: string, };

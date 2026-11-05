@@ -84,6 +84,11 @@ impl HivePaths {
         self.home.join("secrets.json")
     }
 
+    /// Copies kept before an instruction file is overwritten or deleted.
+    pub fn instruction_backups_dir(&self) -> PathBuf {
+        self.home.join("backups").join("instructions")
+    }
+
     /// Create every directory Hive needs.
     pub fn ensure(&self) -> Result<()> {
         for dir in [

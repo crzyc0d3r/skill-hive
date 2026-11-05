@@ -14,6 +14,7 @@ pub mod error;
 pub mod evals;
 pub mod hash;
 pub mod hive;
+pub mod instructions;
 pub mod library;
 pub mod loadouts;
 pub mod merge;

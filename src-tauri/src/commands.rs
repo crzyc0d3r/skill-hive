@@ -378,6 +378,65 @@ pub async fn recommend(
     Ok(hive.recommend(&request).await?)
 }
 
+// ---- instruction files ------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn instructions_list(
+    hive: HiveState<'_>,
+    scope: Scope,
+    project_path: Option<String>,
+) -> CmdResult<Vec<InstructionFile>> {
+    blocking(&hive, move |h| {
+        h.instruction_files(scope, project_path.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn instruction_read(
+    hive: HiveState<'_>,
+    path: String,
+    project_path: Option<String>,
+) -> CmdResult<InstructionDocument> {
+    blocking(&hive, move |h| {
+        h.read_instruction_file(&path, project_path.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn instruction_write(
+    hive: HiveState<'_>,
+    path: String,
+    text: String,
+    project_path: Option<String>,
+) -> CmdResult<InstructionDocument> {
+    blocking(&hive, move |h| {
+        h.write_instruction_file(&path, &text, project_path.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn instruction_delete(
+    hive: HiveState<'_>,
+    path: String,
+    project_path: Option<String>,
+) -> CmdResult<InstructionFile> {
+    blocking(&hive, move |h| {
+        h.delete_instruction_file(&path, project_path.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn instruction_backups(
+    hive: HiveState<'_>,
+    path: String,
+) -> CmdResult<Vec<InstructionBackup>> {
+    blocking(&hive, move |h| h.instruction_backups(&path)).await
+}
+
 // ---- merging skills ---------------------------------------------------------------------------
 
 #[tauri::command]
