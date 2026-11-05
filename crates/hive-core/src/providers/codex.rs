@@ -67,13 +67,12 @@ fn u64_at(v: &Value, key: &str) -> u64 {
 
 impl CodexSummary {
     fn absorb_usage(&mut self, usage: &Value) {
+        // Codex reports cached tokens as a subset of the input tokens (OpenAI API semantics),
+        // so `input_tokens` already includes them. Readings are cumulative: keep the largest.
         let input = u64_at(usage, "input_tokens");
-        let cached = u64_at(usage, "cached_input_tokens");
         let output = u64_at(usage, "output_tokens");
-        if input + cached + output > 0 {
-            // Older builds report cached tokens as a subset of input tokens; newer ones report
-            // them separately. Taking the max keeps both readings sane.
-            self.input_tokens = (input + cached).max(self.input_tokens);
+        if input + output > 0 {
+            self.input_tokens = input.max(self.input_tokens);
             self.output_tokens = output.max(self.output_tokens);
         }
     }
@@ -342,7 +341,11 @@ mod tests {
         }
         assert_eq!(s.tool_calls, 2);
         assert_eq!(s.last_message.as_deref(), Some("Done, wrote a.md"));
-        assert_eq!((s.input_tokens, s.output_tokens), (140, 25));
+        assert_eq!(
+            (s.input_tokens, s.output_tokens),
+            (100, 25),
+            "cached tokens are a subset of the input tokens"
+        );
         assert_eq!(s.model.as_deref(), Some("gpt-5-codex"));
         assert!(s.error.is_none());
     }
@@ -364,7 +367,7 @@ mod tests {
         }
         assert_eq!(s.tool_calls, 2);
         assert_eq!(s.last_message.as_deref(), Some("All set."));
-        assert_eq!((s.input_tokens, s.output_tokens), (60, 5));
+        assert_eq!((s.input_tokens, s.output_tokens), (50, 5));
         assert_eq!(s.model.as_deref(), Some("o4-mini"));
 
         let mut s = CodexSummary::default();

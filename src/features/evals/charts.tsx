@@ -4,7 +4,7 @@
 import * as React from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ErrorBar, Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 import type * as T from "@/lib/api/bindings";
-import { formatDate, formatPercent } from "@/lib/utils";
+import { formatDate, formatPercent, formatTokens } from "@/lib/utils";
 import { ArmSwatch } from "./bits";
 import { armColor, armColors, armLabel } from "./shared";
 
@@ -158,6 +158,80 @@ export function ArmPassRateChart({ arms, height = 220 }: { arms: T.ArmSummary[];
               ))}
               <ErrorBar dataKey="sd" width={6} strokeWidth={1.5} stroke="var(--fg-muted)" />
             </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// Where the output tokens went. Fixed colours per use that no arm uses (arms take chart-1/2
+// and variants chart-3…5): two chart tokens for the reasoning kinds and a neutral for the
+// data that merely moved through tool arguments, so the stack never reads as an arm.
+const OUTPUT_USES = [
+  { key: "thinking", label: "Thinking", color: "var(--chart-4)" },
+  { key: "text", label: "Text", color: "var(--chart-5)" },
+  { key: "toolInput", label: "Tool arguments", color: "var(--fg-subtle)" },
+] as const;
+
+interface OutputDatum {
+  key: string;
+  label: string;
+  thinking: number;
+  text: number;
+  toolInput: number;
+  activity: T.ArmActivity;
+}
+
+/** Mean output tokens per run and arm, stacked by what they were spent on (estimates). */
+export function OutputTokenChart({ arms, rowHeight = 44 }: { arms: T.ArmSummary[]; rowHeight?: number }) {
+  const data = React.useMemo<OutputDatum[]>(
+    () =>
+      arms
+        .filter((a): a is T.ArmSummary & { activity: T.ArmActivity } => !!a.activity)
+        .map((a) => ({
+          key: a.label,
+          label: armLabel(a.label),
+          thinking: Math.round(a.activity.thinkingTokens.mean),
+          text: Math.round(a.activity.textTokens.mean),
+          toolInput: Math.round(a.activity.toolInputTokens.mean),
+          activity: a.activity,
+        })),
+    [arms],
+  );
+  const height = 36 + data.length * rowHeight;
+  // Room for the longest arm label at the 11px tick size, within sane bounds.
+  const labelWidth = Math.min(160, Math.max(72, 12 + 6.5 * Math.max(0, ...data.map((d) => d.label.length))));
+  return (
+    <div className="flex flex-col gap-2">
+      <ChartLegend entries={OUTPUT_USES.map((u) => ({ label: u.label, color: u.color }))} />
+      <div style={{ height }} role="img" aria-label="Output tokens per arm by use">
+        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 400, height }}>
+          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, bottom: 0, left: 0 }} barCategoryGap="28%">
+            <CartesianGrid horizontal={false} stroke="var(--line)" />
+            <XAxis type="number" tickFormatter={(v: number) => formatTokens(v)} tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+            <YAxis type="category" dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} width={labelWidth} />
+            <ChartTooltip
+              cursor={{ fill: "var(--bg-sunken)" }}
+              content={({ active, payload }) => {
+                const d = payload?.[0]?.payload as OutputDatum | undefined;
+                if (!active || !d) return null;
+                const total = d.thinking + d.text + d.toolInput;
+                return (
+                  <TipFrame
+                    title={`${d.label} · ${formatTokens(total)} output tokens per run`}
+                    rows={[
+                      ...OUTPUT_USES.map((u) => ({ label: u.label, value: `${formatTokens(d[u.key])} · ${formatPercent(total ? d[u.key] / total : 0)}`, color: u.color })),
+                      { label: "Tool results (input)", value: formatTokens(Math.round(d.activity.toolResultTokens.mean)) },
+                      { label: "IO share", value: formatPercent(d.activity.ioShare.mean) },
+                    ]}
+                  />
+                );
+              }}
+            />
+            {OUTPUT_USES.map((u, i) => (
+              <Bar key={u.key} dataKey={u.key} name={u.label} stackId="out" fill={u.color} stroke="var(--bg-elevated)" strokeWidth={2} radius={i === OUTPUT_USES.length - 1 ? [0, 4, 4, 0] : 0} maxBarSize={28} isAnimationActive={false} />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </div>

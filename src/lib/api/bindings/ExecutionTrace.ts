@@ -32,9 +32,24 @@ filesWritten: Array<string>,
  */
 filesReadCount: number, filesWrittenCount: number, 
 /**
- * Reads of files inside the installed skill (`SKILL.md`, bundled scripts…).
+ * Reads of files inside the installed skill (`SKILL.md`, bundled scripts…), including
+ * loading it through Claude Code's `Skill` tool.
  */
-skillReads: number, thinkingBlocks: number, thinkingChars: number, textBlocks: number, textChars: number, 
+skillReads: number, 
+/**
+ * The skill was in the model's context without a read: API providers put `SKILL.md` in
+ * the system prompt.
+ */
+skillInContext: boolean, 
+/**
+ * Model calls made by subagents (Claude Code forwards them with `parent_tool_use_id`);
+ * not included in `turns`.
+ */
+subagentTurns: number, 
+/**
+ * Tool calls made by subagents; not included in `tool_calls` or the categories.
+ */
+subagentToolCalls: number, thinkingBlocks: number, thinkingChars: number, textBlocks: number, textChars: number, 
 /**
  * Characters of serialised tool arguments (file contents written, commands, patterns).
  */

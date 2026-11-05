@@ -84,57 +84,184 @@ fn first_chars(text: &str, max: usize) -> String {
     )
 }
 
-/// Strip environment assignments, `sudo`, and a leading `cd … &&` from a command line.
-fn command_words(command: &str) -> Vec<&str> {
+/// Agents run shell scripts through a wrapper (`bash -lc '<script>'`, the way Codex and many
+/// Claude Code commands do). Return the script when `command` is such a wrapper, with one
+/// layer of quotes removed.
+fn unwrap_shell(command: &str) -> Option<String> {
+    let mut words = command.trim().splitn(3, char::is_whitespace);
+    let program = words.next()?.rsplit('/').next()?;
+    if !matches!(program, "bash" | "sh" | "zsh" | "dash" | "ksh") {
+        return None;
+    }
+    let flag = words.next()?;
+    if !(flag.starts_with('-') && flag.contains('c') && flag.len() <= 5 && !flag.starts_with("--"))
+    {
+        return None;
+    }
+    let script = words.next()?.trim();
+    let unquoted = if script.len() >= 2 && script.starts_with('\'') && script.ends_with('\'') {
+        script[1..script.len() - 1].replace("'\\''", "'")
+    } else if script.len() >= 2 && script.starts_with('"') && script.ends_with('"') {
+        script[1..script.len() - 1]
+            .replace("\\\"", "\"")
+            .replace("\\$", "$")
+            .replace("\\\\", "\\")
+    } else {
+        script.to_string()
+    };
+    Some(unquoted)
+}
+
+/// The command line without a shell wrapper and without a heredoc body (the body is data,
+/// not commands).
+fn command_text(command: &str) -> String {
+    let mut text = command.to_string();
+    for _ in 0..2 {
+        match unwrap_shell(&text) {
+            Some(inner) => text = inner,
+            None => break,
+        }
+    }
+    if let Some(pos) = text.find("<<") {
+        if let Some(newline) = text[pos..].find('\n') {
+            text.truncate(pos + newline);
+        }
+    }
+    text
+}
+
+/// Split a command line into words the way a shell would: quotes group, backslashes escape,
+/// and the quote characters themselves are dropped.
+fn shell_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut in_word = false;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for c in text.chars() {
+        if escaped {
+            current.push(c);
+            escaped = false;
+            in_word = true;
+        } else if c == '\\' && quote != Some('\'') {
+            escaped = true;
+            in_word = true;
+        } else if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            } else {
+                current.push(c);
+            }
+        } else if c == '\'' || c == '"' {
+            quote = Some(c);
+            in_word = true;
+        } else if c.is_whitespace() {
+            if in_word {
+                words.push(std::mem::take(&mut current));
+                in_word = false;
+            }
+        } else {
+            current.push(c);
+            in_word = true;
+        }
+    }
+    if in_word {
+        words.push(current);
+    }
+    words
+}
+
+/// Strip environment assignments, `sudo`, and leading `cd … &&` / `export … &&` segments
+/// from a (wrapper-free) command line.
+fn command_words(command: &str) -> Vec<String> {
     let mut segments: Vec<&str> = command.split("&&").map(str::trim).collect();
     // `cd dir && real-command`: the real command decides.
-    while segments.len() > 1 && (segments[0] == "cd" || segments[0].starts_with("cd ")) {
+    while segments.len() > 1
+        && ["cd", "export", "set", "source", "."]
+            .iter()
+            .any(|p| segments[0] == *p || segments[0].starts_with(&format!("{p} ")))
+    {
         segments.remove(0);
     }
     let first = segments.first().copied().unwrap_or("");
     // Only the first pipeline stage decides the category.
     let stage = first.split('|').next().unwrap_or("").trim();
-    stage
-        .split_whitespace()
+    shell_words(stage)
+        .into_iter()
         .skip_while(|w| {
-            *w == "sudo"
-                || *w == "env"
-                || *w == "time"
-                || (w.contains('=') && !w.starts_with('-') && !w.starts_with('"'))
+            w == "sudo"
+                || w == "env"
+                || w == "time"
+                || (w.contains('=') && !w.starts_with('-') && !w.starts_with('>'))
         })
         .collect()
 }
 
-/// Does a command line write to the file system? A `>` redirect outside of `2>&1`-style
-/// stderr plumbing, or a writing program.
-fn command_writes(command: &str, words: &[&str]) -> bool {
-    let cleaned = command
-        .replace("2>&1", "")
-        .replace("2>/dev/null", "")
-        .replace(">/dev/null", "")
-        .replace("> /dev/null", "");
-    if cleaned.contains('>') && !cleaned.contains("<<") {
+/// Is there a `>` redirect outside quotes, other than `2>&1`-style stderr plumbing?
+fn has_redirect(command: &str) -> bool {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let chars: Vec<char> = command.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if escaped {
+            escaped = false;
+        } else if c == '\\' && quote != Some('\'') {
+            escaped = true;
+        } else if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            }
+        } else if c == '\'' || c == '"' {
+            quote = Some(c);
+        } else if c == '>' {
+            let stderr_only = i > 0 && chars[i - 1] == '2';
+            let rest: String = chars[i..].iter().collect();
+            let target = rest
+                .trim_start_matches('>')
+                .trim_start_matches('|')
+                .trim_start();
+            if !(stderr_only
+                || target.starts_with("&1")
+                || target.starts_with("/dev/null")
+                || target.starts_with("&2"))
+            {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Does a command line write to the file system? A redirect, `| tee`, or a writing program.
+fn command_writes(command: &str, words: &[String]) -> bool {
+    if has_redirect(command) {
         return true;
     }
-    if cleaned.contains("| tee ") || cleaned.contains("|tee ") {
+    if command.contains("| tee ") || command.contains("|tee ") {
         return true;
     }
-    match words.first().copied() {
+    match words.first().map(|w| w.rsplit('/').next().unwrap_or(w)) {
         Some(
             "touch" | "mkdir" | "cp" | "mv" | "rm" | "rmdir" | "ln" | "tee" | "chmod" | "chown",
         ) => true,
-        Some("sed") => words.iter().any(|w| *w == "-i" || w.starts_with("-i")),
+        Some("sed") => words
+            .iter()
+            .any(|w| w == "-i" || w.starts_with("-i") || w == "--in-place"),
         _ => false,
     }
 }
 
 /// Classify a shell command line.
 pub fn classify_command(command: &str) -> ToolCategory {
-    let words = command_words(command);
-    if command_writes(command, &words) {
+    let text = command_text(command);
+    let words = command_words(&text);
+    if command_writes(&text, &words) {
         return ToolCategory::Write;
     }
-    let Some(program) = words.first().copied() else {
+    let Some(program) = words.first() else {
         return ToolCategory::Command;
     };
     let program = program.rsplit('/').next().unwrap_or(program);
@@ -144,7 +271,7 @@ pub fn classify_command(command: &str) -> ToolCategory {
         "ls" | "find" | "grep" | "egrep" | "fgrep" | "rg" | "fd" | "fdfind" | "ag" | "ack"
         | "tree" | "wc" | "which" | "whereis" | "locate" | "type" | "stat" | "file" | "du"
         | "pwd" | "realpath" => ToolCategory::Search,
-        "git" => match words.get(1).copied() {
+        "git" => match words.get(1).map(String::as_str) {
             Some("grep" | "ls-files" | "status" | "log" | "diff" | "show" | "blame") => {
                 ToolCategory::Search
             }
@@ -156,7 +283,7 @@ pub fn classify_command(command: &str) -> ToolCategory {
 }
 
 /// The file a reading command targets (`cat path`, `head -n 5 path`), if any.
-fn command_file(words: &[&str]) -> Option<String> {
+fn command_file(words: &[String]) -> Option<String> {
     let program = words.first()?.rsplit('/').next()?;
     if !matches!(
         program,
@@ -180,14 +307,35 @@ fn command_file(words: &[&str]) -> Option<String> {
             skip_next = false;
             continue;
         }
-        if *w == "-n" || *w == "-c" {
+        if w == "-n" || w == "-c" || w == ">" || w == ">>" {
+            // `-n 5`, `-c 400`, and `> target` / `>> target` take the next word.
             skip_next = true;
             continue;
         }
-        if w.starts_with('-') {
+        if w.starts_with('-') || w.starts_with('<') || w.starts_with('>') {
             continue;
         }
-        return Some(w.trim_matches(|c| c == '"' || c == '\'').to_string());
+        return Some(w.clone());
+    }
+    None
+}
+
+/// The file a reading command line targets, after unwrapping any shell wrapper.
+fn command_read_file(command: &str) -> Option<String> {
+    let text = command_text(command);
+    command_file(&command_words(&text))
+}
+
+/// The skill a Claude Code `Skill` tool call invokes (`{"skill": "name"}`, or `"name args"`).
+fn invoked_skill(input: &Value) -> Option<String> {
+    for key in ["skill", "command", "name"] {
+        if let Some(s) = input.get(key).and_then(Value::as_str) {
+            let name = s.trim().trim_start_matches('/');
+            let name = name.split_whitespace().next().unwrap_or("");
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
     }
     None
 }
@@ -219,6 +367,9 @@ pub fn categorize_tool(name: &str, input: &Value) -> ToolCategory {
         "bashoutput" | "killshell" | "killbash" | "monitor" => ToolCategory::Command,
         "webfetch" | "websearch" | "fetch" | "web_search" | "web_fetch" => ToolCategory::Web,
         "task" | "agent" | "subagent" | "dispatch_agent" => ToolCategory::Subagent,
+        // Claude Code loads a project skill through its `Skill` tool: that is how the agent
+        // opens SKILL.md, so it counts as a read of the skill.
+        "skill" => ToolCategory::Read,
         _ => ToolCategory::Other,
     }
 }
@@ -261,6 +412,7 @@ fn describe_tool(name: &str, input: &Value) -> String {
             .or_else(|| input.get("prompt"))
             .and_then(Value::as_str)
             .map(str::to_string),
+        "skill" => invoked_skill(input).map(|s| format!("skill {s}")),
         _ => tool_path(input),
     };
     let text = text.unwrap_or_else(|| {
@@ -276,6 +428,36 @@ fn describe_tool(name: &str, input: &Value) -> String {
 
 fn u64_at(v: &Value, key: &str) -> u64 {
     v.get(key).and_then(Value::as_u64).unwrap_or(0)
+}
+
+/// Split `total` across buckets in proportion to `weights` so the parts sum to `total`
+/// exactly (largest-remainder rounding).
+fn largest_remainder<const N: usize>(total: u64, weights: [u64; N]) -> [u64; N] {
+    let sum: u64 = weights.iter().sum();
+    let mut out = [0u64; N];
+    if sum == 0 {
+        return out;
+    }
+    let mut remainders = [0f64; N];
+    let mut assigned = 0u64;
+    for i in 0..N {
+        let exact = total as f64 * weights[i] as f64 / sum as f64;
+        out[i] = exact.floor() as u64;
+        remainders[i] = exact - out[i] as f64;
+        assigned += out[i];
+    }
+    let mut left = total.saturating_sub(assigned);
+    while left > 0 {
+        let (i, _) =
+            remainders.iter().enumerate().fold(
+                (0, -1.0),
+                |best, (i, r)| if *r > best.1 { (i, *r) } else { best },
+            );
+        out[i] += 1;
+        remainders[i] = -1.0;
+        left -= 1;
+    }
+    out
 }
 
 /// Characters of a tool result's content (a string, or text blocks).
@@ -331,25 +513,36 @@ impl TraceBuilder {
         let p = normalize_path(path);
         if !self.cwd.is_empty() {
             if let Some(rest) = p.strip_prefix(&self.cwd) {
-                let rest = rest.trim_start_matches('/');
-                if !rest.is_empty() {
-                    return rest.to_string();
+                // `/sb/x` is inside `/sb`; `/sb10/x` is a sibling and stays absolute.
+                if let Some(inside) = rest.strip_prefix('/') {
+                    let inside = inside.trim_start_matches('/');
+                    if !inside.is_empty() {
+                        return inside.to_string();
+                    }
                 }
             }
         }
         p
     }
 
+    /// Is `text` a path inside the installed skill directory (`<marker>/…`), or the directory
+    /// itself? A sibling skill whose name merely starts with the marker does not count.
     fn is_skill_path(&self, text: &str) -> bool {
+        let Some(marker) = self.skill_marker.as_deref() else {
+            return false;
+        };
+        let text = normalize_path(text);
+        text.contains(&format!("{marker}/")) || text.ends_with(marker)
+    }
+
+    /// The installed skill's name: the last component of the marker.
+    fn skill_name(&self) -> Option<&str> {
         self.skill_marker
             .as_deref()
-            .is_some_and(|m| normalize_path(text).contains(m))
+            .and_then(|m| m.rsplit('/').next())
     }
 
     fn push_step(&mut self, step: TraceStep) {
-        if step.at_ms.is_some() {
-            self.timed = true;
-        }
         if self.trace.steps.len() < STEP_CAP {
             self.trace.steps.push(step);
         } else {
@@ -453,6 +646,9 @@ impl TraceBuilder {
         if self.trace.first_tool_ms.is_none() {
             self.trace.first_tool_ms = at_ms;
         }
+        if at_ms.is_some() {
+            self.timed = true;
+        }
         let open = OpenTool {
             name: name.to_string(),
             at_ms,
@@ -468,10 +664,40 @@ impl TraceBuilder {
             kind: TraceStepKind::ToolUse,
             tool: Some(name.to_string()),
             category: Some(category),
-            summary: summary.to_string(),
+            summary: first_chars(summary, SUMMARY_CHARS),
             chars: input_chars,
             is_error: false,
         });
+    }
+
+    /// Record an event of a subagent (Claude Code forwards them with `parent_tool_use_id`).
+    /// They count in `subagent_turns` / `subagent_tool_calls` and appear in the timeline,
+    /// but not in the headline counters, the files, or the tool time: the parent's own
+    /// `Task` call already spans them.
+    fn nested_step(
+        &mut self,
+        kind: TraceStepKind,
+        tool: Option<&str>,
+        summary: &str,
+        chars: u64,
+        is_error: bool,
+        at_ms: Option<u64>,
+    ) {
+        self.push_step(TraceStep {
+            at_ms,
+            kind,
+            tool: tool.map(str::to_string),
+            category: None,
+            summary: first_chars(&format!("↳ {summary}"), SUMMARY_CHARS),
+            chars,
+            is_error,
+        });
+    }
+
+    /// Mark that the skill was in the model's context without a tool call (API providers put
+    /// `SKILL.md` in the system prompt).
+    pub fn set_skill_in_context(&mut self, in_context: bool) {
+        self.trace.skill_in_context = in_context;
     }
 
     /// Record a tool result. With an `id` it closes that call; without one it closes the last
@@ -528,7 +754,99 @@ impl TraceBuilder {
         }
     }
 
+    /// Events of a subagent: counted apart, shown in the timeline, otherwise left alone.
+    fn absorb_nested_claude(&mut self, event: &Value, at_ms: Option<u64>) {
+        let message = &event["message"];
+        let Some(blocks) = message.get("content").and_then(Value::as_array) else {
+            return;
+        };
+        match event.get("type").and_then(Value::as_str) {
+            Some("assistant") => {
+                let counted = match message.get("id").and_then(Value::as_str) {
+                    Some(id) => self.messages.insert(format!("nested:{id}")),
+                    None => true,
+                };
+                if counted {
+                    self.trace.subagent_turns += 1;
+                }
+                for block in blocks {
+                    match block.get("type").and_then(Value::as_str) {
+                        Some("thinking") => {
+                            let t = block.get("thinking").and_then(Value::as_str).unwrap_or("");
+                            self.nested_step(
+                                TraceStepKind::Thinking,
+                                None,
+                                t,
+                                t.chars().count() as u64,
+                                false,
+                                at_ms,
+                            );
+                        }
+                        Some("text") => {
+                            let t = block.get("text").and_then(Value::as_str).unwrap_or("");
+                            self.nested_step(
+                                TraceStepKind::Text,
+                                None,
+                                t,
+                                t.chars().count() as u64,
+                                false,
+                                at_ms,
+                            );
+                        }
+                        Some("tool_use") => {
+                            self.trace.subagent_tool_calls += 1;
+                            let name = block.get("name").and_then(Value::as_str).unwrap_or("tool");
+                            let input = block.get("input").cloned().unwrap_or(Value::Null);
+                            let summary = describe_tool(name, &input);
+                            let chars = serde_json::to_string(&input)
+                                .map(|s| s.chars().count() as u64)
+                                .unwrap_or(0);
+                            self.nested_step(
+                                TraceStepKind::ToolUse,
+                                Some(name),
+                                &summary,
+                                chars,
+                                false,
+                                at_ms,
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Some("user") => {
+                for block in blocks {
+                    if block.get("type").and_then(Value::as_str) != Some("tool_result") {
+                        continue;
+                    }
+                    let (chars, excerpt) =
+                        result_chars(block.get("content").unwrap_or(&Value::Null));
+                    let is_error = block
+                        .get("is_error")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    self.nested_step(
+                        TraceStepKind::ToolResult,
+                        None,
+                        &excerpt,
+                        chars,
+                        is_error,
+                        at_ms,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn absorb_claude(&mut self, event: &Value, at_ms: Option<u64>) {
+        if event
+            .get("parent_tool_use_id")
+            .is_some_and(|p| !p.is_null())
+        {
+            self.absorb_nested_claude(event, at_ms);
+            return;
+        }
         match event.get("type").and_then(Value::as_str) {
             Some("assistant") => {
                 let message = &event["message"];
@@ -576,17 +894,28 @@ impl TraceBuilder {
                         Some("tool_use") => {
                             let name = block.get("name").and_then(Value::as_str).unwrap_or("tool");
                             let input = block.get("input").cloned().unwrap_or(Value::Null);
-                            let category = categorize_tool(name, &input);
-                            let words;
-                            let path = match tool_path(&input) {
-                                Some(p) => Some(p),
-                                None if category == ToolCategory::Read => {
-                                    let command =
-                                        input.get("command").and_then(Value::as_str).unwrap_or("");
-                                    words = command_words(command);
-                                    command_file(&words)
+                            let mut category = categorize_tool(name, &input);
+                            let path = if name.eq_ignore_ascii_case("skill") {
+                                // The Skill tool opens the installed skill when it names it;
+                                // any other skill (a user-level one) is just another tool.
+                                let installed = invoked_skill(&input).is_some_and(|s| {
+                                    self.skill_name()
+                                        .is_some_and(|n| n.eq_ignore_ascii_case(&s))
+                                });
+                                if installed {
+                                    self.skill_marker.as_ref().map(|m| format!("{m}/SKILL.md"))
+                                } else {
+                                    category = ToolCategory::Other;
+                                    None
                                 }
-                                None => None,
+                            } else {
+                                match tool_path(&input) {
+                                    Some(p) => Some(p),
+                                    None if category == ToolCategory::Read => command_read_file(
+                                        input.get("command").and_then(Value::as_str).unwrap_or(""),
+                                    ),
+                                    None => None,
+                                }
                             };
                             let input_chars = if input.is_null() {
                                 0
@@ -655,16 +984,13 @@ impl TraceBuilder {
     }
 
     fn codex_usage(&mut self, usage: &Value) {
+        // Codex reports cached tokens as a subset of the input tokens (OpenAI API semantics)
+        // and cache writes separately.
         let input = u64_at(usage, "input_tokens");
         let cached = u64_at(usage, "cached_input_tokens");
-        // Older builds report cached tokens as a subset of the input tokens.
-        let uncached = if cached <= input {
-            input - cached
-        } else {
-            input
-        };
         self.anonymous_usage.cache_read += cached;
-        self.anonymous_usage.uncached += uncached;
+        self.anonymous_usage.uncached += input.saturating_sub(cached);
+        self.anonymous_usage.cache_creation += u64_at(usage, "cache_write_input_tokens");
     }
 
     fn codex_command(
@@ -677,9 +1003,8 @@ impl TraceBuilder {
         started_at: Option<u64>,
     ) {
         let category = classify_command(command);
-        let words = command_words(command);
         let path = if category == ToolCategory::Read {
-            command_file(&words)
+            command_read_file(command)
         } else {
             None
         };
@@ -892,9 +1217,8 @@ impl TraceBuilder {
                     _ => String::new(),
                 };
                 let category = classify_command(&command);
-                let words = command_words(&command);
                 let path = if category == ToolCategory::Read {
-                    command_file(&words)
+                    command_read_file(&command)
                 } else {
                     None
                 };
@@ -1034,11 +1358,13 @@ impl TraceBuilder {
                 self.tool_result(call_id.as_deref(), chars, &excerpt, false, at_ms);
             }
             Some("token_count") => {
-                let usage = msg
-                    .get("info")
-                    .and_then(|i| i.get("total_token_usage"))
-                    .unwrap_or(msg);
-                // token_count is cumulative: keep the latest reading.
+                // token_count is cumulative: keep the latest reading. Rate-limit-only updates
+                // carry no usage and leave the last reading alone.
+                let usage = match msg.get("info").and_then(|i| i.get("total_token_usage")) {
+                    Some(u) if !u.is_null() => u,
+                    _ if msg.get("input_tokens").is_some() => msg,
+                    _ => return,
+                };
                 self.anonymous_usage = Usage::default();
                 self.codex_usage(usage);
             }
@@ -1052,14 +1378,13 @@ impl TraceBuilder {
         let mut t = std::mem::take(&mut self.trace);
         let total_chars = t.thinking_chars + t.text_chars + t.tool_input_chars;
         if output_tokens > 0 && total_chars > 0 {
-            let share = |chars: u64| {
-                ((output_tokens as f64) * (chars as f64) / (total_chars as f64)).round() as u64
-            };
-            t.thinking_tokens = share(t.thinking_chars);
-            t.text_tokens = share(t.text_chars);
-            t.tool_input_tokens = output_tokens
-                .saturating_sub(t.thinking_tokens)
-                .saturating_sub(t.text_tokens);
+            let split = largest_remainder(
+                output_tokens,
+                [t.thinking_chars, t.text_chars, t.tool_input_chars],
+            );
+            t.thinking_tokens = split[0];
+            t.text_tokens = split[1];
+            t.tool_input_tokens = split[2];
         } else {
             t.thinking_tokens = ceil_div4(t.thinking_chars);
             t.text_tokens = ceil_div4(t.text_chars);
@@ -1258,8 +1583,8 @@ mod tests {
         let lines = [
             r##"{"type":"thread.started","model":"gpt-5-codex"}"##,
             r##"{"type":"item.completed","item":{"id":"r0","type":"reasoning","text":"Look at the skill, then write."}}"##,
-            r##"{"type":"item.started","item":{"id":"i0","type":"command_execution","command":"cat .codex/skills/report-writer/SKILL.md"}}"##,
-            r##"{"type":"item.completed","item":{"id":"i0","type":"command_execution","command":"cat .codex/skills/report-writer/SKILL.md","aggregated_output":"# Report writer","exit_code":0}}"##,
+            r##"{"type":"item.started","item":{"id":"i0","type":"command_execution","command":"/bin/bash -lc 'cat .codex/skills/report-writer/SKILL.md'"}}"##,
+            r##"{"type":"item.completed","item":{"id":"i0","type":"command_execution","command":"/bin/bash -lc 'cat .codex/skills/report-writer/SKILL.md'","aggregated_output":"# Report writer","exit_code":0}}"##,
             r##"{"type":"item.started","item":{"id":"i1","type":"command_execution","command":"ls"}}"##,
             r##"{"type":"item.completed","item":{"id":"i1","type":"command_execution","command":"ls","aggregated_output":"notes.txt","exit_code":0}}"##,
             r##"{"type":"item.completed","item":{"id":"i2","type":"file_change","changes":[{"path":"/sb/report.md","kind":"add"},{"path":"/sb/notes/extra.md","kind":"add"}]}}"##,
@@ -1311,14 +1636,248 @@ mod tests {
             b.absorb_line(l, None);
         }
         let t = b.finish(5);
-        // `bash -lc ls`: the wrapper is a command, not a search; the raw count is what matters.
+        // `bash -lc ls`: the wrapper is unwrapped and the script classified.
         assert_eq!(t.tool_calls, 2);
+        assert_eq!(t.searches, 1);
         assert_eq!(t.writes, 1);
         assert_eq!(t.files_written, vec!["a.txt"]);
         assert_eq!(t.thinking_blocks, 1);
         assert_eq!((t.cache_read_tokens, t.uncached_input_tokens), (10, 40));
         assert_eq!(t.tools["command_execution"], 1);
         assert_eq!(t.tools["patch_apply"], 1);
+    }
+
+    #[test]
+    fn shell_wrappers_heredocs_and_quotes() {
+        assert_eq!(unwrap_shell("bash -lc 'cat x'").as_deref(), Some("cat x"));
+        assert_eq!(
+            unwrap_shell("/bin/bash -c \"grep -n \\\"a\\\" f\"").as_deref(),
+            Some("grep -n \"a\" f")
+        );
+        assert_eq!(
+            unwrap_shell("bash -lc 'echo '\\''hi'\\'''").as_deref(),
+            Some("echo 'hi'")
+        );
+        assert_eq!(unwrap_shell("bash script.sh"), None);
+        assert_eq!(unwrap_shell("bashful -c x"), None);
+        assert_eq!(
+            classify_command("/bin/bash -lc 'cat .codex/skills/report-writer/SKILL.md'"),
+            ToolCategory::Read
+        );
+        assert_eq!(
+            command_read_file("bash -lc 'cat .codex/skills/x/SKILL.md'").as_deref(),
+            Some(".codex/skills/x/SKILL.md")
+        );
+        assert_eq!(classify_command("sh -c \"ls -la\""), ToolCategory::Search);
+        // Heredocs: the body is data; the redirect decides.
+        assert_eq!(
+            classify_command("cat > out.md <<'EOF'\nhello\nEOF"),
+            ToolCategory::Write
+        );
+        assert_eq!(
+            classify_command("cat <<'EOF' > out.md\nhello\nEOF"),
+            ToolCategory::Write
+        );
+        assert_eq!(
+            classify_command("cat << EOF >> notes.txt\nx\nEOF"),
+            ToolCategory::Write
+        );
+        assert_eq!(
+            classify_command("cat <<'EOF'\ncat > not-a-redirect\nEOF"),
+            ToolCategory::Read
+        );
+        assert_eq!(command_read_file("cat > out.md <<'EOF'\nhello\nEOF"), None);
+        assert_eq!(command_read_file("cat <<'EOF' > out.md\nx\nEOF"), None);
+        // A `>` inside quotes is not a redirect.
+        assert_eq!(
+            classify_command("grep -n \"->\" src/"),
+            ToolCategory::Search
+        );
+        assert_eq!(classify_command("rg '=>' src"), ToolCategory::Search);
+        assert_eq!(
+            classify_command("python -c \"print(1 > 0)\""),
+            ToolCategory::Command
+        );
+        assert_eq!(classify_command("FOO=\"a > b\" ls"), ToolCategory::Search);
+        assert_eq!(classify_command("npm test 2>&1"), ToolCategory::Command);
+        assert_eq!(
+            classify_command("npm test &>/dev/null"),
+            ToolCategory::Command
+        );
+        assert_eq!(
+            classify_command("npm test 2>/dev/null"),
+            ToolCategory::Command
+        );
+        assert_eq!(classify_command("echo hi >out.txt"), ToolCategory::Write);
+        assert_eq!(
+            classify_command("sed --in-place 's/a/b/' f"),
+            ToolCategory::Write
+        );
+        assert_eq!(classify_command("export X=1 && cat y"), ToolCategory::Read);
+        assert_eq!(
+            classify_command("ünïcödé > 日本語.txt"),
+            ToolCategory::Write
+        );
+    }
+
+    #[test]
+    fn skill_tool_counts_as_opening_the_skill() {
+        let lines = [
+            r##"{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"report-writer"}}],"usage":{"input_tokens":1,"output_tokens":10}}}"##,
+            r##"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Launching skill: report-writer"}]}}"##,
+            r##"{"type":"assistant","message":{"id":"m2","content":[{"type":"tool_use","id":"t2","name":"Skill","input":{"skill":"other-skill"}}],"usage":{"input_tokens":1,"output_tokens":10}}}"##,
+            r##"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"Launching skill: other-skill"}]}}"##,
+        ];
+        let mut b = TraceBuilder::new(
+            Dialect::ClaudeCode,
+            Path::new("/sb"),
+            Some(".claude/skills/report-writer"),
+        );
+        for l in lines {
+            b.absorb_line(l, None);
+        }
+        let t = b.finish(20);
+        assert_eq!(t.skill_reads, 1);
+        assert_eq!(t.reads, 1);
+        assert_eq!(t.other_tools, 1, "another skill is just another tool");
+        assert_eq!(t.files_read, vec![".claude/skills/report-writer/SKILL.md"]);
+        assert_eq!(t.steps[0].summary, "skill report-writer");
+        assert_eq!(t.tools["Skill"], 2);
+
+        // A sibling skill whose name starts with the marker is not the skill.
+        let mut b = TraceBuilder::new(
+            Dialect::ClaudeCode,
+            Path::new("/sb"),
+            Some(".claude/skills/pdf"),
+        );
+        b.tool_use(
+            None,
+            "Read",
+            ToolCategory::Read,
+            "x",
+            Some("/home/u/.claude/skills/pdf-forms/SKILL.md"),
+            0,
+            None,
+        );
+        b.tool_use(
+            None,
+            "Read",
+            ToolCategory::Read,
+            "x",
+            Some("/sb/.claude/skills/pdf/SKILL.md"),
+            0,
+            None,
+        );
+        b.tool_use(
+            None,
+            "Bash",
+            ToolCategory::Read,
+            "cat .claude/skills/pdf/scripts/a.py",
+            None,
+            0,
+            None,
+        );
+        let t = b.finish(0);
+        assert_eq!(t.skill_reads, 2);
+        assert_eq!(t.files_read_count, 2);
+    }
+
+    #[test]
+    fn subagent_events_are_counted_apart() {
+        let lines = [
+            r##"{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"Task","input":{"description":"look around"}}]}}"##,
+            r##"{"type":"assistant","parent_tool_use_id":"t1","message":{"id":"s1","content":[{"type":"tool_use","id":"s1a","name":"Read","input":{"file_path":"/sb/notes.txt"}}]}}"##,
+            r##"{"type":"user","parent_tool_use_id":"t1","message":{"content":[{"type":"tool_result","tool_use_id":"s1a","content":"notes"}]}}"##,
+            r##"{"type":"assistant","parent_tool_use_id":"t1","message":{"id":"s2","content":[{"type":"text","text":"found it"}]}}"##,
+            r##"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"found it"}]}}"##,
+        ];
+        let mut b = TraceBuilder::new(Dialect::ClaudeCode, Path::new("/sb"), None);
+        for (i, l) in lines.iter().enumerate() {
+            b.absorb_line(l, Some(i as u64 * 100));
+        }
+        let t = b.finish(0);
+        assert_eq!(t.turns, 1);
+        assert_eq!(t.tool_calls, 1);
+        assert_eq!(t.subagents, 1);
+        assert_eq!(t.reads, 0, "the subagent's read is not the parent's");
+        assert_eq!(t.subagent_turns, 2);
+        assert_eq!(t.subagent_tool_calls, 1);
+        assert_eq!(t.tool_time_ms, Some(400), "only the Task call's own span");
+        assert_eq!(t.steps.len(), 5);
+        assert!(t.steps[1].summary.starts_with("↳ "));
+        assert_eq!(t.files_read_count, 0);
+    }
+
+    #[test]
+    fn token_split_sums_exactly_and_paths_stay_outside_siblings() {
+        assert_eq!(largest_remainder(5, [1, 1, 0]), [3, 2, 0]);
+        assert_eq!(largest_remainder(100, [199, 199, 2]), [50, 50, 0]);
+        assert_eq!(largest_remainder(100, [150, 150, 100]), [38, 37, 25]);
+        assert_eq!(largest_remainder(7, [0, 0, 0]), [0, 0, 0]);
+        let mut b = TraceBuilder::new(Dialect::ClaudeCode, Path::new("/tmp/hive/run1"), None);
+        b.thinking("a", None);
+        b.text("b", None);
+        b.tool_use(
+            None,
+            "Read",
+            ToolCategory::Read,
+            "x",
+            Some("/tmp/hive/run10/notes.txt"),
+            0,
+            None,
+        );
+        b.tool_use(
+            None,
+            "Read",
+            ToolCategory::Read,
+            "x",
+            Some("/tmp/hive/run1/notes.txt"),
+            0,
+            None,
+        );
+        b.tool_use(
+            None,
+            "Read",
+            ToolCategory::Read,
+            &"é".repeat(500),
+            Some("C:\\x\\y.txt"),
+            0,
+            None,
+        );
+        let t = b.finish(5);
+        assert_eq!(t.thinking_tokens + t.text_tokens + t.tool_input_tokens, 5);
+        assert_eq!(
+            t.files_read,
+            vec!["/tmp/hive/run10/notes.txt", "C:/x/y.txt", "notes.txt"]
+        );
+        assert!(t.steps[2].summary.chars().count() <= SUMMARY_CHARS);
+        assert_eq!(t.tool_time_ms, None, "no timestamps");
+
+        // A completion-style trace has text but no tool calls: no tool time at all.
+        let mut b = TraceBuilder::new(Dialect::ClaudeCode, Path::new("/sb"), None);
+        b.turn();
+        b.text("answer", Some(1200));
+        b.set_skill_in_context(true);
+        let t = b.finish(3);
+        assert_eq!(t.tool_time_ms, None);
+        assert!(t.skill_in_context);
+
+        // A token_count without usage leaves the last reading alone.
+        let mut b = TraceBuilder::new(Dialect::Codex, Path::new("/sb"), None);
+        b.absorb_line(r##"{"msg":{"type":"token_count","info":{"total_token_usage":{"input_tokens":50,"cached_input_tokens":10,"cache_write_input_tokens":5}}}}"##, None);
+        b.absorb_line(
+            r##"{"msg":{"type":"token_count","info":null,"rate_limits":{}}}"##,
+            None,
+        );
+        let t = b.finish(0);
+        assert_eq!(
+            (
+                t.cache_read_tokens,
+                t.uncached_input_tokens,
+                t.cache_creation_tokens
+            ),
+            (10, 40, 5)
+        );
     }
 
     #[test]

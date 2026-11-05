@@ -4,7 +4,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Copy, FileText, FolderOpen, Info, Loader2, MoreHorizontal, Square, Trash2, XCircle } from "lucide-react";
+import { ArrowLeft, Brain, CheckCircle2, ChevronDown, ChevronRight, Copy, FileText, FolderOpen, Info, Loader2, MessageSquare, MoreHorizontal, Square, Trash2, Wrench, XCircle } from "lucide-react";
 import type * as T from "@/lib/api/bindings";
 import { api } from "@/lib/api/client";
 import { keys, useApiMutation, useProviders, useRun } from "@/lib/api/hooks";
@@ -35,9 +35,9 @@ import {
   revealPath,
 } from "@/components/ui";
 import { ErrorNote, InlineCode, Page, PageBody, PageHeader, VerdictBadge } from "@/components/app/common";
-import { ArmPassRateChart } from "./charts";
+import { ArmPassRateChart, OutputTokenChart } from "./charts";
 import { ArmSwatch, MiniStat } from "./bits";
-import { CASE_STATUS_META, PATTERN_META, RUN_STATUS_META, armColors, armLabel, formatCI, formatPValue, formatRateStats, interpretBenchmark, isActiveRun, passFractionFill } from "./shared";
+import { CASE_STATUS_META, PATTERN_META, RUN_STATUS_META, TOOL_CATEGORY_META, armColors, armLabel, formatCI, formatPValue, formatRateStats, formatStat, interpretBenchmark, isActiveRun, passFractionFill, skillArms } from "./shared";
 
 export function RunPage() {
   const { runId } = useParams<{ runId: string }>();
@@ -166,6 +166,7 @@ export function RunPage() {
                 <ArmStatsTable bench={bench} />
               </div>
             </section>
+            {bench.arms.some((a) => a.activity) ? <ActivitySection bench={bench} armSpecs={run.config.arms} /> : null}
             <ExpectationMatrix bench={bench} />
             {bench.trigger ? <TriggerSection trigger={bench.trigger} /> : null}
             {bench.notes.length ? <NotesSection notes={bench.notes} /> : null}
@@ -176,7 +177,7 @@ export function RunPage() {
             {results.length ? " Individual case results are below." : ""}
           </div>
         ) : null}
-        <CaseResults runId={run.id} results={results} arms={run.config.arms.map((a) => a.label)} live={active} />
+        <CaseResults runId={run.id} results={results} armSpecs={run.config.arms} live={active} />
       </PageBody>
 
       <ConfirmDialog
@@ -318,6 +319,102 @@ function ArmStatsTable({ bench }: { bench: T.Benchmark }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+type ActivityRow = { label: string; hint?: string; cell: (a: T.ArmActivity, arm: T.ArmSummary) => { value: string; sd?: string | null } | null };
+
+function ActivitySection({ bench, armSpecs }: { bench: T.Benchmark; armSpecs: T.ArmSpec[] }) {
+  const arms = bench.arms;
+  const colors = armColors(arms.map((a) => a.label));
+  const withSkill = skillArms(armSpecs);
+  const count = (s: T.Stats) => formatStat(s, (v) => v.toFixed(1));
+  const tokens = (s: T.Stats) => formatStat(s, (v) => formatTokens(Math.round(v)));
+  const time = (s: T.Stats) => (s.n > 0 ? formatStat(s, formatDuration) : null);
+  const rows: ActivityRow[] = [
+    { label: "Model turns", cell: (a) => count(a.turns) },
+    { label: "Tool calls", cell: (a) => count(a.toolCalls) },
+    { label: "File reads", cell: (a) => count(a.reads) },
+    { label: "Searches", hint: "Grep, Glob, ls, find…", cell: (a) => count(a.searches) },
+    { label: "Writes", cell: (a) => count(a.writes) },
+    { label: "Commands", cell: (a) => count(a.commands) },
+    { label: "Tool errors", cell: (a) => count(a.toolErrors) },
+    { label: "Distinct files read", cell: (a) => count(a.filesRead) },
+    { label: "Distinct files written", cell: (a) => count(a.filesWritten) },
+    { label: "Opened the skill", hint: "Share of runs that loaded the skill: read SKILL.md or a bundled script, invoked it through the Skill tool, or had it in the system prompt (API providers)", cell: (a, arm) => (withSkill.has(arm.label) ? { value: formatPercent(a.skillOpened) } : null) },
+    { label: "Thinking tokens", hint: "estimate", cell: (a) => tokens(a.thinkingTokens) },
+    { label: "Text tokens", hint: "estimate", cell: (a) => tokens(a.textTokens) },
+    { label: "Tool-argument tokens", hint: "estimate", cell: (a) => tokens(a.toolInputTokens) },
+    { label: "Tool-result tokens", hint: "estimate", cell: (a) => tokens(a.toolResultTokens) },
+    { label: "IO share", hint: "tool arguments + tool results over all model traffic", cell: (a) => formatStat(a.ioShare, (v) => formatPercent(v)) },
+    { label: "Cache reads", hint: "input tokens served from the prompt cache", cell: (a) => tokens(a.cacheReadTokens) },
+    { label: "Fresh input", hint: "input tokens not read from the cache", cell: (a) => tokens(a.freshInputTokens) },
+    { label: "Model time", hint: "time waiting for the model, as the provider reports it (Claude Code's API time)", cell: (a) => time(a.modelTimeMs) },
+    { label: "Tool time", hint: "sum of the gaps between each tool call and its result, measured from the event stream", cell: (a) => time(a.toolTimeMs) },
+  ];
+  const head = "px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle whitespace-nowrap";
+  return (
+    <section className="surface p-4">
+      <SectionTitle
+        title="Activity"
+        description="What the agent did, mean per traced run with ± one standard deviation. Token splits are estimates from character counts (≈ 4 per token); turns and cache figures are as the provider reported them, model time is the provider's API time and tool time is measured from the event stream."
+      />
+      <div className="mt-3 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
+        <div className="flex flex-col gap-2">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-subtle">Output tokens by use</div>
+          <OutputTokenChart arms={arms} />
+          <p className="text-[11px] text-muted">Thinking is the chain of thought, text the visible answer, tool arguments the files written and commands typed. Tool results flow the other way, as input.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs" aria-label="Activity">
+            <thead>
+              <tr className="border-b">
+                <th className={cn(head, "text-left")}>Metric</th>
+                {arms.map((a) => (
+                  <th key={a.label} className={cn(head, "text-right")}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <ArmSwatch color={colors[a.label]} /> {armLabel(a.label)}
+                    </span>
+                    {a.activity ? <span className="block text-[11px] font-normal normal-case tracking-normal text-subtle">{a.activity.traced} traced</span> : null}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.label} className="border-b last:border-b-0">
+                  <td className="px-2 py-1 whitespace-nowrap">
+                    {row.label}
+                    {row.hint ? (
+                      <Tooltip content={row.hint}>
+                        <button type="button" aria-label={row.hint} className="ml-1 inline-flex align-[-2px] text-subtle hover:text-fg">
+                          <Info className="size-3" />
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                  </td>
+                  {arms.map((a) => {
+                    const c = a.activity ? row.cell(a.activity, a) : null;
+                    return (
+                      <td key={a.label} className="num whitespace-nowrap px-2 py-1 text-right">
+                        {c ? (
+                          <>
+                            {c.value}
+                            {c.sd ? <span className="text-subtle"> {c.sd}</span> : null}
+                          </>
+                        ) : (
+                          <span className="text-subtle">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -483,11 +580,13 @@ function NotesSection({ notes }: { notes: string[] }) {
 
 const ALL = "__all__";
 
-function CaseResults({ runId, results, arms, live }: { runId: string; results: T.CaseResult[]; arms: string[]; live: boolean }) {
+function CaseResults({ runId, results, armSpecs, live }: { runId: string; results: T.CaseResult[]; armSpecs: T.ArmSpec[]; live: boolean }) {
   const [arm, setArm] = React.useState(ALL);
   const [caseName, setCaseName] = React.useState(ALL);
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const [transcriptFor, setTranscriptFor] = React.useState<T.CaseResult | null>(null);
+  const arms = React.useMemo(() => armSpecs.map((a) => a.label), [armSpecs]);
+  const withSkill = React.useMemo(() => skillArms(armSpecs), [armSpecs]);
   const colors = armColors(arms);
   const caseNames = React.useMemo(() => [...new Set(results.map((r) => r.caseName))], [results]);
   const armOptions = React.useMemo(() => [...new Set([...arms, ...results.map((r) => r.arm)])], [arms, results]);
@@ -570,7 +669,7 @@ function CaseResults({ runId, results, arms, live }: { runId: string; results: T
                   <span className="num text-right text-muted">{formatDuration(r.durationMs)}</span>
                   <span className="num text-right text-muted">{r.toolCalls}</span>
                 </button>
-                {open ? <CaseDetail result={r} onTranscript={() => setTranscriptFor(r)} /> : null}
+                {open ? <CaseDetail result={r} hasSkill={withSkill.has(r.arm)} onTranscript={() => setTranscriptFor(r)} /> : null}
               </div>
             );
           })}
@@ -581,7 +680,8 @@ function CaseResults({ runId, results, arms, live }: { runId: string; results: T
   );
 }
 
-function CaseDetail({ result: r, onTranscript }: { result: T.CaseResult; onTranscript: () => void }) {
+function CaseDetail({ result: r, hasSkill, onTranscript }: { result: T.CaseResult; hasSkill: boolean; onTranscript: () => void }) {
+  const graderTokens = r.graderInputTokens + r.graderOutputTokens;
   return (
     <div className="grid gap-4 border-t bg-sunken/40 px-4 py-3 text-xs lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <div className="flex flex-col gap-1.5">
@@ -627,7 +727,151 @@ function CaseDetail({ result: r, onTranscript }: { result: T.CaseResult; onTrans
           {r.costUsd ? <span className="ml-auto num text-subtle">${r.costUsd.toFixed(2)}</span> : null}
         </div>
       </div>
+      <div className="flex min-w-0 flex-col gap-2 lg:col-span-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-subtle">Activity</div>
+          {graderTokens > 0 ? <span className="num text-[11px] text-subtle">Grader spent {formatTokens(graderTokens)} tokens</span> : null}
+        </div>
+        {r.trace ? <CaseActivity trace={r.trace} hasSkill={hasSkill} /> : <p className="text-muted">No activity trace for this run (recorded for runs started with this version).</p>}
+      </div>
     </div>
+  );
+}
+
+function StatChip({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "ok" | "danger" }) {
+  return (
+    <span className="inline-flex items-baseline gap-1 rounded-md bg-elevated px-2 py-1 hairline">
+      <span className={cn("num font-medium", tone === "ok" ? "text-ok" : tone === "danger" ? "text-danger" : "")}>{value}</span>
+      <span className="text-muted">{label}</span>
+    </span>
+  );
+}
+
+const FILE_LIST_FOLD = 6;
+
+function FileList({ title, files, total }: { title: string; files: string[]; total: number }) {
+  const [all, setAll] = React.useState(false);
+  if (total === 0) return null;
+  const shown = all ? files : files.slice(0, FILE_LIST_FOLD);
+  const hidden = files.length - shown.length;
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 text-[11px] text-subtle">
+        {title} <span className="num">({total})</span>
+      </div>
+      <ul className="flex flex-col gap-0.5">
+        {shown.map((f) => (
+          <li key={f} className="mono break-all text-[11.5px] selectable">
+            {f}
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 || all ? (
+        <button type="button" className="mt-1 text-[11px] text-muted underline-offset-2 hover:underline" onClick={() => setAll((v) => !v)} aria-expanded={all}>
+          {all ? "Show fewer" : `Show all ${files.length}`}
+        </button>
+      ) : null}
+      {total > files.length ? <div className="mt-1 text-[11px] text-subtle">{total - files.length} more not listed</div> : null}
+    </div>
+  );
+}
+
+function CaseActivity({ trace: t, hasSkill }: { trace: T.ExecutionTrace; hasSkill: boolean }) {
+  const [timeline, setTimeline] = React.useState(false);
+  const opened = t.skillReads > 0 || t.skillInContext;
+  const hasTimeline = t.steps.length > 0 || t.stepsTruncated > 0;
+  return (
+    <div className="flex min-w-0 flex-col gap-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        <StatChip label="turns" value={t.turns} />
+        <StatChip label="tool calls" value={t.toolCalls} />
+        <StatChip label="reads" value={t.reads} />
+        <StatChip label="searches" value={t.searches} />
+        <StatChip label="writes" value={t.writes} />
+        <StatChip label="commands" value={t.commands} />
+        {t.web ? <StatChip label="web" value={t.web} /> : null}
+        {t.subagents ? <StatChip label="subagents" value={t.subagents} /> : null}
+        {t.subagentToolCalls ? <StatChip label="subagent tool calls" value={t.subagentToolCalls} /> : null}
+        <StatChip label="tool errors" value={t.toolErrors} tone={t.toolErrors ? "danger" : undefined} />
+        <StatChip label="files read" value={t.filesReadCount} />
+        <StatChip label="files written" value={t.filesWrittenCount} />
+        {hasSkill ? <StatChip label={t.skillInContext ? "skill in context" : "opened the skill"} value={opened ? "yes" : "no"} tone={opened ? "ok" : "danger"} /> : null}
+        <StatChip label="thinking tokens" value={formatTokens(t.thinkingTokens)} />
+        <StatChip label="IO share" value={formatPercent(t.ioShare)} />
+        <StatChip label="cache reads" value={formatTokens(t.cacheReadTokens)} />
+        {t.modelTimeMs !== null && t.modelTimeMs !== undefined ? <StatChip label="model time" value={formatDuration(t.modelTimeMs)} /> : null}
+        {t.toolTimeMs !== null && t.toolTimeMs !== undefined ? <StatChip label="tool time" value={formatDuration(t.toolTimeMs)} /> : null}
+      </div>
+      {t.filesReadCount || t.filesWrittenCount ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FileList title="Files read" files={t.filesRead} total={t.filesReadCount} />
+          <FileList title="Files written" files={t.filesWritten} total={t.filesWrittenCount} />
+        </div>
+      ) : null}
+      {hasTimeline ? (
+        <div>
+          <button type="button" className="inline-flex items-center gap-1 text-muted hover:text-fg" onClick={() => setTimeline((v) => !v)} aria-expanded={timeline}>
+            {timeline ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            {timeline ? "Hide timeline" : `Show timeline (${pluralize(t.steps.length, "step")})`}
+          </button>
+          {timeline ? <Timeline steps={t.steps} truncated={t.stepsTruncated} /> : null}
+        </div>
+      ) : (
+        <p className="text-subtle">No timeline was recorded for this run.</p>
+      )}
+    </div>
+  );
+}
+
+function Timeline({ steps, truncated }: { steps: T.TraceStep[]; truncated: number }) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-lg bg-elevated hairline">
+      <ol className="divide-y divide-line">
+        {steps.map((s, i) => (
+          <TimelineStep key={i} step={s} />
+        ))}
+      </ol>
+      {truncated > 0 ? <div className="border-t px-2.5 py-1.5 text-[11px] text-muted">{pluralize(truncated, "more step")} were not recorded: the timeline is capped.</div> : null}
+    </div>
+  );
+}
+
+function TimelineStep({ step: s }: { step: T.TraceStep }) {
+  const time = s.atMs === null || s.atMs === undefined ? "—" : formatDuration(s.atMs);
+  const chars = s.chars ? `${formatTokens(s.chars)} chars` : null;
+  let kind: React.ReactNode;
+  if (s.kind === "thinking") {
+    kind = (
+      <Badge tone="neutral">
+        <Brain /> thinking
+      </Badge>
+    );
+  } else if (s.kind === "text") {
+    kind = (
+      <Badge tone="outline">
+        <MessageSquare /> text
+      </Badge>
+    );
+  } else if (s.kind === "tool_use") {
+    const meta = (s.category && TOOL_CATEGORY_META[s.category]) ?? TOOL_CATEGORY_META.other;
+    kind = (
+      <span className="inline-flex items-center gap-1">
+        <Badge tone={meta.tone}>
+          <Wrench /> {meta.label}
+        </Badge>
+        {s.tool ? <span className="mono text-[11px] text-muted">{s.tool}</span> : null}
+      </span>
+    );
+  } else {
+    kind = <Badge tone={s.isError ? "danger" : "outline"}>{s.isError ? "error" : "result"}</Badge>;
+  }
+  return (
+    <li className={cn("grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-2.5 py-1.5 sm:grid-cols-[3.5rem_minmax(7rem,auto)_minmax(0,1fr)_auto]", s.isError ? "bg-danger-soft/50" : "")}>
+      <span className="num pt-0.5 text-[11px] text-subtle">{time}</span>
+      <span className="pt-px">{kind}</span>
+      <span className={cn("col-span-2 min-w-0 break-words selectable sm:col-span-1", s.kind === "thinking" ? "italic text-muted" : "mono text-[11.5px]", s.isError ? "text-danger" : s.kind === "tool_result" ? "text-muted" : "")}>{s.summary || <span className="text-subtle">(empty)</span>}</span>
+      <span className="num col-span-2 text-[11px] text-subtle sm:col-span-1 sm:pt-0.5">{chars}</span>
+    </li>
   );
 }
 

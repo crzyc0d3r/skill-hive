@@ -259,9 +259,14 @@ grader providers, a timeout and whether to include the trigger evaluation.
 
 A finished run opens on the verdict: the pass-rate delta against the baseline with a 95 percent
 confidence interval and p-value, then per-arm pass rate, tokens, duration, tool calls and cost.
-The expectation matrix shows the pass fraction of every expectation in every arm with a pattern
-(only with skill, always passes, flaky, mixed, and so on), followed by the trigger evaluation,
-analyst notes and every case result with its graded expectations, output and transcript.
+An activity profile follows for executors that stream their events (Claude Code, Codex): per
+arm, how many turns the agent took, how many files it read, searched, wrote and how many
+commands it ran, how its output tokens split between thinking, text and tool arguments, what
+share of its traffic was tool IO, the prompt-cache breakdown, and whether it opened the skill
+at all. The expectation matrix shows the pass fraction of every expectation in every arm with a
+pattern (only with skill, always passes, flaky, mixed, and so on), followed by the trigger
+evaluation, analyst notes and every case result with its graded expectations, output,
+transcript and a step-by-step timeline of what the agent thought, said, called and got back.
 
 ### Settings
 
@@ -338,10 +343,15 @@ project skills. **Checks** (`file_exists`, `file_contains`, `file_matches`, `out
 `output_matches`, `json_pointer`, `command`) decide an expectation without a model; the **grader**
 is a model that must answer strict JSON with cited evidence for every remaining expectation.
 The **trigger evaluation** asks a model which skill it would pick for each trigger query and
-reports precision and recall of the description. The benchmark gives per-arm means and standard
-deviations, the delta against the baseline with a bootstrap confidence interval and a Welch
-t-test, a **verdict** (helps a lot, helps, neutral, hurts, hurts a lot, inconclusive), the
-expectation matrix and analyst notes. The full rules are in [docs/evaluations.md](docs/evaluations.md).
+reports precision and recall of the description. Executors that stream their events also leave
+an **activity trace** per case: model turns, tool calls by category (read, search, write,
+command, web, subagent), the distinct files read and written, whether the skill was opened,
+thinking and text blocks, an estimated split of the output tokens, the share of traffic that was
+tool IO, the prompt-cache breakdown, model and tool time, and a timeline. The benchmark gives
+per-arm means and standard deviations, the delta against the baseline with a bootstrap
+confidence interval and a Welch t-test, a **verdict** (helps a lot, helps, neutral, hurts,
+hurts a lot, inconclusive), the expectation matrix, per-arm activity statistics and analyst
+notes. The full rules are in [docs/evaluations.md](docs/evaluations.md).
 
 ### Providers and secrets
 
@@ -427,7 +437,7 @@ with the same id as a built-in one replaces it. Custom targets always count as d
 | `hive eval suite <ITEM> [--draft] [--write]` | Show a skill's suite, or draft one from its description and save it |
 | `hive eval run <ITEM> [--repeats N] [--trigger] [--variant label=path] [--no-baseline] ...` | Run a comparative evaluation and wait; also `--executor`, `--grader`, `--concurrency`, `--timeout`, `--case` |
 | `hive eval runs [ITEM] [--limit N]` | List runs |
-| `hive eval report <RUN> [--markdown]` | A run's benchmark (`--markdown` prints the written report) |
+| `hive eval report <RUN> [--markdown]` | A run's benchmark, with the per-arm activity table when the executor traced its runs (`--markdown` prints the written report) |
 | `hive eval history <ITEM>` | Effectiveness per run, against the skill's content hash |
 | `hive eval cancel <RUN>` / `hive eval delete <RUN>` | Cancel a running evaluation; delete a run and its workspace |
 

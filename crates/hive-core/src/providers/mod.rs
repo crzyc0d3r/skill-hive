@@ -228,6 +228,7 @@ pub async fn execute_as_completion(
     trace.turn();
     trace.text(&resp.text, Some(resp.latency_ms));
     trace.set_model_time(resp.latency_ms);
+    trace.set_skill_in_context(task.skill_dir.is_some());
     let transcript = sandbox::write_transcript(
         &task.cwd,
         &[

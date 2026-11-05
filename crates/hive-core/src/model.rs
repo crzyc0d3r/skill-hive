@@ -1517,8 +1517,20 @@ pub struct ExecutionTrace {
     /// Distinct files read, including those beyond the cap.
     pub files_read_count: u32,
     pub files_written_count: u32,
-    /// Reads of files inside the installed skill (`SKILL.md`, bundled scripts…).
+    /// Reads of files inside the installed skill (`SKILL.md`, bundled scripts…), including
+    /// loading it through Claude Code's `Skill` tool.
     pub skill_reads: u32,
+    /// The skill was in the model's context without a read: API providers put `SKILL.md` in
+    /// the system prompt.
+    #[serde(default)]
+    pub skill_in_context: bool,
+    /// Model calls made by subagents (Claude Code forwards them with `parent_tool_use_id`);
+    /// not included in `turns`.
+    #[serde(default)]
+    pub subagent_turns: u32,
+    /// Tool calls made by subagents; not included in `tool_calls` or the categories.
+    #[serde(default)]
+    pub subagent_tool_calls: u32,
     pub thinking_blocks: u32,
     pub thinking_chars: u64,
     pub text_blocks: u32,
@@ -1567,6 +1579,10 @@ pub struct ArmActivity {
     /// Results that carried a trace.
     pub traced: u32,
     pub turns: Stats,
+    /// Tool calls over the traced results (the arm-level `tool_calls` covers every scored
+    /// result).
+    #[serde(default)]
+    pub tool_calls: Stats,
     pub reads: Stats,
     pub searches: Stats,
     pub writes: Stats,
@@ -1585,7 +1601,8 @@ pub struct ArmActivity {
     pub fresh_input_tokens: Stats,
     pub model_time_ms: Stats,
     pub tool_time_ms: Stats,
-    /// Fraction of traced results in which the agent read a file of the skill.
+    /// Fraction of traced results in which the agent read a file of the skill, or had it in
+    /// context (API providers).
     pub skill_opened: f64,
 }
 

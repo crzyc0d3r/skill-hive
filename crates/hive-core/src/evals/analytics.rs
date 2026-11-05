@@ -353,10 +353,14 @@ pub fn summarize_activity(done: &[&CaseResult]) -> Option<ArmActivity> {
     }
     let of =
         |f: fn(&ExecutionTrace) -> f64| stats(&traces.iter().map(|t| f(t)).collect::<Vec<_>>());
-    let opened = traces.iter().filter(|t| t.skill_reads > 0).count();
+    let opened = traces
+        .iter()
+        .filter(|t| t.skill_reads > 0 || t.skill_in_context)
+        .count();
     Some(ArmActivity {
         traced: traces.len() as u32,
         turns: of(|t| t.turns as f64),
+        tool_calls: of(|t| t.tool_calls as f64),
         reads: of(|t| t.reads as f64),
         searches: of(|t| t.searches as f64),
         writes: of(|t| t.writes as f64),
@@ -931,6 +935,10 @@ pub fn benchmark_markdown(b: &Benchmark) -> String {
         let rows: Vec<Row> = vec![
             ("Traced runs", Box::new(|a| a.traced.to_string())),
             ("Model turns", Box::new(|a| format!("{:.1}", a.turns.mean))),
+            (
+                "Tool calls",
+                Box::new(|a| format!("{:.1}", a.tool_calls.mean)),
+            ),
             ("File reads", Box::new(|a| format!("{:.1}", a.reads.mean))),
             ("Searches", Box::new(|a| format!("{:.1}", a.searches.mean))),
             ("Writes", Box::new(|a| format!("{:.1}", a.writes.mean))),

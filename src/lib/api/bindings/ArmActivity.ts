@@ -8,12 +8,18 @@ export type ArmActivity = {
 /**
  * Results that carried a trace.
  */
-traced: number, turns: Stats, reads: Stats, searches: Stats, writes: Stats, commands: Stats, web: Stats, toolErrors: Stats, filesRead: Stats, filesWritten: Stats, thinkingTokens: Stats, textTokens: Stats, toolInputTokens: Stats, toolResultTokens: Stats, ioShare: Stats, cacheReadTokens: Stats, 
+traced: number, turns: Stats, 
+/**
+ * Tool calls over the traced results (the arm-level `tool_calls` covers every scored
+ * result).
+ */
+toolCalls: Stats, reads: Stats, searches: Stats, writes: Stats, commands: Stats, web: Stats, toolErrors: Stats, filesRead: Stats, filesWritten: Stats, thinkingTokens: Stats, textTokens: Stats, toolInputTokens: Stats, toolResultTokens: Stats, ioShare: Stats, cacheReadTokens: Stats, 
 /**
  * Input tokens that were not cache reads (prompt, tool results, cache writes).
  */
 freshInputTokens: Stats, modelTimeMs: Stats, toolTimeMs: Stats, 
 /**
- * Fraction of traced results in which the agent read a file of the skill.
+ * Fraction of traced results in which the agent read a file of the skill, or had it in
+ * context (API providers).
  */
 skillOpened: number, };
