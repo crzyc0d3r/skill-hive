@@ -369,7 +369,11 @@ fn resolve_name(
             .collect::<Vec<_>>()
             .join("-"),
     );
-    let mut name = util::truncate_chars(&joined, skill::MAX_NAME_LEN)
+    // A plain character take, not `util::truncate_chars`: its `…` is not a valid name character.
+    let mut name = joined
+        .chars()
+        .take(skill::MAX_NAME_LEN)
+        .collect::<String>()
         .trim_end_matches('-')
         .to_string();
     if name.is_empty() {
@@ -1254,5 +1258,50 @@ mod tests {
         );
         // Nothing listed by the model: every bundled file is kept.
         assert!(proposal.files.iter().all(|f| f.keep));
+    }
+
+    #[tokio::test]
+    async fn fallback_name_from_long_source_names_is_valid() {
+        let (tmp, hive, _) = hive_with_provider(
+            "---\nname: \ndescription: Everything about PDF files, when a PDF is shared or read.\n---\n\n# Merged body\n",
+        );
+        let src = tmp.path().join("src");
+        let a = write_skill(
+            &src,
+            "extract-text-and-tables-from-portable-document-format-files",
+            "Extract text and tables from PDF documents.",
+            "# Extract\n",
+        );
+        let b = write_skill(
+            &src,
+            "read-pages-of-portable-document-format-files-aloud",
+            "Read PDF documents.",
+            "# Reader\n",
+        );
+        let item_a = hive.import_path(&a, &[], false).unwrap();
+        let item_b = hive.import_path(&b, &[], false).unwrap();
+        assert!(item_a.name.len() + 1 + item_b.name.len() > skill::MAX_NAME_LEN);
+        let proposal = hive
+            .propose_merge(&MergeRequest {
+                item_ids: vec![item_a.id.clone(), item_b.id.clone()],
+                name: None,
+                guidance: None,
+                provider_id: None,
+            })
+            .await
+            .unwrap();
+        assert!(
+            skill::is_valid_name(&proposal.name),
+            "fallback name `{}` is not a valid skill name",
+            proposal.name
+        );
+        assert!(proposal.name.len() <= skill::MAX_NAME_LEN);
+        assert!(proposal.name.starts_with("extract-text-and-tables"));
+        assert!(
+            proposal
+                .warnings
+                .iter()
+                .any(|w| w.contains("no usable name"))
+        );
     }
 }
