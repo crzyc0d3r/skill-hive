@@ -238,6 +238,8 @@ pub fn run() {
             commands::loadout_plan,
             commands::loadout_apply,
             commands::recommend,
+            commands::merge_propose,
+            commands::merge_apply,
             commands::providers_list,
             commands::provider_save,
             commands::provider_delete,

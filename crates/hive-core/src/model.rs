@@ -1000,6 +1000,146 @@ pub struct RecommendResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Merging overlapping skills
+// ---------------------------------------------------------------------------
+
+/// Ask a model to combine several skills into one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MergeRequest {
+    /// Library ids of the skills to combine (two or more, all skills).
+    pub item_ids: Vec<String>,
+    /// Name for the merged skill; the model proposes one when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Free-form guidance for the model ("keep the python workflow", "prefer the shorter one").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guidance: Option<String>,
+    /// Provider to ask; the default is the recommender, then the grader, then any provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+}
+
+/// One of the skills being merged, as the proposal shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MergeSource {
+    pub item: LibraryItem,
+    /// Files bundled next to `SKILL.md` (excluding the eval suite).
+    pub file_count: u32,
+    /// Evaluation cases in the skill's suite.
+    pub eval_cases: u32,
+    pub deployments: Vec<Deployment>,
+}
+
+/// A file bundled with a source skill that the merged skill can carry over.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MergeFile {
+    pub from_item_id: String,
+    pub from_name: String,
+    /// Path inside the source skill.
+    pub path: String,
+    /// Path inside the merged skill (prefixed with the source name when two sources ship the
+    /// same path with different content).
+    pub dest: String,
+    pub size_bytes: u64,
+    /// Whether the merged skill keeps this file. The model may drop files it no longer
+    /// references; the user can override.
+    pub keep: bool,
+}
+
+/// What the model proposes, with everything the user needs to judge and adjust it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MergeProposal {
+    pub sources: Vec<MergeSource>,
+    /// Conflicts among the sources (why merging them is worth it).
+    pub conflicts: ConflictReport,
+    pub name: String,
+    pub description: String,
+    /// Markdown body of the merged `SKILL.md`.
+    pub body: String,
+    /// Frontmatter keys besides name and description: the union of `allowed-tools`, a shared
+    /// license, metadata, and `merged-from`.
+    #[ts(type = "Record<string, unknown>")]
+    pub frontmatter: serde_json::Value,
+    pub files: Vec<MergeFile>,
+    /// Union of the sources' tags.
+    pub tags: Vec<String>,
+    /// The model's account of how it combined the sources.
+    pub notes: String,
+    /// Content the model says it left out, for the user to check.
+    pub dropped: Vec<String>,
+    /// Things the user should look at before applying (licence mismatch, a source that failed
+    /// to read, the model ignoring the requested name…).
+    pub warnings: Vec<String>,
+    pub validation: ValidationReport,
+    /// Instruction tokens of all sources together vs the merged body.
+    pub body_tokens_before: u32,
+    pub body_tokens_after: u32,
+    /// Description tokens (standing context cost) before and after.
+    pub description_tokens_before: u32,
+    pub description_tokens_after: u32,
+    /// Evaluation cases the merged skill would inherit.
+    pub eval_cases: u32,
+    pub provider_id: String,
+    pub provider_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub latency_ms: u64,
+}
+
+/// The proposal as the user accepted it: what to write into the library.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MergeCommit {
+    pub source_ids: Vec<String>,
+    pub name: String,
+    pub description: String,
+    pub body: String,
+    #[serde(default)]
+    #[ts(type = "Record<string, unknown>")]
+    pub frontmatter: serde_json::Value,
+    /// Files to carry over (only entries with `keep` are copied).
+    #[serde(default)]
+    pub files: Vec<MergeFile>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Remove the sources from the library afterwards and move their deployments to the
+    /// merged skill. When the merged skill keeps a source's name, that source is replaced in
+    /// place and keeps its id, deployments and history.
+    #[serde(default)]
+    pub retire_sources: bool,
+    /// Carry the sources' evaluation cases into the merged skill's suite.
+    #[serde(default)]
+    pub carry_evals: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MergeResult {
+    pub item: LibraryItem,
+    /// Sources removed from the library.
+    pub retired: Vec<LibraryItem>,
+    /// Source whose content the merged skill replaced in place, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced_id: Option<String>,
+    /// Deployments the merged skill now has in place of the sources'.
+    pub deployed: Vec<Deployment>,
+    pub failed: Vec<DeployFailure>,
+    pub eval_cases: u32,
+}
+
+// ---------------------------------------------------------------------------
 // Providers
 // ---------------------------------------------------------------------------
 

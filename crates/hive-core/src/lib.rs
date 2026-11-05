@@ -16,6 +16,7 @@ pub mod hash;
 pub mod hive;
 pub mod library;
 pub mod loadouts;
+pub mod merge;
 pub mod model;
 pub mod paths;
 pub mod providers;

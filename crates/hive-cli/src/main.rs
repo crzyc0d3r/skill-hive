@@ -86,6 +86,8 @@ enum Command {
         #[arg(long)]
         target: Option<String>,
     },
+    /// Combine overlapping skills into one, written by a model provider.
+    Merge(MergeArgs),
     /// The curated catalog of well-known skill collections.
     Catalog {
         #[arg(long)]
@@ -294,6 +296,32 @@ struct FindArgs {
     /// Deploy the suggested set to --target.
     #[arg(long)]
     deploy: bool,
+}
+
+#[derive(Args)]
+struct MergeArgs {
+    /// Two or more skills (by id, name or `skill:name`).
+    items: Vec<String>,
+    /// Name of the merged skill; the model proposes one when omitted. Using a source's name
+    /// replaces that source in place (it keeps its id, deployments and history).
+    #[arg(long)]
+    name: Option<String>,
+    /// Guidance for the model ("keep the python workflow", "prefer the shorter wording").
+    #[arg(long)]
+    guidance: Option<String>,
+    /// Provider to ask (default: the recommender, then the grader, then the executor).
+    #[arg(long)]
+    provider: Option<String>,
+    /// Keep the source skills in the library instead of retiring them and moving their
+    /// deployments to the merged skill.
+    #[arg(long)]
+    keep_sources: bool,
+    /// Do not carry the sources' evaluation cases over.
+    #[arg(long)]
+    no_evals: bool,
+    /// Show the proposal and stop without writing anything.
+    #[arg(long)]
+    dry_run: bool,
 }
 
 #[derive(Subcommand)]
@@ -753,6 +781,7 @@ async fn run(cli: Cli) -> Result<()> {
             let report = hive.analyze_items(&ids, target.as_deref())?;
             out.emit(&report, || print_conflicts(&report))?;
         }
+        Command::Merge(args) => cmd_merge(&hive, &out, args).await?,
         Command::Catalog { refresh, query } => {
             let entries = hive.catalog(refresh).await?;
             let entries = match query {
@@ -1382,6 +1411,157 @@ fn print_plan(plan: &LoadoutPlan) {
             .unwrap_or_default()
     );
     print_conflicts(&plan.conflicts);
+}
+
+async fn cmd_merge(hive: &Hive, out: &Out, args: MergeArgs) -> Result<()> {
+    if args.items.len() < 2 {
+        bail!("name at least two skills, e.g. `hive merge pdf-extract pdf-reader`");
+    }
+    let ids = resolve_ids(hive, &args.items)?;
+    let proposal = hive
+        .propose_merge(&MergeRequest {
+            item_ids: ids.clone(),
+            name: args.name.clone(),
+            guidance: args.guidance.clone(),
+            provider_id: args.provider.clone(),
+        })
+        .await?;
+    let errors: Vec<&Finding> = proposal
+        .validation
+        .findings
+        .iter()
+        .filter(|f| f.severity == Severity::Error)
+        .collect();
+    if args.dry_run || !errors.is_empty() {
+        out.emit(&proposal, || print_proposal(&proposal))?;
+        if !errors.is_empty() {
+            bail!(
+                "the proposal does not validate: {}",
+                errors
+                    .iter()
+                    .map(|f| f.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+        }
+        return Ok(());
+    }
+    if !out.json {
+        print_proposal(&proposal);
+    }
+    let result = hive.apply_merge(&MergeCommit {
+        source_ids: ids,
+        name: proposal.name.clone(),
+        description: proposal.description.clone(),
+        body: proposal.body.clone(),
+        frontmatter: proposal.frontmatter.clone(),
+        files: proposal.files.clone(),
+        tags: proposal.tags.clone(),
+        retire_sources: !args.keep_sources,
+        carry_evals: !args.no_evals,
+    })?;
+    out.emit(&result, || {
+        out.ok(format!(
+            "{} {} at {}",
+            if result.replaced_id.is_some() {
+                "replaced"
+            } else {
+                "created"
+            },
+            result.item.name.style(st::bold()),
+            result.item.path
+        ));
+        for r in &result.retired {
+            out.note(format!("retired {}", r.name));
+        }
+        for d in &result.deployed {
+            out.ok(format!("deployed to {} ({})", d.target_id, d.path));
+        }
+        for f in &result.failed {
+            out.warn(format!("deployment failed: {}", f.reason));
+        }
+        if result.eval_cases > 0 {
+            out.note(format!(
+                "carried {} evaluation case(s); run `hive eval run {}` to measure the merged skill",
+                result.eval_cases, result.item.name
+            ));
+        }
+    })
+}
+
+fn print_proposal(p: &MergeProposal) {
+    println!(
+        "{} {} ← {}",
+        "merge:".style(st::bold()),
+        p.name,
+        p.sources
+            .iter()
+            .map(|s| s.item.name.as_str())
+            .collect::<Vec<_>>()
+            .join(" + ")
+    );
+    println!("{} {}", "description:".style(st::dim()), p.description);
+    println!(
+        "{} {} → {} instruction tokens, {} → {} description tokens",
+        "size:".style(st::dim()),
+        p.body_tokens_before,
+        p.body_tokens_after,
+        p.description_tokens_before,
+        p.description_tokens_after
+    );
+    let kept: Vec<&str> = p
+        .files
+        .iter()
+        .filter(|f| f.keep)
+        .map(|f| f.dest.as_str())
+        .collect();
+    let dropped: Vec<&str> = p
+        .files
+        .iter()
+        .filter(|f| !f.keep)
+        .map(|f| f.dest.as_str())
+        .collect();
+    if !kept.is_empty() {
+        println!("{} {}", "files kept:".style(st::dim()), kept.join(", "));
+    }
+    if !dropped.is_empty() {
+        println!(
+            "{} {}",
+            "files dropped:".style(st::dim()),
+            dropped.join(", ")
+        );
+    }
+    if p.eval_cases > 0 {
+        println!("{} {}", "eval cases:".style(st::dim()), p.eval_cases);
+    }
+    if !p.notes.is_empty() {
+        println!("{} {}", "model:".style(st::dim()), p.notes);
+    }
+    for d in &p.dropped {
+        println!("{} {d}", "left out:".style(st::yellow()));
+    }
+    for w in &p.warnings {
+        println!("{} {w}", "!".style(st::yellow()).style(st::bold()));
+    }
+    for f in &p.validation.findings {
+        let tag = match f.severity {
+            Severity::Error => "error".style(st::red()).style(st::bold()).to_string(),
+            Severity::Warning => "warning".style(st::yellow()).to_string(),
+            Severity::Info => "info".style(st::dim()).to_string(),
+        };
+        println!("{tag} {}", f.message);
+    }
+    println!(
+        "{} {} · {} in, {} out · {} ms",
+        "provider:".style(st::dim()),
+        p.provider_name,
+        p.input_tokens,
+        p.output_tokens,
+        p.latency_ms
+    );
+    println!("\n{}", "--- SKILL.md body ---".style(st::dim()));
+    println!("{}", p.body);
+    println!("{}", "---".style(st::dim()));
 }
 
 async fn cmd_find(hive: &Hive, out: &Out, args: FindArgs) -> Result<()> {

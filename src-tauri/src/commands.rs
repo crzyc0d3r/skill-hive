@@ -378,6 +378,18 @@ pub async fn recommend(
     Ok(hive.recommend(&request).await?)
 }
 
+// ---- merging skills ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn merge_propose(hive: HiveState<'_>, request: MergeRequest) -> CmdResult<MergeProposal> {
+    Ok(hive.propose_merge(&request).await?)
+}
+
+#[tauri::command]
+pub async fn merge_apply(hive: HiveState<'_>, commit: MergeCommit) -> CmdResult<MergeResult> {
+    blocking(&hive, move |h| h.apply_merge(&commit)).await
+}
+
 // ---- providers --------------------------------------------------------------------------------
 
 #[tauri::command]
