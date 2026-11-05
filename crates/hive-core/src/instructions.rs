@@ -684,7 +684,13 @@ impl Hive {
             .extension()
             .map(|e| format!(".{}", e.to_string_lossy()))
             .unwrap_or_else(|| ".txt".into());
-        let dest = dir.join(format!("{now}{ext}"));
+        // Two saves within one millisecond get distinct names: `<ms>.md`, `<ms>-1.md`, …
+        let mut dest = dir.join(format!("{now}{ext}"));
+        let mut n = 0;
+        while dest.exists() {
+            n += 1;
+            dest = dir.join(format!("{now}-{n}{ext}"));
+        }
         std::fs::copy(path, &dest).at(path)?;
         let size_bytes = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
         let mut all = list_backups(&dir);
@@ -806,21 +812,32 @@ fn list_backups(dir: &Path) -> Vec<InstructionBackup> {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
-    let mut out: Vec<InstructionBackup> = rd
+    // `<ms>.ext` or `<ms>-<n>.ext`; the sequence number orders copies saved in the same
+    // millisecond.
+    let mut found: Vec<(i64, i64, InstructionBackup)> = rd
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_file())
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
-            let saved_at: i64 = name.split('.').next()?.parse().ok()?;
-            Some(InstructionBackup {
-                path: path_string(&e.path()),
+            let stem = name.split('.').next()?;
+            let (ms, seq) = match stem.split_once('-') {
+                Some((ms, n)) => (ms, n.parse::<i64>().ok()?),
+                None => (stem, 0),
+            };
+            let saved_at: i64 = ms.parse().ok()?;
+            Some((
                 saved_at,
-                size_bytes: e.metadata().map(|m| m.len()).unwrap_or(0),
-            })
+                seq,
+                InstructionBackup {
+                    path: path_string(&e.path()),
+                    saved_at,
+                    size_bytes: e.metadata().map(|m| m.len()).unwrap_or(0),
+                },
+            ))
         })
         .collect();
-    out.sort_by_key(|b| b.saved_at);
-    out
+    found.sort_by_key(|(ms, seq, _)| (*ms, *seq));
+    found.into_iter().map(|(_, _, b)| b).collect()
 }
 
 /// Which targets read `AGENTS.md`-style shared files; handy for docs and tests.
@@ -1040,13 +1057,20 @@ mod tests {
         let (_tmp, hive, home) = temp_hive();
         let path = home.join(".codex/AGENTS.md");
         for i in 0..(BACKUPS_KEPT + 5) {
+            // No pause between writes: several land in the same millisecond and must
+            // still be kept apart.
             hive.write_instruction_file(&path.to_string_lossy(), &format!("v{i}"), None)
                 .unwrap();
-            // Distinct timestamps: backups are named by the millisecond.
-            std::thread::sleep(std::time::Duration::from_millis(2));
         }
         let backups = hive.instruction_backups(&path.to_string_lossy()).unwrap();
         assert_eq!(backups.len(), BACKUPS_KEPT);
         assert!(backups.windows(2).all(|w| w[0].saved_at <= w[1].saved_at));
+        // The newest backup holds the previous version, the oldest kept the earliest survivor.
+        let newest = hive
+            .read_instruction_file(&backups[BACKUPS_KEPT - 1].path, None)
+            .unwrap();
+        assert_eq!(newest.text, format!("v{}", BACKUPS_KEPT + 3));
+        let oldest = hive.read_instruction_file(&backups[0].path, None).unwrap();
+        assert_eq!(oldest.text, "v4");
     }
 }
