@@ -1861,6 +1861,41 @@ fn print_run(out: &Out, detail: &EvalRunDetail) -> Result<()> {
                     })
                     .collect(),
             );
+            if b.arms.iter().any(|a| a.activity.is_some()) {
+                println!("\n{}", "activity (mean per traced run)".style(st::bold()));
+                out.table(
+                    &[
+                        "Arm",
+                        "Turns",
+                        "Reads",
+                        "Searches",
+                        "Writes",
+                        "Commands",
+                        "Tool errors",
+                        "Thinking tok",
+                        "IO share",
+                        "Opened skill",
+                    ],
+                    b.arms
+                        .iter()
+                        .filter_map(|a| a.activity.as_ref().map(|act| (a, act)))
+                        .map(|(a, act)| {
+                            vec![
+                                a.label.clone(),
+                                format!("{:.1}", act.turns.mean),
+                                format!("{:.1}", act.reads.mean),
+                                format!("{:.1}", act.searches.mean),
+                                format!("{:.1}", act.writes.mean),
+                                format!("{:.1}", act.commands.mean),
+                                format!("{:.1}", act.tool_errors.mean),
+                                format!("{:.0}", act.thinking_tokens.mean),
+                                percent(act.io_share.mean),
+                                percent(act.skill_opened),
+                            ]
+                        })
+                        .collect(),
+                );
+            }
             for d in &b.deltas {
                 println!(
                     "{} vs {}: {} pass rate (95% CI {} … {}){}",

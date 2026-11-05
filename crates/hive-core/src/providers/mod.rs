@@ -40,6 +40,7 @@ pub mod process;
 pub mod registry;
 pub mod sandbox;
 pub mod scripted;
+pub mod trace;
 
 pub use anthropic::AnthropicProvider;
 pub use claude_code::ClaudeCodeProvider;
@@ -159,6 +160,8 @@ pub struct ExecutionResult {
     /// directories Hive or the agent tooling manage (`.hive`, `.claude`, `.codex`, …).
     pub files_created: Vec<String>,
     pub model: Option<String>,
+    /// What the agent did, when the provider's event stream allows reconstructing it.
+    pub trace: Option<crate::model::ExecutionTrace>,
 }
 
 /// A model provider. Implementations are cheap to build and safe to share across tasks.
@@ -221,6 +224,10 @@ pub async fn execute_as_completion(
         cancel: task.cancel.clone(),
     };
     let resp = provider.complete(req).await?;
+    let mut trace = trace::TraceBuilder::new(trace::Dialect::ClaudeCode, &task.cwd, None);
+    trace.turn();
+    trace.text(&resp.text, Some(resp.latency_ms));
+    trace.set_model_time(resp.latency_ms);
     let transcript = sandbox::write_transcript(
         &task.cwd,
         &[
@@ -245,6 +252,7 @@ pub async fn execute_as_completion(
         cost_usd: resp.cost_usd,
         files_created: Vec::new(),
         model: resp.model,
+        trace: Some(trace.finish(resp.output_tokens)),
     })
 }
 
