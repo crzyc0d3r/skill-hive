@@ -182,7 +182,11 @@ Every item in one grid or list, filtered by kind (skills, subagents, commands), 
 favourites and the agent they are deployed to, with full-text search over name, description and
 body. **Check updates** compares each GitHub- or git-sourced item with its source and lets you
 update it. **New skill** creates a skill in the library from a name and description. Multi-select
-to check a set for conflicts, deploy it, or remove several items at once.
+to check a set for conflicts, deploy it, or remove several items at once. With two or more skills
+selected, **Merge with AI...** asks a model provider to combine them into one skill and shows the
+draft for review before anything is written; the same dialog opens from the **Merge...** button
+next to an overlap conflict (duplicate content, description, trigger or tool overlap,
+contradictory directive) wherever conflicts are listed.
 
 ![Item detail](docs/screenshots/item-detail-dark.png)
 
@@ -322,6 +326,24 @@ it is large enough; the threshold is a setting. The budget defaults to 15 000 ch
 point at which Claude Code truncates its skill listing; other agents use the same figure until a
 better one is known, and a custom target can declare its own.
 
+#### Merging overlapping skills
+
+The usual fix for an overlap is one skill instead of two. **Merge with AI...** (or `hive merge`)
+sends the sources to a model provider (the recommender by default, then the grader, then the
+executor) with their descriptions, pre-approved tools, licences, bundled file list with excerpts,
+the full `SKILL.md` bodies, the conflicts the analyser found between them and any guidance you
+typed. The model answers with one name, description and body, notes on how it combined them, a
+list of what it left out, and the bundled files the body still refers to. The proposal adds the
+merged frontmatter (union of `allowed-tools`, a licence when every licensed source agrees, merged
+metadata with a `merged-from` entry), the union of the tags, the files to carry with their final
+paths, the eval cases the merged skill would inherit, token counts before and after, warnings and
+the same validation as any authored skill. If the merged name is one of the sources' names, that
+source is replaced in place and keeps its id, deployments and history; otherwise a new skill is
+created. Retiring the sources removes the others from the library and deploys the merged skill
+wherever they were deployed; carrying evaluations writes the union of their suites. Nothing is
+written until the draft is accepted, and the draft can be edited first. The full contract is in
+[docs/merging.md](docs/merging.md).
+
 ### The recommender
 
 `Find` ranks the library with SQLite FTS5 BM25 over name, description and body, plus features for
@@ -427,6 +449,7 @@ with the same id as a built-in one replaces it. Custom targets always count as d
 | `hive loadout apply <LOADOUT> --to TARGET [--exclusive] ...` | Apply a loadout (additive unless `--exclusive`) |
 | `hive find <TASK>... [--target T] [--kind K] [--limit N] [--llm] [--deploy]` | Rank the library for a task and compose a conflict-free set; `--deploy` installs it |
 | `hive conflicts <ITEMS>... [--target T]` | Analyse a set of items for conflicts and budget |
+| `hive merge <SKILLS>... [--name N] [--guidance TEXT] [--provider P] [--keep-sources] [--no-evals] [--dry-run]` | Ask a model to combine two or more skills into one and write it; `--name` set to a source's name replaces that source in place, `--dry-run` only prints the proposal |
 | `hive catalog [QUERY] [--refresh]` | The curated catalog of collections |
 | `hive github-search <QUERY> [--limit N]` | Search GitHub for skill repositories |
 | `hive project list\|add <PATH>\|remove <PATH>` | Projects registered for project-scope deployments |
@@ -617,7 +640,7 @@ src-tauri/          Tauri 2 shell: async commands over the facade, event bridge
 src/                React 19 + TypeScript UI (Vite, Tailwind 4, Radix, TanStack Query)
   lib/api/          typed client, generated bindings, mock backend, hooks
   features/         home, library, discover, find, agents, loadouts, evals, settings
-docs/               architecture.md, evaluations.md, screenshots/
+docs/               architecture.md, evaluations.md, merging.md, screenshots/
 ```
 
 [docs/architecture.md](docs/architecture.md) describes the core modules, the data on disk, the
