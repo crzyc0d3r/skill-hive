@@ -131,6 +131,9 @@ export const api = {
   refreshItem: (id: string) => call<T.LibraryItem>("library_refresh", { id }),
   analyzeItems: (ids: string[], targetId?: string | null) =>
     call<T.ConflictReport>("library_analyze", { ids, targetId: targetId ?? null }),
+  /** Asks a provider to combine two or more skills into one draft (slow: a model call). */
+  proposeMerge: (request: T.MergeRequest) => call<T.MergeProposal>("merge_propose", { request }),
+  applyMerge: (commit: T.MergeCommit) => call<T.MergeResult>("merge_apply", { commit }),
 
   // discovery & sources
   scanLocal: (extra: string[] = []) => call<T.ScanReport>("scan_local", { extra }),

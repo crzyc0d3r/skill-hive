@@ -47,22 +47,27 @@ export function Progress({
   className,
   tone = "accent",
   size = "md",
+  indeterminate = false,
+  ...props
 }: {
   value: number; // 0..1
   className?: string;
   tone?: "accent" | "ok" | "warn" | "danger" | "info";
   size?: "sm" | "md";
-}) {
+  /** Unknown duration: a bar sweeps across instead of filling (`value` is ignored). */
+  indeterminate?: boolean;
+} & Pick<React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root>, "aria-label">) {
   const pct = Math.max(0, Math.min(100, value * 100));
   const bar = { accent: "bg-accent", ok: "bg-ok", warn: "bg-warn", danger: "bg-danger", info: "bg-info" }[tone];
   return (
     <ProgressPrimitive.Root
-      value={pct}
+      value={indeterminate ? null : pct}
       className={cn("relative w-full overflow-hidden rounded-full bg-sunken", size === "sm" ? "h-1.5" : "h-2", className)}
+      {...props}
     >
       <ProgressPrimitive.Indicator
-        className={cn("h-full rounded-full transition-[width] duration-300", bar)}
-        style={{ width: `${pct}%` }}
+        className={cn("h-full rounded-full", bar, indeterminate ? "w-1/3 animate-progress-sweep" : "transition-[width] duration-300")}
+        style={indeterminate ? undefined : { width: `${pct}%` }}
       />
     </ProgressPrimitive.Root>
   );

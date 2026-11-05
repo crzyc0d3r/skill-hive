@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowDownUp, Check, Filter, LayoutGrid, Library as LibraryIcon, Plus, RefreshCw, Rows3, Search, Star, Trash2, Upload, X } from "lucide-react";
+import { ArrowDownUp, Check, Filter, LayoutGrid, Library as LibraryIcon, Plus, RefreshCw, Rows3, Search, Sparkles, Star, Trash2, Upload, X } from "lucide-react";
 import type * as T from "@/lib/api/bindings";
 import { api } from "@/lib/api/client";
 import { keys, useApiMutation, useItems, useStats, useTargets } from "@/lib/api/hooks";
@@ -28,6 +28,7 @@ import { KIND_LABEL, Page, PageBody, PageHeader, SOURCE_LABEL, TagChip } from "@
 import { ItemCard, ItemCardSkeleton, ItemRow } from "./ItemCard";
 import { CreateSkillDialog } from "./CreateSkillDialog";
 import { DeployDialog } from "@/features/agents/DeployDialog";
+import { ALL_ITEMS_QUERY } from "@/features/agents/queries";
 import { UpdatesDialog } from "./UpdatesDialog";
 
 const SORTS: { value: T.LibrarySort; label: string }[] = [
@@ -55,6 +56,7 @@ export function LibraryPage() {
   const [updatesOpen, setUpdatesOpen] = React.useState(params.get("updates") === "1");
 
   const openItem = useUi((s) => s.openItem);
+  const openMerge = useUi((s) => s.openMerge);
   const selectedIds = useUi((s) => s.selectedIds);
   const toggleSelected = useUi((s) => s.toggleSelected);
   const clearSelection = useUi((s) => s.clearSelection);
@@ -76,6 +78,10 @@ export function LibraryPage() {
   const { data: items, isLoading, isError, error, refetch } = useItems(query);
   const { data: stats } = useStats();
   const { data: targets } = useTargets();
+  // The selection survives filter changes, so kinds come from the whole library rather than the
+  // filtered list.
+  const { data: allItems } = useItems(ALL_ITEMS_QUERY);
+  const selectionHasNonSkill = selectedIds.some((id) => allItems?.find((i) => i.id === id)?.kind !== "skill");
 
   const removeMany = useApiMutation(
     async (ids: string[]) => {
@@ -260,7 +266,15 @@ export function LibraryPage() {
           <Button size="sm" variant="ghost" onClick={() => (allSelected ? clearSelection() : setSelection(items?.map((i) => i.id) ?? []))}>
             {allSelected ? "Deselect all" : "Select all"}
           </Button>
-          <span className="ml-auto flex items-center gap-1">
+          <span className="ml-auto flex flex-wrap items-center justify-end gap-1">
+            {selectedIds.length >= 2 ? (
+              <>
+                {selectionHasNonSkill ? <span className="mr-1 text-subtle">Only skills can be merged</span> : null}
+                <Button size="sm" variant="secondary" disabled={selectionHasNonSkill} onClick={() => openMerge(selectedIds)}>
+                  <Sparkles /> Merge with AI…
+                </Button>
+              </>
+            ) : null}
             <Button size="sm" variant="secondary" onClick={() => setDeployOpen(true)}>
               Deploy…
             </Button>

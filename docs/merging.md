@@ -96,13 +96,14 @@ unchanged; the app passes whatever the user edited. Step by step:
    `<slug>-<file name>` next to the original and the case updated), renumber the cases and write
    `evals/`. Nothing is written when the union is empty.
 5. Import the staged directory into the library as an authored skill with the tags. Replacing in
-   place keeps the source's id, sidecar, deployments and run history; its copy deployments are
-   re-synced so they carry the new content. Otherwise a new item is created.
+   place keeps the source's id, sidecar, deployments and run history; every deployment of it is
+   re-synced, so copies get the new content and links record the new hash. Otherwise a new item
+   is created.
 6. With `retire_sources`, for every other source: note each deployment's target, scope, project
    and mode, undeploy it, and remove the skill from the library.
-7. Deploy the merged skill to each noted place, skipping any where it already has a deployment
-   for the same target, scope and project. A deployment that fails is reported in `failed` and
-   does not undo the merge.
+7. Deploy the merged skill to each noted place in the mode the retired deployment used (link or
+   copy), skipping any where it already has a deployment for the same target, scope and project.
+   A deployment that fails is reported in `failed` and does not undo the merge.
 8. Write the audit row `merge.apply`, emit `LibraryChanged` and `DeploymentsChanged`, and return
    the item, the retired items, `replaced_id`, the deployments made, the failures and the number
    of eval cases written.

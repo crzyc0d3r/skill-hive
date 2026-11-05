@@ -718,6 +718,17 @@ function budgetFor(list: { name: string; description: string; tokenEstimate?: nu
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+/** Mock figure for the merged `SKILL.md` body and the model's token counts. */
+const tokensIn = (text: string) => Math.ceil(text.length / 4);
+
 export function createMockBackend(): Backend {
   const state = initialState();
   const listeners = new Set<(e: T.HiveEvent) => void>();
@@ -770,6 +781,18 @@ export function createMockBackend(): Backend {
       loadouts: state.loadouts.filter((l) => l.itemIds.includes(id)).map((l) => ({ id: l.id, name: l.name })),
       history,
     };
+  }
+
+  /** The skills a merge request names, in order, with the checks the Rust core makes. */
+  function mergeSources(ids: string[]): (T.LibraryItem & { body: string })[] {
+    const distinct = [...new Set(ids)];
+    if (distinct.length < 2) throw new ApiError("invalid", "pick at least two skills to merge");
+    return distinct.map((id) => {
+      const it = byId.get(id);
+      if (!it) throw new ApiError("not_found", `item ${id}`);
+      if (it.kind !== "skill") throw new ApiError("invalid", `${it.name} is ${it.kind === "agent" ? "an agent" : "a command"}; only skills can be merged`);
+      return it;
+    });
   }
 
   function stripBody(it: T.LibraryItem & { body?: string }): T.LibraryItem {
@@ -963,6 +986,120 @@ export function createMockBackend(): Backend {
         (ids as string[]).map((id) => byId.get(id)!).filter(Boolean),
         targetSpecs.find((t) => t.id === targetId)?.descriptionBudgetChars ?? state.settings.defaultDescriptionBudgetChars,
       ),
+    merge_propose: async ({ request }) => {
+      await sleep(900);
+      const req = request as T.MergeRequest;
+      const sources = mergeSources(req.itemIds);
+      const provider = req.providerId
+        ? state.providers.find((p) => p.id === req.providerId) ?? (() => { throw new ApiError("not_found", `provider ${req.providerId}`); })()
+        : state.providers.find((p) => p.roles.includes("recommender")) ?? state.providers.find((p) => p.roles.includes("grader")) ?? state.providers[0];
+      if (!provider) throw new ApiError("not_found", "no provider is configured; add one in Settings → Providers");
+      const [first, second] = sources;
+      const name = req.name ?? slugify(`${first.name}-${second.name}`);
+      const firstSentence = (s: string) => s.split(/(?<=\.)\s+/)[0].replace(/\.$/, "");
+      const topics = sources.map((s) => s.name.replace(/-/g, " "));
+      const description = `${firstSentence(first.description)}. ${firstSentence(second.description)}. Use when the task involves ${topics.slice(0, -1).join(", ")} or ${topics[topics.length - 1]}.`;
+      const body = [
+        `# ${name}`,
+        "",
+        `Combines ${sources.map((s) => `\`${s.name}\``).join(" and ")} into one skill. Read the section that matches the task; the shared conventions at the end apply to all of them.${req.guidance ? ` Guidance applied: ${req.guidance.trim()}` : ""}`,
+        "",
+        ...sources.flatMap((s) => [`## ${s.name.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase())}`, "", s.body.replace(/^#\s[^\n]*\n+/, "").trim() || "_No instructions in the original._", ""]),
+        "## Resolved differences",
+        "",
+        `- Where ${first.name} and ${second.name} described the same step differently, the more specific wording was kept.`,
+        "- Tool recommendations that appeared in only one source are kept with the section they came from.",
+        "- The combined \"Use when\" clause covers every trigger of the originals.",
+        "",
+      ].join("\n");
+      const files = sources.flatMap((s, i): T.MergeFile[] =>
+        i === 0
+          ? [
+              { fromItemId: s.id, fromName: s.name, path: "scripts/extract.py", dest: "scripts/extract.py", sizeBytes: 1830, keep: true },
+              { fromItemId: s.id, fromName: s.name, path: "reference.md", dest: "reference.md", sizeBytes: 9100, keep: true },
+            ]
+          : [{ fromItemId: s.id, fromName: s.name, path: "scripts/extract.py", dest: `${s.slug}/scripts/extract.py`, sizeBytes: 1830, keep: false }],
+      );
+      const taken = items.find((i) => i.name === name && !sources.includes(i));
+      const findings: T.Finding[] = taken ? [{ code: "name.taken", severity: "error", message: `A ${taken.kind} named \`${name}\` is already in the library; pick another name or merge it in too`, field: "name" }] : [];
+      const warnings = req.name ? [] : [`The model proposed "${first.name} + ${second.name}"; it was normalised to \`${name}\` to fit the skill name rules.`];
+      const evalCases = sources.reduce((n, s) => n + (state.suites.get(s.id)?.cases.length ?? 0), 0);
+      const inputTokens = sources.reduce((n, s) => n + tokensIn(s.body) + s.descriptionTokens, 0) + 640;
+      return {
+        sources: sources.map((s) => ({ item: stripBody(s), fileCount: detail(s.id).files.filter((f) => !f.isDir && f.path !== "SKILL.md").length, evalCases: state.suites.get(s.id)?.cases.length ?? 0, deployments: state.deployments.filter((d) => d.itemId === s.id) })),
+        conflicts: conflictsFor(sources),
+        name,
+        description,
+        body,
+        frontmatter: { "merged-from": sources.map((s) => s.name), ...(first.frontmatter.license ? { license: first.frontmatter.license } : {}) },
+        files,
+        tags: [...new Set(sources.flatMap((s) => s.tags))],
+        notes: `Kept ${first.name}'s overview as the opening because it states the trigger more precisely, and folded ${second.name}'s steps in as their own section. The reference files of both are identical, so only one copy is carried over.`,
+        dropped: [`${second.name}'s closing note about keeping the file under 500 lines (already covered by the shared conventions).`],
+        warnings,
+        validation: { findings },
+        bodyTokensBefore: sources.reduce((n, s) => n + s.tokenEstimate, 0),
+        bodyTokensAfter: tokensIn(body),
+        descriptionTokensBefore: sources.reduce((n, s) => n + s.descriptionTokens, 0),
+        descriptionTokensAfter: tokensIn(description),
+        evalCases,
+        providerId: provider.id,
+        providerName: provider.name,
+        model: provider.model ?? null,
+        inputTokens,
+        outputTokens: tokensIn(body) + tokensIn(description) + 120,
+        latencyMs: 900,
+      } satisfies T.MergeProposal;
+    },
+    merge_apply: ({ commit }) => {
+      const c = commit as T.MergeCommit;
+      if (!NAME_RE.test(c.name) || c.name.length > 64) throw new ApiError("invalid", "name must be 1–64 lowercase letters, digits or single hyphens");
+      const sources = mergeSources(c.sourceIds);
+      const taken = items.find((i) => i.name === c.name && !sources.includes(i));
+      if (taken) throw new ApiError("already_exists", `a ${taken.kind} named '${c.name}' is already in the library`);
+      const replaced = sources.find((s) => s.name === c.name) ?? null;
+      const frontmatter = { ...c.frontmatter };
+      let merged: (typeof items)[number];
+      if (replaced) {
+        merged = replaced;
+        Object.assign(merged, { description: c.description, body: c.body, frontmatter: { name: c.name, description: c.description, ...frontmatter }, tags: [...new Set(c.tags)], updatedAt: Date.now(), contentHash: Math.random().toString(16).slice(2).padEnd(40, "0"), tokenEstimate: tokensIn(c.body) + 300, descriptionTokens: tokensIn(c.description) });
+      } else {
+        merged = item({ name: c.name, description: c.description, tags: [...new Set(c.tags)], source: src("authored", ""), frontmatter }, c.body);
+        items.push(merged);
+        byId.set(merged.id, merged);
+      }
+      const retired: T.LibraryItem[] = [];
+      const deployed: T.Deployment[] = [];
+      if (c.retireSources) {
+        for (const s of sources) {
+          if (s === merged) continue;
+          items.splice(items.indexOf(s), 1);
+          byId.delete(s.id);
+          retired.push(stripBody(s));
+          for (const d of state.deployments.filter((x) => x.itemId === s.id)) {
+            const duplicate = state.deployments.some((x) => x.itemId === merged.id && x.targetId === d.targetId && x.scope === d.scope && (x.projectPath ?? null) === (d.projectPath ?? null));
+            if (duplicate) {
+              state.deployments = state.deployments.filter((x) => x !== d);
+              continue;
+            }
+            Object.assign(d, { itemId: merged.id, itemName: merged.name, path: d.path.replace(new RegExp(`/${s.name}$`), `/${merged.name}`), deployedHash: merged.contentHash, updatedAt: Date.now() });
+            deployed.push(d);
+          }
+        }
+      }
+      let evalCases = 0;
+      if (c.carryEvals) {
+        const suites = sources.map((s) => state.suites.get(s.id)).filter((s): s is T.EvalSuite => !!s);
+        const cases = suites.flatMap((s) => s.cases).map((k, i) => ({ ...k, id: i + 1 }));
+        const seen = new Set<string>();
+        const triggerCases = suites.flatMap((s) => s.triggerCases).filter((t) => !seen.has(t.query) && seen.add(t.query));
+        state.suites.set(merged.id, { itemId: merged.id, skillName: merged.name, path: `${merged.path}/evals`, exists: cases.length > 0, cases, triggerCases });
+        evalCases = cases.length;
+      }
+      emit({ type: "library_changed" });
+      emit({ type: "deployments_changed" });
+      return { item: stripBody(merged), retired, replacedId: replaced?.id ?? null, deployed, failed: [], evalCases } satisfies T.MergeResult;
+    },
 
     scan_local: async () => {
       await sleep(900);
