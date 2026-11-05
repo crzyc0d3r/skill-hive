@@ -477,6 +477,9 @@ async fn execute_job(ctx: &RunContext, job: &Job) -> CaseResult {
         transcript_path: None,
         grader_notes: None,
         error: None,
+        trace: None,
+        grader_input_tokens: 0,
+        grader_output_tokens: 0,
     };
     let started = Instant::now();
     let timeout = Duration::from_secs(ctx.config.timeout_secs.max(MIN_TIMEOUT_SECS) as u64);
@@ -513,6 +516,7 @@ async fn execute_job(ctx: &RunContext, job: &Job) -> CaseResult {
             };
             result.tool_calls = res.tool_calls;
             result.cost_usd = res.cost_usd;
+            result.trace = res.trace;
             result.transcript_path = res
                 .transcript_path
                 .as_ref()
@@ -570,6 +574,8 @@ async fn execute_job(ctx: &RunContext, job: &Job) -> CaseResult {
                         Ok(outcome) => {
                             expectations.extend(outcome.results);
                             result.grader_notes = outcome.notes;
+                            result.grader_input_tokens = outcome.input_tokens;
+                            result.grader_output_tokens = outcome.output_tokens;
                             result.status = CaseStatus::Graded;
                         }
                         Err(HiveError::Cancelled) => {

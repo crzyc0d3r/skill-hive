@@ -35,8 +35,8 @@ reaches the file system or the network directly; every operation is a core metho
 | `conflicts` | Analysis of a set that would share one agent: name collisions, duplicate content, description overlap (log-TF cosine, IDF from the whole library when it is large enough), trigger overlap, tool overlap, contradictory always/never directives, and the description budget. |
 | `recommend` | Task → ranked items (FTS5 BM25 + name/tag/trigger/description features + measured effectiveness), pairwise conflicts, greedy conflict-free in-budget suggested set, optional model re-ranking. |
 | `loadouts` | Named sets; plan (adds/removes/keeps/unmanaged, resulting conflicts and budget) and apply (exclusive or additive). |
-| `providers` | `Provider` trait with `complete` and `execute`; Claude Code CLI, Codex CLI, Anthropic Messages API, OpenAI-compatible chat completions, and a scripted offline provider; registry, probes, secrets. |
-| `evals` | Suites (`evals/evals.json`, `checks.json`, `trigger.json`), deterministic checks, LLM grader, trigger evaluation, the run engine (sandboxes, arms, repeats, concurrency, cancellation, events) and analytics. See `docs/evaluations.md`. |
+| `providers` | `Provider` trait with `complete` and `execute`; Claude Code CLI, Codex CLI, Anthropic Messages API, OpenAI-compatible chat completions, and a scripted offline provider; registry, probes, secrets. `trace` builds an `ExecutionTrace` (tool calls by category, files, thinking, token split, cache, timeline) from a CLI agent's event stream. |
+| `evals` | Suites (`evals/evals.json`, `checks.json`, `trigger.json`), deterministic checks, LLM grader, trigger evaluation, the run engine (sandboxes, arms, repeats, concurrency, cancellation, events) and analytics, including per-arm activity statistics. See `docs/evaluations.md`. |
 | `hive` | The facade: owns the database, paths, secrets, target resolver and event bus. |
 
 ## Data on disk

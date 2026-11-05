@@ -291,6 +291,167 @@ function deployment(itemName: string, targetId: string, mode: T.LinkMode = "link
   };
 }
 
+const SKILL_DIR = ".claude/skills/pdf";
+
+type StepSeed = [kind: T.TraceStepKind, summary: string, chars: number, tool?: string, category?: T.ToolCategory, isError?: boolean];
+
+/** The timeline of one mock execution: what the agent thought, read, ran and wrote. */
+function traceSteps(arm: string, caseId: number, repeat: number): { steps: StepSeed[]; opensSkill: boolean } {
+  const task = caseId === 1 ? "invoice.pdf" : caseId === 2 ? "a.pdf and b.pdf" : "w9.pdf";
+  const script = caseId === 1 ? "extract.py" : caseId === 2 ? "merge.py" : "fill.py";
+  const output = caseId === 1 ? "invoice.csv" : caseId === 2 ? "merged.pdf" : "filled.pdf";
+  // One with_skill run never opened the skill (and is the run that failed an expectation).
+  const opensSkill = arm === "with_skill" && !(caseId === 3 && repeat === 2);
+  const steps: StepSeed[] = [];
+  if (opensSkill) {
+    steps.push(
+      ["thinking", `The pdf skill is installed for this task. Let me read the skill instructions in SKILL.md before touching ${task}.`, 420],
+      ["tool_use", `${SKILL_DIR}/SKILL.md`, 64, "Read", "read"],
+      ["tool_result", "# PDF skill\n\nUse pdfplumber for tables and pypdf for merging and forms. Scripts in scripts/ are tested…", 3840],
+      ["tool_use", `${SKILL_DIR}/scripts/${caseId === 1 ? "extract_tables.py" : "pdf_tools.py"}`, 72, "Read", "read"],
+      ["tool_result", "#!/usr/bin/env python3\nimport sys\nimport pdfplumber…", 2210],
+      ["thinking", `The skill says to use ${caseId === 1 ? "pdfplumber with the lines strategy" : "pypdf"} and to verify the output afterwards. I'll follow the bundled script.`, 310],
+    );
+  } else {
+    steps.push(["thinking", `I need to work on ${task}. There are no instructions for PDFs here, so I'll look at what is in the sandbox and parse the PDF directly. PDF files are object streams; a regex over the raw bytes may be enough for simple files, otherwise I will need a library.`, 440 + repeat * 60 + caseId * 30]);
+  }
+  steps.push(
+    ["tool_use", "*.pdf", 24, "Glob", "search"],
+    ["tool_result", caseId === 2 ? "a.pdf\nb.pdf" : task, 40],
+    ["tool_use", `ls -la && python3 -c "import ${opensSkill ? "pdfplumber, pypdf" : "re"}"`, 58, "Bash", "command"],
+    ["tool_result", "total 48\n-rw-r--r-- 1 user user 18234 invoice.pdf…", 310],
+  );
+  if (!opensSkill) {
+    steps.push(["tool_use", `head -c 400 ${task.split(" ")[0]}`, 32, "Bash", "read"], ["tool_result", "%PDF-1.7\n%âãÏÓ\n1 0 obj\n<</Type/Catalog…", 400]);
+    if (caseId === 2) steps.push(["tool_use", "/Type /Page in a.pdf", 30, "Grep", "search"], ["tool_result", "a.pdf: binary file matches", 28]);
+    steps.push(["thinking", "The objects are in compressed streams, so a regex will not see the content. I'll write a small parser with zlib and fall back to a library if that fails.", 330 + repeat * 40]);
+  }
+  steps.push(["text", opensSkill ? `I'll write ${script} following the skill's approach.` : `I'll write ${script} and parse the raw PDF objects.`, 96], ["tool_use", script, opensSkill ? 1480 : 1120, "Write", "write"], ["tool_result", `File written: ${script}`, 24]);
+  const fails = arm === "with_skill" && caseId === 2 && repeat === 1;
+  if (fails) {
+    steps.push(["tool_use", `python3 ${script}`, 18, "Bash", "command"], ["tool_result", "Traceback (most recent call last):\n  File \"merge.py\", line 2, in <module>\nModuleNotFoundError: No module named 'pypdf'", 142, undefined, undefined, true], ["thinking", "pypdf is not installed in this sandbox; install it and rerun.", 90], ["tool_use", "pip install -q pypdf", 20, "Bash", "command"], ["tool_result", "", 0]);
+  }
+  steps.push(["tool_use", `python3 ${script}`, 18, "Bash", "command"], ["tool_result", `Wrote ${output}`, 60], ["tool_use", `head -5 ${output}`, 22, "Bash", "read"], ["tool_result", caseId === 1 ? "description,qty,unit,amount\nConsulting,12,95.00,1140.00…" : "%PDF-1.7…", 220], ["text", arm === "with_skill" ? `Done: ${output} was produced following the skill's procedure and verified.` : `Done: ${output} was produced by parsing the PDF directly.`, 140]);
+  return { steps, opensSkill };
+}
+
+/** An execution trace consistent with `traceSteps` and with the case result's token figures. */
+function makeTrace(arm: string, caseId: number, repeat: number, durationMs: number, inputTokens: number, outputTokens: number): T.ExecutionTrace {
+  const { steps: seeds, opensSkill } = traceSteps(arm, caseId, repeat);
+  let at = 900;
+  const steps: T.TraceStep[] = seeds.map(([kind, summary, chars, tool, category, isError]) => {
+    at += kind === "tool_result" ? 400 + Math.round(chars / 8) : kind === "thinking" ? 1800 : kind === "text" ? 700 : 1200;
+    return { atMs: at, kind, tool: tool ?? null, category: category ?? null, summary, chars, isError: isError ?? false };
+  });
+  const uses = steps.filter((s) => s.kind === "tool_use");
+  const by = (c: T.ToolCategory) => uses.filter((s) => s.category === c).length;
+  const tools: Record<string, number> = {};
+  for (const s of uses) tools[s.tool!] = (tools[s.tool!] ?? 0) + 1;
+  const reads = uses.filter((s) => s.category === "read");
+  const filesRead = [...new Set(reads.map((s) => s.summary.replace(/^head -c 400 |^head -5 /, "")))];
+  const filesWritten = [...new Set(uses.filter((s) => s.category === "write").map((s) => s.summary))];
+  const skillReads = reads.filter((s) => s.summary.startsWith(SKILL_DIR)).length;
+  const sum = (kind: T.TraceStepKind) => steps.filter((s) => s.kind === kind).reduce((n, s) => n + s.chars, 0);
+  const thinkingChars = sum("thinking");
+  const textChars = sum("text");
+  const toolInputChars = sum("tool_use");
+  const toolResultChars = sum("tool_result");
+  const outChars = thinkingChars + textChars + toolInputChars;
+  const thinkingTokens = Math.round((outputTokens * thinkingChars) / outChars);
+  const textTokens = Math.round((outputTokens * textChars) / outChars);
+  const toolInputTokens = outputTokens - thinkingTokens - textTokens;
+  const toolResultTokens = Math.ceil(toolResultChars / 4);
+  const cacheReadTokens = Math.round(inputTokens * (opensSkill ? 0.82 : 0.74));
+  const cacheCreationTokens = Math.round(inputTokens * 0.11);
+  const first = steps.find((s) => s.kind === "tool_use");
+  return {
+    turns: uses.length + 1,
+    toolCalls: uses.length,
+    reads: reads.length,
+    searches: by("search"),
+    writes: by("write"),
+    commands: by("command"),
+    web: 0,
+    subagents: 0,
+    otherTools: 0,
+    toolErrors: steps.filter((s) => s.isError).length,
+    tools,
+    filesRead,
+    filesWritten,
+    filesReadCount: filesRead.length,
+    filesWrittenCount: filesWritten.length,
+    skillReads,
+    skillInContext: false,
+    subagentTurns: 0,
+    subagentToolCalls: 0,
+    thinkingBlocks: steps.filter((s) => s.kind === "thinking").length,
+    thinkingChars,
+    textBlocks: steps.filter((s) => s.kind === "text").length,
+    textChars,
+    toolInputChars,
+    toolResultChars,
+    thinkingTokens,
+    textTokens,
+    toolInputTokens,
+    toolResultTokens,
+    ioShare: (toolInputTokens + toolResultTokens) / (toolInputTokens + toolResultTokens + thinkingTokens + textTokens),
+    cacheReadTokens,
+    cacheCreationTokens,
+    uncachedInputTokens: inputTokens - cacheReadTokens - cacheCreationTokens,
+    modelTimeMs: Math.round(durationMs * 0.68),
+    toolTimeMs: Math.round(durationMs * 0.21),
+    firstToolMs: first?.atMs ?? null,
+    steps,
+    stepsTruncated: 0,
+  };
+}
+
+function statsOf(values: number[]): T.Stats {
+  if (values.length === 0) return { n: 0, mean: 0, stddev: 0, min: 0, max: 0 };
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.length > 1 ? values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - 1) : 0;
+  return { n: values.length, mean, stddev: Math.sqrt(variance), min: Math.min(...values), max: Math.max(...values) };
+}
+
+/** The traces `makeCaseResults` produces for one arm (3 cases × 2 repeats). */
+function armTraces(arm: string): T.ExecutionTrace[] {
+  return [1, 2, 3].flatMap((caseId) => [1, 2].map((repeat) => makeTrace(arm, caseId, repeat, caseDuration(arm, caseId), caseInputTokens(arm, repeat), caseOutputTokens(arm))));
+}
+
+/** Per-arm activity aggregated over the traces `makeCaseResults` produces for that arm. */
+function makeActivity(arm: string): T.ArmActivity {
+  const traces = armTraces(arm);
+  const of = (f: (t: T.ExecutionTrace) => number) => statsOf(traces.map(f));
+  const timed = (f: (t: T.ExecutionTrace) => number | null | undefined) => statsOf(traces.map(f).filter((v): v is number => typeof v === "number"));
+  return {
+    traced: traces.length,
+    turns: of((t) => t.turns),
+    toolCalls: of((t) => t.toolCalls),
+    reads: of((t) => t.reads),
+    searches: of((t) => t.searches),
+    writes: of((t) => t.writes),
+    commands: of((t) => t.commands),
+    web: of((t) => t.web),
+    toolErrors: of((t) => t.toolErrors),
+    filesRead: of((t) => t.filesReadCount),
+    filesWritten: of((t) => t.filesWrittenCount),
+    thinkingTokens: of((t) => t.thinkingTokens),
+    textTokens: of((t) => t.textTokens),
+    toolInputTokens: of((t) => t.toolInputTokens),
+    toolResultTokens: of((t) => t.toolResultTokens),
+    ioShare: of((t) => t.ioShare),
+    cacheReadTokens: of((t) => t.cacheReadTokens),
+    freshInputTokens: of((t) => t.cacheCreationTokens + t.uncachedInputTokens),
+    modelTimeMs: timed((t) => t.modelTimeMs),
+    toolTimeMs: timed((t) => t.toolTimeMs),
+    skillOpened: traces.filter((t) => t.skillReads > 0).length / traces.length,
+  };
+}
+
+const caseDuration = (arm: string, caseId: number) => (arm === "with_skill" ? 95_000 + caseId * 4000 : 70_000 + caseId * 6000);
+const caseInputTokens = (arm: string, repeat: number) => (arm === "with_skill" ? 36_000 + repeat * 1000 : 24_000 + repeat * 900);
+const caseOutputTokens = (arm: string) => (arm === "with_skill" ? 5200 : 4100);
+
 function makeBenchmark(skill: string, withRate: number, baseRate: number, verdict: T.Verdict): T.Benchmark {
   const stats = (mean: number, sd: number, n: number): T.Stats => ({ n, mean, stddev: sd, min: Math.max(0, mean - sd * 1.5), max: Math.min(1, mean + sd * 1.5) });
   return {
@@ -299,8 +460,8 @@ function makeBenchmark(skill: string, withRate: number, baseRate: number, verdic
     executor: "Claude Code (claude-sonnet-4-5)",
     grader: "Anthropic API (claude-sonnet-4-5)",
     arms: [
-      { label: "with_skill", runs: 6, errors: 0, pass_rate: stats(withRate, 0.08, 6), tokens: { n: 6, mean: 41200, stddev: 6100, min: 32000, max: 50100 }, duration_ms: { n: 6, mean: 98_000, stddev: 21_000, min: 70_000, max: 130_000 }, tool_calls: { n: 6, mean: 19, stddev: 4, min: 13, max: 25 }, cost_usd: 0.42 } as unknown as T.ArmSummary,
-      { label: "without_skill", runs: 6, errors: 0, pass_rate: stats(baseRate, 0.14, 6), tokens: { n: 6, mean: 28400, stddev: 9000, min: 17000, max: 41000 }, duration_ms: { n: 6, mean: 76_000, stddev: 30_000, min: 40_000, max: 120_000 }, tool_calls: { n: 6, mean: 11, stddev: 5, min: 5, max: 18 }, cost_usd: 0.3 } as unknown as T.ArmSummary,
+      { label: "with_skill", runs: 6, errors: 0, pass_rate: stats(withRate, 0.08, 6), tokens: { n: 6, mean: 41200, stddev: 6100, min: 32000, max: 50100 }, duration_ms: { n: 6, mean: 98_000, stddev: 21_000, min: 70_000, max: 130_000 }, cost_usd: 0.42 } as unknown as T.ArmSummary,
+      { label: "without_skill", runs: 6, errors: 0, pass_rate: stats(baseRate, 0.14, 6), tokens: { n: 6, mean: 28400, stddev: 9000, min: 17000, max: 41000 }, duration_ms: { n: 6, mean: 76_000, stddev: 30_000, min: 40_000, max: 120_000 }, cost_usd: 0.3 } as unknown as T.ArmSummary,
     ].map((a) => ({
       label: a.label,
       runs: a.runs,
@@ -308,8 +469,10 @@ function makeBenchmark(skill: string, withRate: number, baseRate: number, verdic
       passRate: (a as unknown as { pass_rate: T.Stats }).pass_rate,
       tokens: a.tokens,
       durationMs: (a as unknown as { duration_ms: T.Stats }).duration_ms,
-      toolCalls: (a as unknown as { tool_calls: T.Stats }).tool_calls,
+      toolCalls: statsOf(armTraces(a.label).map((t) => t.toolCalls)),
       costUsd: (a as unknown as { cost_usd: number }).cost_usd,
+      activity: makeActivity(a.label),
+      // The pdf skill's run-0 predates traces in the mock history (see initialState).
     })),
     baseline: "without_skill",
     deltas: [
@@ -354,6 +517,8 @@ function makeBenchmark(skill: string, withRate: number, baseRate: number, verdic
       "2 of 7 expectations pass in every arm and do not measure the skill.",
       "with_skill uses 1.45× the tokens of without_skill and takes 29% longer.",
       "\"Page order is preserved\" is flaky across repeats; tighten the assertion or the prompt.",
+      "with_skill opened the skill in only 5 of 6 run(s): the other run(s) never read it, so its instructions could not help there.",
+      "with_skill reads 1.4× as many files as without_skill (2.8 vs 2.0 per run) and spends 69% of its traffic on tool IO vs 54%.",
     ],
     generatedAt: now - day,
   };
@@ -404,6 +569,10 @@ function makeCaseResults(run: T.EvalRun): T.CaseResult[] {
           return { text, passed, evidence: passed ? `Found in transcript step ${3 + i}: output verified` : "No evidence in the transcript or outputs", source: i === 0 ? "check" : "grader" };
         });
         const passed = expectations.filter((e) => e.passed).length;
+        const inputTokens = caseInputTokens(arm, repeat);
+        const outputTokens = caseOutputTokens(arm);
+        const durationMs = caseDuration(arm, c.id);
+        const trace = makeTrace(arm, c.id, repeat, durationMs, inputTokens, outputTokens);
         out.push({
           id: `${run.id}-${c.id}-${arm}-${repeat}`,
           runId: run.id,
@@ -417,16 +586,19 @@ function makeCaseResults(run: T.EvalRun): T.CaseResult[] {
           failed: expectations.length - passed,
           total: expectations.length,
           passRate: passed / expectations.length,
-          inputTokens: arm === "with_skill" ? 36_000 + repeat * 1000 : 24_000 + repeat * 900,
-          outputTokens: arm === "with_skill" ? 5200 : 4100,
-          durationMs: arm === "with_skill" ? 95_000 + c.id * 4000 : 70_000 + c.id * 6000,
-          toolCalls: arm === "with_skill" ? 18 + c.id : 10 + c.id,
+          inputTokens,
+          outputTokens,
+          durationMs,
+          toolCalls: trace.toolCalls,
           costUsd: 0.07,
-          outputExcerpt: arm === "with_skill" ? "I read SKILL.md and used pdfplumber to extract the tables into invoice.csv…" : "I attempted to parse the PDF with a regex over the raw bytes…",
+          outputExcerpt: trace.skillReads > 0 ? "I read SKILL.md and used pdfplumber to extract the tables into invoice.csv…" : arm === "with_skill" ? "I filled the form with pypdf directly and saved it as filled.pdf…" : "I attempted to parse the PDF with a regex over the raw bytes…",
           sandboxPath: `${run.workspace}/cases/${c.name}/${arm}/${repeat}`,
           transcriptPath: `${run.workspace}/cases/${c.name}/${arm}/${repeat}/transcript.jsonl`,
           graderNotes: null,
           error: null,
+          trace,
+          graderInputTokens: 1900 + c.id * 120,
+          graderOutputTokens: 240,
         });
       }
     }

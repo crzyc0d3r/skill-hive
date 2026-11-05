@@ -1407,6 +1407,203 @@ pub struct CaseResult {
     pub grader_notes: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// What the agent did while executing, when the provider's event stream allows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace: Option<ExecutionTrace>,
+    /// Tokens the grader spent on this case (0 without a grader).
+    #[serde(default)]
+    pub grader_input_tokens: u64,
+    #[serde(default)]
+    pub grader_output_tokens: u64,
+}
+
+/// What a tool call did, judged from its name and arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ToolCategory {
+    /// Reading a file (`Read`, `cat`, `head`, …).
+    Read,
+    /// Scanning for files or text (`Glob`, `Grep`, `ls`, `find`, `rg`, …).
+    Search,
+    /// Creating or changing files (`Write`, `Edit`, patches, redirects).
+    Write,
+    /// Running a command for its effect (`Bash`, builds, tests, scripts).
+    Command,
+    /// Fetching or searching the web.
+    Web,
+    /// Delegating to a subagent (`Task`, `Agent`).
+    Subagent,
+    /// Anything else (MCP tools, todo lists, questions to the user).
+    Other,
+}
+
+impl ToolCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            ToolCategory::Read => "read",
+            ToolCategory::Search => "search",
+            ToolCategory::Write => "write",
+            ToolCategory::Command => "command",
+            ToolCategory::Web => "web",
+            ToolCategory::Subagent => "subagent",
+            ToolCategory::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum TraceStepKind {
+    /// A thinking (chain-of-thought) block the model emitted.
+    Thinking,
+    /// Visible assistant text.
+    Text,
+    /// A tool call.
+    ToolUse,
+    /// The result a tool returned to the model.
+    ToolResult,
+}
+
+/// One step of an execution timeline.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TraceStep {
+    /// Milliseconds since the execution started, when the stream was timed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at_ms: Option<u64>,
+    pub kind: TraceStepKind,
+    /// Tool name for tool steps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<ToolCategory>,
+    /// A short description: the path, the command, the pattern, or the first characters of
+    /// the text.
+    pub summary: String,
+    /// Characters of the block (text, arguments or result).
+    pub chars: u64,
+    #[serde(default)]
+    pub is_error: bool,
+}
+
+/// What the agent did during one execution, derived from the provider's event stream. Counts
+/// are exact where the stream reports them; token figures marked as estimates are derived
+/// from character counts (≈ 4 characters per token).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ExecutionTrace {
+    /// Model calls (assistant messages).
+    pub turns: u32,
+    pub tool_calls: u32,
+    pub reads: u32,
+    pub searches: u32,
+    pub writes: u32,
+    pub commands: u32,
+    pub web: u32,
+    pub subagents: u32,
+    pub other_tools: u32,
+    /// Tool results flagged as errors.
+    pub tool_errors: u32,
+    /// Calls per tool name.
+    pub tools: BTreeMap<String, u32>,
+    /// Distinct files the agent read (sandbox-relative when inside it), capped.
+    pub files_read: Vec<String>,
+    /// Distinct files the agent wrote or edited, capped.
+    pub files_written: Vec<String>,
+    /// Distinct files read, including those beyond the cap.
+    pub files_read_count: u32,
+    pub files_written_count: u32,
+    /// Reads of files inside the installed skill (`SKILL.md`, bundled scripts…), including
+    /// loading it through Claude Code's `Skill` tool.
+    pub skill_reads: u32,
+    /// The skill was in the model's context without a read: API providers put `SKILL.md` in
+    /// the system prompt.
+    #[serde(default)]
+    pub skill_in_context: bool,
+    /// Model calls made by subagents (Claude Code forwards them with `parent_tool_use_id`);
+    /// not included in `turns`.
+    #[serde(default)]
+    pub subagent_turns: u32,
+    /// Tool calls made by subagents; not included in `tool_calls` or the categories.
+    #[serde(default)]
+    pub subagent_tool_calls: u32,
+    pub thinking_blocks: u32,
+    pub thinking_chars: u64,
+    pub text_blocks: u32,
+    pub text_chars: u64,
+    /// Characters of serialised tool arguments (file contents written, commands, patterns).
+    pub tool_input_chars: u64,
+    /// Characters of tool results returned to the model.
+    pub tool_result_chars: u64,
+    /// Output tokens spent thinking (estimated split of the reported output tokens).
+    pub thinking_tokens: u64,
+    /// Output tokens spent on visible text (estimate).
+    pub text_tokens: u64,
+    /// Output tokens spent on tool arguments (estimate).
+    pub tool_input_tokens: u64,
+    /// Input tokens taken up by tool results (estimate).
+    pub tool_result_tokens: u64,
+    /// Share of the model's traffic that was tool IO: (tool arguments + tool results) over
+    /// (those + thinking + text), 0…1.
+    pub io_share: f64,
+    /// Input tokens served from the prompt cache.
+    pub cache_read_tokens: u64,
+    /// Input tokens written to the prompt cache.
+    pub cache_creation_tokens: u64,
+    /// Input tokens neither read from nor written to the cache.
+    pub uncached_input_tokens: u64,
+    /// Time spent waiting for the model, when the provider reports it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_time_ms: Option<u64>,
+    /// Time between tool calls and their results, when the stream was timed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_time_ms: Option<u64>,
+    /// When the first tool call happened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_tool_ms: Option<u64>,
+    /// The timeline, capped at [`crate::providers::trace::STEP_CAP`] steps.
+    pub steps: Vec<TraceStep>,
+    /// Steps beyond the cap that were dropped.
+    pub steps_truncated: u32,
+}
+
+/// Per-arm activity statistics over the traced results of the arm.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ArmActivity {
+    /// Results that carried a trace.
+    pub traced: u32,
+    pub turns: Stats,
+    /// Tool calls over the traced results (the arm-level `tool_calls` covers every scored
+    /// result).
+    #[serde(default)]
+    pub tool_calls: Stats,
+    pub reads: Stats,
+    pub searches: Stats,
+    pub writes: Stats,
+    pub commands: Stats,
+    pub web: Stats,
+    pub tool_errors: Stats,
+    pub files_read: Stats,
+    pub files_written: Stats,
+    pub thinking_tokens: Stats,
+    pub text_tokens: Stats,
+    pub tool_input_tokens: Stats,
+    pub tool_result_tokens: Stats,
+    pub io_share: Stats,
+    pub cache_read_tokens: Stats,
+    /// Input tokens that were not cache reads (prompt, tool results, cache writes).
+    pub fresh_input_tokens: Stats,
+    pub model_time_ms: Stats,
+    pub tool_time_ms: Stats,
+    /// Fraction of traced results in which the agent read a file of the skill, or had it in
+    /// context (API providers).
+    pub skill_opened: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -1446,6 +1643,9 @@ pub struct ArmSummary {
     pub tool_calls: Stats,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost_usd: Option<f64>,
+    /// Activity profile; absent when no result of the arm carried a trace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<ArmActivity>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

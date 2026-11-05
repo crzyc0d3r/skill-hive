@@ -17,8 +17,8 @@
 use std::collections::BTreeMap;
 
 use crate::model::{
-    ArmDelta, ArmKind, ArmSummary, Benchmark, CaseResult, CaseStatus, EvalRun, ExpectationPattern,
-    ExpectationRow, RunConfig, Stats, TriggerSummary, Verdict,
+    ArmActivity, ArmDelta, ArmKind, ArmSummary, Benchmark, CaseResult, CaseStatus, EvalRun,
+    ExecutionTrace, ExpectationPattern, ExpectationRow, RunConfig, Stats, TriggerSummary, Verdict,
 };
 
 /// Bootstrap resamples for the confidence interval.
@@ -27,6 +27,8 @@ pub const BOOTSTRAP_RESAMPLES: usize = 2000;
 pub const SMALL_SAMPLE: u32 = 5;
 /// Token ratio between arms that earns a note.
 pub const TOKEN_RATIO_NOTE: f64 = 1.5;
+/// Difference in IO share between arms that earns a note.
+pub const IO_SHARE_NOTE: f64 = 0.15;
 
 /// Mean, sample standard deviation (n − 1), min and max. All zero for an empty slice.
 pub fn stats(values: &[f64]) -> Stats {
@@ -343,6 +345,55 @@ pub fn pass_rate_samples(results: &[CaseResult], arm: &str) -> Vec<f64> {
         .collect()
 }
 
+/// Activity statistics over the traced, scored results of an arm; `None` without traces.
+pub fn summarize_activity(done: &[&CaseResult]) -> Option<ArmActivity> {
+    let traces: Vec<&ExecutionTrace> = done.iter().filter_map(|r| r.trace.as_ref()).collect();
+    if traces.is_empty() {
+        return None;
+    }
+    let of =
+        |f: fn(&ExecutionTrace) -> f64| stats(&traces.iter().map(|t| f(t)).collect::<Vec<_>>());
+    let opened = traces
+        .iter()
+        .filter(|t| t.skill_reads > 0 || t.skill_in_context)
+        .count();
+    Some(ArmActivity {
+        traced: traces.len() as u32,
+        turns: of(|t| t.turns as f64),
+        tool_calls: of(|t| t.tool_calls as f64),
+        reads: of(|t| t.reads as f64),
+        searches: of(|t| t.searches as f64),
+        writes: of(|t| t.writes as f64),
+        commands: of(|t| t.commands as f64),
+        web: of(|t| t.web as f64),
+        tool_errors: of(|t| t.tool_errors as f64),
+        files_read: of(|t| t.files_read_count as f64),
+        files_written: of(|t| t.files_written_count as f64),
+        thinking_tokens: of(|t| t.thinking_tokens as f64),
+        text_tokens: of(|t| t.text_tokens as f64),
+        tool_input_tokens: of(|t| t.tool_input_tokens as f64),
+        tool_result_tokens: of(|t| t.tool_result_tokens as f64),
+        io_share: of(|t| t.io_share),
+        cache_read_tokens: of(|t| t.cache_read_tokens as f64),
+        fresh_input_tokens: of(|t| (t.cache_creation_tokens + t.uncached_input_tokens) as f64),
+        model_time_ms: stats(
+            &traces
+                .iter()
+                .filter_map(|t| t.model_time_ms)
+                .map(|v| v as f64)
+                .collect::<Vec<_>>(),
+        ),
+        tool_time_ms: stats(
+            &traces
+                .iter()
+                .filter_map(|t| t.tool_time_ms)
+                .map(|v| v as f64)
+                .collect::<Vec<_>>(),
+        ),
+        skill_opened: opened as f64 / traces.len() as f64,
+    })
+}
+
 /// Summary statistics of one arm.
 pub fn summarize_arm(label: &str, results: &[CaseResult]) -> ArmSummary {
     let in_arm: Vec<&CaseResult> = results
@@ -352,6 +403,7 @@ pub fn summarize_arm(label: &str, results: &[CaseResult]) -> ArmSummary {
     let done: Vec<&CaseResult> = in_arm.iter().copied().filter(|r| scored(r)).collect();
     let costs: Vec<f64> = done.iter().filter_map(|r| r.cost_usd).collect();
     ArmSummary {
+        activity: summarize_activity(&done),
         label: label.to_string(),
         runs: in_arm.len() as u32,
         errors: in_arm
@@ -469,6 +521,98 @@ fn median(values: &mut [f64]) -> f64 {
     } else {
         values[mid]
     }
+}
+
+/// Notes about how the arms worked, from their activity profiles: whether skill arms opened
+/// the skill, and large differences in reads, thinking, tool errors and IO share.
+pub fn activity_notes(arms: &[ArmSummary], config: &RunConfig, baseline: &str) -> Vec<String> {
+    let mut notes = Vec::new();
+    let base = arms
+        .iter()
+        .find(|a| a.label == baseline)
+        .and_then(|a| a.activity.as_ref());
+    for arm in arms {
+        let Some(act) = &arm.activity else {
+            continue;
+        };
+        let has_skill = config
+            .arms
+            .iter()
+            .find(|a| a.label == arm.label)
+            .is_some_and(|a| !matches!(a.kind, ArmKind::WithoutSkill));
+        if has_skill {
+            let opened = (act.skill_opened * act.traced as f64).round() as u32;
+            if opened < act.traced {
+                notes.push(format!(
+                    "{} opened the skill in only {opened} of {} run(s): the other run(s) never read it, so its instructions could not help there",
+                    arm.label, act.traced
+                ));
+            } else {
+                notes.push(format!(
+                    "{} opened the skill in every run ({} of {})",
+                    arm.label, opened, act.traced
+                ));
+            }
+        }
+        if act.tool_errors.mean >= 1.0 {
+            notes.push(format!(
+                "{} hit {:.1} tool error(s) per run on average",
+                arm.label, act.tool_errors.mean
+            ));
+        }
+        if arm.label == baseline {
+            continue;
+        }
+        let Some(base) = base else {
+            continue;
+        };
+        if base.reads.mean > 0.0 && act.reads.mean / base.reads.mean >= TOKEN_RATIO_NOTE {
+            notes.push(format!(
+                "{} reads {:.1}× as many files as {baseline} ({:.1} vs {:.1} per run)",
+                arm.label,
+                act.reads.mean / base.reads.mean,
+                act.reads.mean,
+                base.reads.mean
+            ));
+        }
+        if base.thinking_tokens.mean > 0.0
+            && act.thinking_tokens.mean / base.thinking_tokens.mean >= TOKEN_RATIO_NOTE
+        {
+            notes.push(format!(
+                "{} thinks {:.1}× as much as {baseline} ({} vs {} tokens per run)",
+                arm.label,
+                act.thinking_tokens.mean / base.thinking_tokens.mean,
+                num(act.thinking_tokens.mean),
+                num(base.thinking_tokens.mean)
+            ));
+        } else if act.thinking_tokens.mean > 0.0
+            && base.thinking_tokens.mean / act.thinking_tokens.mean >= TOKEN_RATIO_NOTE
+        {
+            notes.push(format!(
+                "{} thinks {:.1}× as much as {} ({} vs {} tokens per run)",
+                baseline,
+                base.thinking_tokens.mean / act.thinking_tokens.mean,
+                arm.label,
+                num(base.thinking_tokens.mean),
+                num(act.thinking_tokens.mean)
+            ));
+        }
+        let io_diff = act.io_share.mean - base.io_share.mean;
+        if io_diff.abs() >= IO_SHARE_NOTE {
+            notes.push(format!(
+                "{} spends {} of its traffic on tool IO vs {} for {baseline}: {}",
+                arm.label,
+                pct(act.io_share.mean),
+                pct(base.io_share.mean),
+                if io_diff > 0.0 {
+                    "more of its tokens move data through tools, fewer reason or explain"
+                } else {
+                    "more of its tokens reason or explain, fewer move data through tools"
+                }
+            ));
+        }
+    }
+    notes
 }
 
 /// Analyst notes: what the aggregates hide.
@@ -643,7 +787,8 @@ pub fn aggregate(
         .or(deltas.first())
         .map(|d| d.verdict)
         .unwrap_or(Verdict::Inconclusive);
-    let notes = analyst_notes(&arms, &expectations, results, &baseline);
+    let mut notes = analyst_notes(&arms, &expectations, results, &baseline);
+    notes.extend(activity_notes(&arms, config, &baseline));
     Benchmark {
         skill_name: run.skill_name.clone(),
         skill_hash: run.skill_hash.clone(),
@@ -774,6 +919,94 @@ pub fn benchmark_markdown(b: &Benchmark) -> String {
                 secs(d.duration_delta_ms),
                 d.verdict.label()
             ));
+        }
+        md.push('\n');
+    }
+
+    if b.arms.iter().any(|a| a.activity.is_some()) {
+        md.push_str("## Activity\n\n");
+        md.push_str(
+            "Mean per run over the traced executions. Token splits are estimated from characters; cache figures and turns are as reported.\n\n",
+        );
+        let labels: Vec<&str> = b.arms.iter().map(|a| a.label.as_str()).collect();
+        md.push_str(&format!("| Metric | {} |\n", labels.join(" | ")));
+        md.push_str(&format!("|---|{}\n", "---:|".repeat(labels.len())));
+        type Row<'a> = (&'a str, Box<dyn Fn(&ArmActivity) -> String + 'a>);
+        let rows: Vec<Row> = vec![
+            ("Traced runs", Box::new(|a| a.traced.to_string())),
+            ("Model turns", Box::new(|a| format!("{:.1}", a.turns.mean))),
+            (
+                "Tool calls",
+                Box::new(|a| format!("{:.1}", a.tool_calls.mean)),
+            ),
+            ("File reads", Box::new(|a| format!("{:.1}", a.reads.mean))),
+            ("Searches", Box::new(|a| format!("{:.1}", a.searches.mean))),
+            ("Writes", Box::new(|a| format!("{:.1}", a.writes.mean))),
+            ("Commands", Box::new(|a| format!("{:.1}", a.commands.mean))),
+            ("Web", Box::new(|a| format!("{:.1}", a.web.mean))),
+            (
+                "Tool errors",
+                Box::new(|a| format!("{:.1}", a.tool_errors.mean)),
+            ),
+            (
+                "Distinct files read",
+                Box::new(|a| format!("{:.1}", a.files_read.mean)),
+            ),
+            (
+                "Distinct files written",
+                Box::new(|a| format!("{:.1}", a.files_written.mean)),
+            ),
+            ("Opened the skill", Box::new(|a| pct(a.skill_opened))),
+            (
+                "Thinking tokens (est.)",
+                Box::new(|a| num(a.thinking_tokens.mean)),
+            ),
+            ("Text tokens (est.)", Box::new(|a| num(a.text_tokens.mean))),
+            (
+                "Tool-argument tokens (est.)",
+                Box::new(|a| num(a.tool_input_tokens.mean)),
+            ),
+            (
+                "Tool-result tokens (est.)",
+                Box::new(|a| num(a.tool_result_tokens.mean)),
+            ),
+            ("IO share", Box::new(|a| pct(a.io_share.mean))),
+            (
+                "Cache-read tokens",
+                Box::new(|a| num(a.cache_read_tokens.mean)),
+            ),
+            (
+                "Fresh input tokens",
+                Box::new(|a| num(a.fresh_input_tokens.mean)),
+            ),
+            (
+                "Model time",
+                Box::new(|a| {
+                    if a.model_time_ms.n > 0 {
+                        secs(a.model_time_ms.mean)
+                    } else {
+                        "—".into()
+                    }
+                }),
+            ),
+            (
+                "Tool time",
+                Box::new(|a| {
+                    if a.tool_time_ms.n > 0 {
+                        secs(a.tool_time_ms.mean)
+                    } else {
+                        "—".into()
+                    }
+                }),
+            ),
+        ];
+        for (name, f) in rows {
+            let cells: Vec<String> = b
+                .arms
+                .iter()
+                .map(|a| a.activity.as_ref().map(&f).unwrap_or_else(|| "—".into()))
+                .collect();
+            md.push_str(&format!("| {name} | {} |\n", cells.join(" | ")));
         }
         md.push('\n');
     }
@@ -1069,7 +1302,40 @@ mod tests {
             transcript_path: None,
             grader_notes: None,
             error: None,
+            trace: None,
+            grader_input_tokens: 0,
+            grader_output_tokens: 0,
         }
+    }
+
+    fn traced(
+        mut r: CaseResult,
+        reads: u32,
+        skill_reads: u32,
+        thinking: u64,
+        io: f64,
+    ) -> CaseResult {
+        r.trace = Some(ExecutionTrace {
+            turns: 4,
+            tool_calls: reads + 1,
+            reads,
+            writes: 1,
+            skill_reads,
+            files_read_count: reads,
+            files_written_count: 1,
+            thinking_tokens: thinking,
+            text_tokens: 100,
+            tool_input_tokens: 50,
+            tool_result_tokens: 300,
+            io_share: io,
+            cache_read_tokens: 1000,
+            cache_creation_tokens: 200,
+            uncached_input_tokens: 20,
+            tool_errors: if reads > 2 { 1 } else { 0 },
+            model_time_ms: Some(1500),
+            ..Default::default()
+        });
+        r
     }
 
     fn run() -> EvalRun {
@@ -1254,5 +1520,123 @@ mod tests {
         assert_eq!(num(1234567.0), "1,234,567");
         assert_eq!(num(999.0), "999");
         assert_eq!(num(-1500.0), "-1,500");
+    }
+
+    #[test]
+    fn activity_is_aggregated_and_noted() {
+        // Without traces there is no activity section and no activity note.
+        let plain = aggregate(
+            &run(),
+            &[result(1, "with_skill", 1, &[true], 10, 10)],
+            None,
+            "x",
+            None,
+        );
+        assert!(plain.arms.iter().all(|a| a.activity.is_none()));
+        assert!(!benchmark_markdown(&plain).contains("## Activity"));
+
+        let results = vec![
+            traced(
+                result(1, "with_skill", 1, &[true, true], 2000, 3000),
+                3,
+                1,
+                900,
+                0.6,
+            ),
+            traced(
+                result(1, "with_skill", 2, &[true, true], 2200, 3100),
+                3,
+                0,
+                700,
+                0.5,
+            ),
+            traced(
+                result(1, "without_skill", 1, &[true, false], 1000, 2000),
+                1,
+                0,
+                300,
+                0.2,
+            ),
+            traced(
+                result(1, "without_skill", 2, &[true, false], 1, 2100),
+                1,
+                0,
+                300,
+                0.3,
+            ),
+            // An untraced result is ignored by the activity statistics but still scored.
+            result(2, "with_skill", 1, &[true, true], 2100, 2900),
+        ];
+        let b = aggregate(&run(), &results, None, "x", None);
+        let with = b.arms[0].activity.as_ref().expect("with_skill activity");
+        let without = b.arms[1].activity.as_ref().expect("baseline activity");
+        assert_eq!((with.traced, without.traced), (2, 2));
+        assert!(approx(with.reads.mean, 3.0, 1e-9));
+        assert!(approx(with.skill_opened, 0.5, 1e-9));
+        assert!(approx(without.skill_opened, 0.0, 1e-9));
+        assert!(approx(with.thinking_tokens.mean, 800.0, 1e-9));
+        assert!(approx(with.io_share.mean, 0.55, 1e-9));
+        assert!(approx(with.fresh_input_tokens.mean, 220.0, 1e-9));
+        assert_eq!(with.model_time_ms.n, 2);
+        assert_eq!(with.tool_time_ms.n, 0, "no timed tool steps in the fixture");
+        assert!(approx(with.tool_errors.mean, 1.0, 1e-9));
+
+        let notes = b.notes.join("\n");
+        assert!(
+            notes.contains("with_skill opened the skill in only 1 of 2 run(s)"),
+            "{notes}"
+        );
+        assert!(!notes.contains("without_skill opened"), "{notes}");
+        assert!(
+            notes.contains("with_skill reads 3.0× as many files"),
+            "{notes}"
+        );
+        assert!(
+            notes.contains("with_skill thinks 2.7× as much as without_skill"),
+            "{notes}"
+        );
+        assert!(
+            notes.contains("with_skill spends 55% of its traffic on tool IO vs 25%"),
+            "{notes}"
+        );
+        assert!(
+            notes.contains("with_skill hit 1.0 tool error(s)"),
+            "{notes}"
+        );
+
+        let md = benchmark_markdown(&b);
+        assert!(md.contains("## Activity"), "{md}");
+        assert!(
+            md.contains("| Metric | with_skill | without_skill |"),
+            "{md}"
+        );
+        assert!(md.contains("| Opened the skill | 50% | 0% |"), "{md}");
+        assert!(md.contains("| File reads | 3.0 | 1.0 |"), "{md}");
+        assert!(
+            md.contains("| Thinking tokens (est.) | 800 | 300 |"),
+            "{md}"
+        );
+        assert!(md.contains("| Tool time | — | — |"), "{md}");
+
+        // A skill arm that always opened the skill gets the positive note.
+        let results = vec![
+            traced(result(1, "with_skill", 1, &[true], 1, 1), 1, 1, 10, 0.1),
+            traced(result(1, "with_skill", 2, &[true], 1, 1), 1, 2, 10, 0.1),
+            traced(result(1, "without_skill", 1, &[true], 1, 1), 1, 0, 10, 0.1),
+            traced(result(1, "without_skill", 2, &[true], 1, 1), 1, 0, 10, 0.1),
+        ];
+        let b = aggregate(&run(), &results, None, "x", None);
+        assert!(
+            b.notes
+                .iter()
+                .any(|n| n == "with_skill opened the skill in every run (2 of 2)"),
+            "{:?}",
+            b.notes
+        );
+        assert!(
+            !b.notes.iter().any(|n| n.contains("reads")),
+            "{:?}",
+            b.notes
+        );
     }
 }

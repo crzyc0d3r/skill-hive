@@ -43,6 +43,11 @@
 //! the output), `duration_ms` (the provider really waits this long, honouring cancellation and
 //! the timeout) and `cost_usd` feed the metrics; `fail: true` makes the call return an error
 //! whose message is `error`.
+//!
+//! The execution trace is simulated too: every file written is a write; `reads`, `searches`
+//! and `commands` add that many tool calls of each kind (when a skill is installed the first
+//! read opens its `SKILL.md`); `thinking` is recorded as one thinking block. `tool_calls` is
+//! raised to the total of these when it is lower.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -52,11 +57,12 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
+use super::trace::{Dialect, TraceBuilder};
 use super::{
     CompletionRequest, CompletionResponse, ExecutionResult, ExecutionTask, Provider, sandbox,
 };
 use crate::error::{HiveError, IoContext, Result};
-use crate::model::{ProviderConfig, ProviderProbe};
+use crate::model::{ProviderConfig, ProviderProbe, ToolCategory};
 
 /// Directory (inside the sandbox) where the scripted provider installs the skill.
 pub const SKILLS_DIR: &str = ".skills";
@@ -83,6 +89,15 @@ pub struct ScriptRule {
     pub fail: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Simulated file reads (the first one opens the skill's `SKILL.md` when one is installed).
+    pub reads: u32,
+    /// Simulated searches (`Glob`/`Grep`-style scans).
+    pub searches: u32,
+    /// Simulated shell commands.
+    pub commands: u32,
+    /// Simulated chain of thought, recorded as one thinking block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
 }
 
 impl ScriptRule {
@@ -293,6 +308,52 @@ impl Provider for ScriptedProvider {
             serde_json::json!({"type": "prompt", "text": prompt, "label": task.label, "skill": skill_name}),
             serde_json::json!({"type": "rule", "index": rule_index, "default": rule_index.is_none()}),
         ];
+        let skill_marker = skill_name.as_ref().map(|n| format!("{SKILLS_DIR}/{n}"));
+        let mut trace = TraceBuilder::new(Dialect::ClaudeCode, &task.cwd, skill_marker.as_deref());
+        let mut at = 0u64;
+        if let Some(thinking) = rule.thinking.as_deref().filter(|t| !t.trim().is_empty()) {
+            trace.thinking(thinking, Some(at));
+            lines.push(serde_json::json!({"type": "thinking", "text": thinking}));
+        }
+        for i in 0..rule.reads {
+            let path = match (&skill_marker, i) {
+                (Some(marker), 0) => format!("{marker}/SKILL.md"),
+                _ => format!("input-{}.txt", i + 1),
+            };
+            trace.turn();
+            at += 1;
+            trace.tool_use(
+                None,
+                "read_file",
+                ToolCategory::Read,
+                &path,
+                Some(&path),
+                path.len() as u64,
+                Some(at),
+            );
+            at += 1;
+            trace.tool_result(None, 400, "(simulated file content)", false, Some(at));
+            lines.push(serde_json::json!({"type": "tool_use", "name": "read_file", "path": path}));
+        }
+        for i in 0..rule.searches {
+            let pattern = format!("pattern-{}", i + 1);
+            trace.turn();
+            at += 1;
+            trace.tool_use(
+                None,
+                "search",
+                ToolCategory::Search,
+                &pattern,
+                None,
+                pattern.len() as u64,
+                Some(at),
+            );
+            at += 1;
+            trace.tool_result(None, 200, "(simulated matches)", false, Some(at));
+            lines.push(
+                serde_json::json!({"type": "tool_use", "name": "search", "pattern": pattern}),
+            );
+        }
         for (rel, content) in &rule.files {
             if !crate::util::is_safe_relative(rel) {
                 return Err(HiveError::invalid(format!(
@@ -304,29 +365,69 @@ impl Provider for ScriptedProvider {
                 std::fs::create_dir_all(parent).at(parent)?;
             }
             std::fs::write(&path, content).at(&path)?;
+            trace.turn();
+            at += 1;
+            trace.tool_use(
+                None,
+                "write_file",
+                ToolCategory::Write,
+                rel,
+                Some(rel),
+                content.chars().count() as u64,
+                Some(at),
+            );
+            at += 1;
+            trace.tool_result(None, 24, "File written", false, Some(at));
             lines.push(serde_json::json!({"type": "tool_use", "name": "write_file", "path": rel}));
         }
+        for i in 0..rule.commands {
+            let command = format!("run-step-{}", i + 1);
+            trace.turn();
+            at += 1;
+            trace.tool_use(
+                None,
+                "shell",
+                ToolCategory::Command,
+                &command,
+                None,
+                command.len() as u64,
+                Some(at),
+            );
+            at += 1;
+            trace.tool_result(None, 100, "(simulated command output)", false, Some(at));
+            lines
+                .push(serde_json::json!({"type": "tool_use", "name": "shell", "command": command}));
+        }
+        let simulated = rule.reads + rule.searches + rule.files.len() as u32 + rule.commands;
+        for _ in simulated..rule.tool_calls {
+            trace.tool_use(None, "tool", ToolCategory::Other, "", None, 0, Some(at));
+            trace.tool_result(None, 0, "", false, Some(at));
+        }
+        trace.turn();
+        trace.text(&rule.output, Some(at + 1));
         lines.push(serde_json::json!({"type": "result", "text": rule.output}));
         let transcript = sandbox::write_transcript(&task.cwd, &lines)?;
         let files_created = sandbox::files_created(&task.cwd, &before);
+        let output_tokens = if rule.output_tokens > 0 {
+            rule.output_tokens
+        } else {
+            crate::util::estimate_tokens(&rule.output) as u64
+        };
         Ok(ExecutionResult {
             input_tokens: if rule.input_tokens > 0 {
                 rule.input_tokens
             } else {
                 crate::util::estimate_tokens(&prompt) as u64
             },
-            output_tokens: if rule.output_tokens > 0 {
-                rule.output_tokens
-            } else {
-                crate::util::estimate_tokens(&rule.output) as u64
-            },
+            output_tokens,
             output: rule.output,
             transcript_path: Some(transcript),
-            tool_calls: rule.tool_calls.max(rule.files.len() as u32),
+            tool_calls: rule.tool_calls.max(simulated),
             duration_ms: started.elapsed().as_millis().max(rule.duration_ms as u128) as u64,
             cost_usd: rule.cost_usd,
             files_created,
             model: self.config.model.clone(),
+            trace: Some(trace.finish(output_tokens)),
         })
     }
 
@@ -412,7 +513,8 @@ mod tests {
         serde_json::json!({
             "rules": [
                 {"match": "skill is available", "with_skill": true, "output": "Followed the skill. MARKER",
-                 "files": {"out/report.md": "# Report\nok\n"}, "tool_calls": 2, "input_tokens": 100, "output_tokens": 20, "cost_usd": 0.01},
+                 "files": {"out/report.md": "# Report\nok\n"}, "tool_calls": 2, "reads": 1, "thinking": "Read the skill, then write the report.",
+                 "input_tokens": 100, "output_tokens": 20, "cost_usd": 0.01},
                 {"system": "(?i)available skills", "match": "(?i)pdf", "output": "{\"skill\": \"pdf-tools\"}"},
                 {"system": "(?i)available skills", "output": "{\"skill\": null}"},
                 {"match": "crash", "fail": true, "error": "boom"},
@@ -447,6 +549,23 @@ mod tests {
         assert!(cwd.join(".skills/report-writer/SKILL.md").is_file());
         assert!(res.transcript_path.unwrap().is_file());
         assert!(cwd.join("out/report.md").is_file());
+        let trace = res.trace.unwrap();
+        assert_eq!(trace.writes, 1);
+        assert_eq!(trace.reads, 1);
+        assert_eq!(
+            trace.skill_reads, 1,
+            "the first simulated read opens SKILL.md"
+        );
+        assert_eq!(trace.files_read, vec![".skills/report-writer/SKILL.md"]);
+        assert_eq!(trace.files_written, vec!["out/report.md"]);
+        assert_eq!(trace.tool_calls, 2);
+        assert_eq!(trace.thinking_blocks, 1);
+        assert_eq!(trace.text_blocks, 1);
+        assert_eq!(
+            trace.thinking_tokens + trace.text_tokens + trace.tool_input_tokens,
+            20
+        );
+        assert!(trace.io_share > 0.0);
 
         // without skill: default
         let res = provider
@@ -459,6 +578,13 @@ mod tests {
         assert_eq!(res.output, "No idea.");
         assert!(res.files_created.is_empty());
         assert!(res.input_tokens > 0);
+        let trace = res.trace.unwrap();
+        assert_eq!(
+            trace.tool_calls, 1,
+            "tool_calls beyond the simulated ones count as other"
+        );
+        assert_eq!(trace.other_tools, 1);
+        assert_eq!(trace.skill_reads, 0);
 
         // failure rule
         let err = provider

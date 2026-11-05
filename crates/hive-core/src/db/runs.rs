@@ -268,6 +268,9 @@ mod tests {
             transcript_path: None,
             grader_notes: None,
             error: None,
+            trace: None,
+            grader_input_tokens: 0,
+            grader_output_tokens: 0,
         };
         db.upsert_case_result(&result).unwrap();
         db.upsert_case_result(&result).unwrap();

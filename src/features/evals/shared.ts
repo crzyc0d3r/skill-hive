@@ -33,6 +33,27 @@ export const PATTERN_META: Record<T.ExpectationPattern, { label: string; tone: T
   mixed: { label: "Mixed", tone: "info", explain: "Passes more in some arms than in others without a clean split." },
 };
 
+/** Label and tone of a tool category in activity views. */
+export const TOOL_CATEGORY_META: Record<T.ToolCategory, { label: string; tone: Tone | "accent" }> = {
+  read: { label: "read", tone: "info" },
+  search: { label: "search", tone: "accent" },
+  write: { label: "write", tone: "warn" },
+  command: { label: "command", tone: "neutral" },
+  web: { label: "web", tone: "info" },
+  subagent: { label: "subagent", tone: "accent" },
+  other: { label: "other", tone: "neutral" },
+};
+
+/** Arms that carry the skill (with_skill and variants); the baseline without it does not. */
+export function skillArms(arms: T.ArmSpec[]): Set<string> {
+  return new Set(arms.filter((a) => a.kind !== "without_skill").map((a) => a.label));
+}
+
+/** `mean ± sd` with a shared formatter; the ± part is dropped when there is no spread. */
+export function formatStat(s: T.Stats, fmt: (v: number) => string): { value: string; sd: string | null } {
+  return { value: fmt(s.mean), sd: s.n > 1 && s.stddev > 0 ? `± ${fmt(s.stddev)}` : null };
+}
+
 export const CHECK_KIND_LABEL: Record<T.CheckKind["kind"], string> = {
   file_exists: "File exists",
   file_contains: "File contains text",

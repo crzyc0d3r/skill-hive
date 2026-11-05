@@ -18,6 +18,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serde_json::Value;
 
+use super::trace::{Dialect, TraceBuilder};
 use super::{
     CompletionRequest, CompletionResponse, ExecutionResult, ExecutionTask, Provider, process,
     sandbox,
@@ -237,6 +238,7 @@ impl Provider for ClaudeCodeProvider {
     async fn execute(&self, task: ExecutionTask) -> Result<ExecutionResult> {
         std::fs::create_dir_all(&task.cwd).at(&task.cwd)?;
         let mut prompt = task.prompt.clone();
+        let mut skill_marker = None;
         if let Some(skill) = &task.skill_dir {
             let (name, _) = sandbox::install_skill(skill, &task.cwd.join(SKILLS_DIR))?;
             prompt = format!(
@@ -244,6 +246,7 @@ impl Provider for ClaudeCodeProvider {
                 sandbox::skill_notice(&format!("./{SKILLS_DIR}/{name}")),
                 prompt
             );
+            skill_marker = Some(format!("{SKILLS_DIR}/{name}"));
         }
         let mut cmd = self.base_command(&task.cwd);
         cmd.arg("-p").arg(&prompt).args([
@@ -258,9 +261,12 @@ impl Provider for ClaudeCodeProvider {
         let (transcript, mut file) = sandbox::open_transcript(&task.cwd)?;
         let before = sandbox::snapshot(&task.cwd);
         let mut summary = StreamSummary::default();
+        let mut trace = TraceBuilder::new(Dialect::ClaudeCode, &task.cwd, skill_marker.as_deref());
+        let started = std::time::Instant::now();
         let out = process::run_streaming(cmd, task.timeout, &task.cancel, |line| {
             let _ = writeln!(file, "{line}");
             summary.absorb_line(line);
+            trace.absorb_line(line, Some(started.elapsed().as_millis() as u64));
         })
         .await?;
         drop(file);
@@ -285,6 +291,7 @@ impl Provider for ClaudeCodeProvider {
             cost_usd: summary.cost_usd,
             files_created,
             model: summary.model.or_else(|| self.config.model.clone()),
+            trace: Some(trace.finish(summary.output_tokens)),
         })
     }
 
