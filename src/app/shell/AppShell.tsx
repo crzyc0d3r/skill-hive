@@ -148,15 +148,15 @@ function Sidebar() {
         <Tooltip content="Settings" side="right">
           <NavLink
             to="/settings"
+            aria-label="Settings"
             className={({ isActive }) =>
               cn(
-                "flex h-7 items-center gap-2 rounded-md px-2 text-xs text-muted hover:bg-elevated hover:text-fg",
+                "flex size-7 items-center justify-center rounded-md text-muted hover:bg-elevated hover:text-fg",
                 isActive && "bg-elevated text-fg",
               )
             }
           >
             <Settings className="size-4" />
-            {!collapsed ? "Settings" : null}
           </NavLink>
         </Tooltip>
         <div className={cn("flex items-center", collapsed && "flex-col")}>
