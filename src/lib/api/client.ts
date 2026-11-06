@@ -166,6 +166,17 @@ export const api = {
   deployments: () => call<T.Deployment[]>("deployments_list"),
   removeInstalledPath: (path: string) => call<void>("remove_installed_path", { path }),
 
+  // instruction files (CLAUDE.md, AGENTS.md, rules folders)
+  instructionFiles: (scope: T.Scope, projectPath?: string | null) =>
+    call<T.InstructionFile[]>("instructions_list", { scope, projectPath: projectPath ?? null }),
+  readInstruction: (path: string, projectPath?: string | null) =>
+    call<T.InstructionDocument>("instruction_read", { path, projectPath: projectPath ?? null }),
+  writeInstruction: (path: string, text: string, projectPath?: string | null) =>
+    call<T.InstructionDocument>("instruction_write", { path, text, projectPath: projectPath ?? null }),
+  deleteInstruction: (path: string, projectPath?: string | null) =>
+    call<T.InstructionFile>("instruction_delete", { path, projectPath: projectPath ?? null }),
+  instructionBackups: (path: string) => call<T.InstructionBackup[]>("instruction_backups", { path }),
+
   // loadouts & recommendations
   loadouts: () => call<T.Loadout[]>("loadouts_list"),
   loadout: (id: string) => call<T.Loadout>("loadout_get", { id }),

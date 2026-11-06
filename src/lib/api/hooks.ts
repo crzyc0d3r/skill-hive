@@ -19,6 +19,9 @@ export const keys = {
     ["targets", "status", id, scope, project ?? null] as const,
   projects: ["projects"] as const,
   deployments: ["deployments"] as const,
+  instructions: (scope: T.Scope, project?: string | null) => ["instructions", scope, project ?? null] as const,
+  instruction: (path: string) => ["instruction", path] as const,
+  instructionBackups: (path: string) => ["instruction", "backups", path] as const,
   loadouts: ["loadouts"] as const,
   loadout: (id: string) => ["loadouts", id] as const,
   providers: ["providers"] as const,
@@ -61,6 +64,10 @@ export function applyEventToCache(qc: QueryClient, event: T.HiveEvent) {
       void qc.invalidateQueries({ queryKey: keys.itemsAll });
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       break;
+    case "instructions_changed":
+      void qc.invalidateQueries({ queryKey: ["instructions"] });
+      void qc.invalidateQueries({ queryKey: ["instruction"] });
+      break;
     case "run_updated":
       void qc.invalidateQueries({ queryKey: ["runs"] });
       void qc.invalidateQueries({ queryKey: keys.run(event.run_id) });
@@ -97,6 +104,18 @@ export const useTargetStatus = (id: string | null, scope: T.Scope, project?: str
   });
 export const useProjects = () => useQuery({ queryKey: keys.projects, queryFn: api.projects });
 export const useDeployments = () => useQuery({ queryKey: keys.deployments, queryFn: api.deployments });
+/** Instruction files at a scope; project scope needs a project. */
+export const useInstructionFiles = (scope: T.Scope, project?: string | null) =>
+  useQuery({
+    queryKey: keys.instructions(scope, project),
+    queryFn: () => api.instructionFiles(scope, project),
+    enabled: scope === "user" || !!project,
+  });
+export const useInstruction = (path: string | null, project?: string | null) =>
+  useQuery({ queryKey: keys.instruction(path ?? ""), queryFn: () => api.readInstruction(path!, project), enabled: !!path });
+/** Backups of one instruction file, oldest first; fetched only while `enabled` (a menu is open). */
+export const useInstructionBackups = (path: string | null, enabled = true) =>
+  useQuery({ queryKey: keys.instructionBackups(path ?? ""), queryFn: () => api.instructionBackups(path!), enabled: !!path && enabled });
 export const useLoadouts = () => useQuery({ queryKey: keys.loadouts, queryFn: api.loadouts });
 export const useProviders = () => useQuery({ queryKey: keys.providers, queryFn: api.providers });
 export const useCatalog = () => useQuery({ queryKey: keys.catalog, queryFn: () => api.catalog(false), staleTime: 300_000 });

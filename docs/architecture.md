@@ -29,6 +29,7 @@ reaches the file system or the network directly; every operation is a core metho
 | `hash` | Content hashes over sorted relative paths + bytes, so copies compare equal anywhere. |
 | `library` | Import (copy + sidecar + index), replace, refresh, create, remove, files, reindex, orphan detection. Names are unique per kind; slugs get suffixes. |
 | `targets` | The table of agent tools and their user/project directories; overrides and custom targets. |
+| `instructions` | The table of standing instruction files per agent (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, rules folders) at user and project scope; listing merged by path for the detected agents, read, atomic write to known locations only, delete, and the capped backups under `backups/instructions`. See `docs/instructions.md`. |
 | `discovery` | Depth-limited scans of agent directories, projects and extra folders; candidates classified as new / in library / modified / managed / invalid. |
 | `sources` | `parse_spec` for `owner/repo`, GitHub tree/blob URLs, git URLs, archive URLs and paths; git-CLI clone cache; GitHub API (search, tarball fallback); safe zip/tar extraction; curated catalog; previews, imports, update checks and updates. |
 | `deploy` | Link (symlink/junction) or copy into a target directory; install state (linked, in sync, stale, modified, unmanaged, broken); undeploy; resync; what a directory contains. |
@@ -51,6 +52,7 @@ reaches the file system or the network directly; every operation is a core metho
   library/meta/<id>.json provenance sidecars (id, slug, source, tags) → reindex
   cache/git/<key>/       shallow clones, refreshed in place
   cache/archives/<key>/  extracted downloads
+  backups/instructions/<key>/  instruction files as they were before each overwrite or delete
   workspaces/<skill>/<run-id>/
     skill-snapshot/      the skill exactly as tested
     cases/<case>/<arm>/<n>/work/   sandbox: inputs, outputs, .hive/transcript.jsonl

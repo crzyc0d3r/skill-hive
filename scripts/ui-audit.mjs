@@ -52,6 +52,7 @@ const routes = [
   ["discover-catalog", "/discover?tab=catalog"],
   ["find", "/find"],
   ["agents", "/agents/claude-code"],
+  ["instructions", "/instructions"],
   ["loadouts", "/loadouts/lo-1"],
   ["evals", "/evals"],
   ["run", "/runs/run-1"],
@@ -110,6 +111,17 @@ const states = [
   ["agents-deploy", "/agents/claude-code", async (page) => {
     const btn = page.getByRole("button", { name: /Deploy|Install|Add/ }).first();
     if (await btn.count()) await btn.click();
+  }],
+  ["instructions-editor", "/instructions", (page) => page.getByRole("button", { name: /CLAUDE\.md/ }).first().click()],
+  ["instructions-preview", "/instructions", async (page) => {
+    await page.getByRole("button", { name: /CLAUDE\.md/ }).first().click();
+    await page.waitForTimeout(500);
+    await page.getByRole("tab", { name: /Preview/ }).click();
+  }],
+  ["instructions-project", "/instructions", async (page) => {
+    await page.getByRole("tab", { name: /^Project$/ }).click();
+    await page.waitForTimeout(500);
+    await page.getByRole("button", { name: /New rule in/ }).first().click();
   }],
   ["find-query", "/find", async (page) => {
     await page.getByRole("textbox").first().fill("extract tables from a pdf and build a spreadsheet");

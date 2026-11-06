@@ -12,6 +12,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  ScrollText,
   Search,
   Settings,
   Sun,
@@ -43,6 +44,7 @@ export const NAV: NavItem[] = [
   { to: "/discover", label: "Discover", icon: Compass, hint: "Collect from this machine or online", shortcut: "3" },
   { to: "/find", label: "Find", icon: Crosshair, hint: "The right skills for a job", shortcut: "4" },
   { to: "/agents", label: "Agents", icon: Monitor, hint: "What each agent tool has installed", shortcut: "5" },
+  { to: "/instructions", label: "Instructions", icon: ScrollText, hint: "CLAUDE.md, AGENTS.md and rules per agent", shortcut: "8" },
   { to: "/loadouts", label: "Loadouts", icon: Layers, hint: "Curated sets to deploy together", shortcut: "6" },
   { to: "/evals", label: "Evals", icon: FlaskConical, hint: "Measure whether a skill helps", shortcut: "7" },
 ];
@@ -180,7 +182,7 @@ function useGlobalShortcuts() {
         setPaletteOpen(true);
         return;
       }
-      if (mod && !e.shiftKey && !e.altKey && /^[1-7]$/.test(e.key)) {
+      if (mod && !e.shiftKey && !e.altKey && /^[1-8]$/.test(e.key)) {
         const item = NAV.find((n) => n.shortcut === e.key);
         if (item) {
           e.preventDefault();
