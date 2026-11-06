@@ -5,4 +5,4 @@ export type SettingsPatch = { defaultLinkMode: LinkMode | null, defaultDescripti
 /**
  * Set (Some(token)) or clear (Some("")) the GitHub token.
  */
-githubToken: string | null, theme: string | null, overlapThreshold: number | null, };
+githubToken: string | null, theme: string | null, overlapThreshold: number | null, autoUpdateCheck: boolean | null, };

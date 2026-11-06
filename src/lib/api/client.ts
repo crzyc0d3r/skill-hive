@@ -105,9 +105,46 @@ export interface AppInfo {
   arch: string;
 }
 
+/** Result of `update_check`: the latest release compared with this build. */
+export interface UpdateCheck {
+  currentVersion: string;
+  available: boolean;
+  version: string | null;
+  /** Release notes, Markdown. */
+  notes: string | null;
+  /** Release date, YYYY-MM-DD. */
+  date: string | null;
+  /** Platform key looked up in latest.json, for example `linux-x86_64`. */
+  target: string;
+}
+
+/** Progress of `update_install`, delivered on the `hive://update` event. */
+export type UpdateProgress = { phase: "downloading"; downloaded: number; total: number | null } | { phase: "installing" } | { phase: "installed" };
+
+/** Follow an update installation. Outside Tauri nothing is ever emitted. */
+export function onUpdateProgress(handler: (progress: UpdateProgress) => void): () => void {
+  if (!isTauri()) return () => {};
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+  void import("@tauri-apps/api/event").then(({ listen }) =>
+    listen<UpdateProgress>("hive://update", (e) => handler(e.payload)).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    }),
+  );
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
+
 /** Every backend command, typed. Names mirror the Rust command names. */
 export const api = {
   appInfo: () => call<AppInfo>("app_info"),
+  /** Compare this build with the latest GitHub release. */
+  updateCheck: () => call<UpdateCheck>("update_check"),
+  /** Download, verify and install the update the last check found, then restart. */
+  updateInstall: () => call<void>("update_install"),
   /** Write a line to the desktop log (no-op in the mock backend). */
   uiReport: (level: "info" | "warn" | "error", message: string) => call<void>("ui_report", { level, message }),
   dashboard: () => call<T.Dashboard>("dashboard"),

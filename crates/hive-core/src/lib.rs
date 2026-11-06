@@ -6,6 +6,7 @@
 //!
 //! Entry point: [`Hive`].
 
+pub mod app_update;
 pub mod conflicts;
 pub mod db;
 pub mod deploy;

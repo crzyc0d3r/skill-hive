@@ -1,15 +1,132 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, BookOpen, Bug, CheckCircle2, Eraser, ExternalLink, GitFork, Hexagon, KeyRound, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, Bug, CheckCircle2, Download, Eraser, ExternalLink, GitFork, Hexagon, KeyRound, RefreshCw, XCircle } from "lucide-react";
 import type * as T from "@/lib/api/bindings";
 import { api } from "@/lib/api/client";
 import { keys, useApiMutation, useAppInfo, useDoctor, useSettings } from "@/lib/api/hooks";
+import { useUpdate } from "@/lib/update";
 import { cn, displayPath, formatBytes, pluralize } from "@/lib/utils";
-import { Badge, Button, Input, Skeleton, openExternal } from "@/components/ui";
+import { Badge, Button, Input, Markdown, Progress, Skeleton, Switch, openExternal } from "@/components/ui";
 import { ErrorNote, InlineCode } from "@/components/app/common";
 import { SettingsRow, SettingsSection } from "./bits";
 import { DOCS_URL, ISSUES_URL, PROVIDER_KIND_META, REPO_URL, useSettingsPatch } from "./shared";
+
+const RELEASES_URL = `${REPO_URL}/releases`;
+
+/** The Updates section: the latest release compared with this build, and the startup check. */
+function UpdatesSection({ settings, save }: { settings: T.Settings | undefined; save: ReturnType<typeof useSettingsPatch> }) {
+  const { data: info } = useAppInfo();
+  const status = useUpdate((s) => s.status);
+  const check = useUpdate((s) => s.check);
+  const progress = useUpdate((s) => s.progress);
+  const error = useUpdate((s) => s.error);
+  const checkForUpdates = useUpdate((s) => s.checkForUpdates);
+  const install = useUpdate((s) => s.install);
+  const [showNotes, setShowNotes] = React.useState(false);
+
+  const busy = status === "downloading" || status === "installing" || status === "installed";
+  const current = check?.currentVersion ?? info?.version;
+  const statusLine =
+    status === "checking"
+      ? "Looking for a newer release…"
+      : status === "latest"
+        ? "This is the latest release."
+        : status === "available"
+          ? `Skill Hive ${check?.version} is available${check?.date ? `, released ${check.date}` : ""}.`
+          : status === "downloading"
+            ? progress?.total
+              ? `Downloading… ${formatBytes(progress.downloaded)} of ${formatBytes(progress.total)}`
+              : `Downloading… ${formatBytes(progress?.downloaded ?? 0)}`
+            : status === "installing"
+              ? "Installing…"
+              : status === "installed"
+                ? "Installed. Skill Hive is restarting."
+                : status === "error"
+                  ? "The check did not complete."
+                  : "Releases are published on GitHub; the app downloads the signed build for this platform and restarts into it.";
+
+  return (
+    <SettingsSection
+      title="Updates"
+      description="New versions are released on GitHub."
+      action={
+        <Button size="sm" variant="secondary" loading={status === "checking"} disabled={busy} onClick={() => void checkForUpdates()}>
+          <RefreshCw /> Check for updates
+        </Button>
+      }
+    >
+      <SettingsRow
+        label={
+          <span className="flex items-center gap-2">
+            Version
+            <Badge tone="neutral" className="num">
+              {current ? `v${current}` : "…"}
+            </Badge>
+            {status === "available" && check?.version ? (
+              <Badge tone="info" className="num">
+                v{check.version} available
+              </Badge>
+            ) : status === "latest" ? (
+              <Badge tone="ok">up to date</Badge>
+            ) : null}
+          </span>
+        }
+        description={
+          <span role="status">
+            {statusLine}
+            {status === "available" && check?.notes ? (
+              <>
+                {" "}
+                <button type="button" className="underline-offset-2 hover:underline" onClick={() => setShowNotes((v) => !v)}>
+                  {showNotes ? "Hide notes" : "What changed"}
+                </button>
+              </>
+            ) : null}
+          </span>
+        }
+        align="start"
+      >
+        {status === "available" || (status === "error" && check?.available) ? (
+          <Button
+            size="sm"
+            variant="primary"
+            loading={busy}
+            onClick={() => void install().catch(() => undefined)}
+          >
+            <Download /> Install and restart
+          </Button>
+        ) : null}
+        <Button size="sm" variant="ghost" onClick={() => void openExternal(RELEASES_URL)}>
+          <ExternalLink /> Releases
+        </Button>
+      </SettingsRow>
+      {busy ? (
+        <div className="px-4 py-3">
+          <Progress value={progress?.total ? progress.downloaded / progress.total : 0} indeterminate={!progress?.total || status !== "downloading"} size="sm" aria-label="Update progress" />
+        </div>
+      ) : null}
+      {showNotes && status === "available" && check?.notes ? (
+        <div className="px-4 py-3 text-xs">
+          <Markdown className="prose-sm">{check.notes}</Markdown>
+        </div>
+      ) : null}
+      <SettingsRow label="Check on startup" description="A few seconds after the app opens, look for a newer release and offer to install it. Nothing is downloaded until you accept.">
+        <Switch
+          aria-label="Check for updates on startup"
+          checked={settings?.autoUpdateCheck ?? true}
+          disabled={!settings}
+          onCheckedChange={(checked) => save.mutate({ patch: { autoUpdateCheck: checked }, message: checked ? "Update checks on" : "Update checks off" })}
+        />
+      </SettingsRow>
+      {error ? (
+        <p className="px-4 py-2.5 text-xs text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </SettingsSection>
+  );
+}
 
 export function AboutTab() {
   const { data: info } = useAppInfo();
@@ -54,6 +171,8 @@ export function AboutTab() {
           </Button>
         </div>
       </section>
+
+      <UpdatesSection settings={settings} save={save} />
 
       <SettingsSection
         title="Health check"

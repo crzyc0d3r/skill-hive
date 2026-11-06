@@ -16,6 +16,7 @@ pub mod keys {
     pub const EXTRA_SCAN_DIRS: &str = "extra_scan_dirs";
     pub const THEME: &str = "theme";
     pub const OVERLAP_THRESHOLD: &str = "overlap_threshold";
+    pub const AUTO_UPDATE_CHECK: &str = "auto_update_check";
 }
 
 /// Name of the GitHub token entry in the secret store.
@@ -38,6 +39,7 @@ pub fn load(db: &Database, paths: &HivePaths, github_token_set: bool) -> Result<
         overlap_threshold: db
             .get_setting(keys::OVERLAP_THRESHOLD)?
             .unwrap_or(DEFAULT_OVERLAP_THRESHOLD),
+        auto_update_check: db.get_setting(keys::AUTO_UPDATE_CHECK)?.unwrap_or(true),
     })
 }
 
@@ -70,6 +72,9 @@ pub fn apply(db: &Database, patch: &SettingsPatch) -> Result<()> {
     if let Some(v) = patch.overlap_threshold {
         db.set_setting(keys::OVERLAP_THRESHOLD, &v.clamp(0.2, 0.95))?;
     }
+    if let Some(v) = patch.auto_update_check {
+        db.set_setting(keys::AUTO_UPDATE_CHECK, &v)?;
+    }
     Ok(())
 }
 
@@ -89,6 +94,7 @@ mod tests {
             CLAUDE_CODE_DESCRIPTION_BUDGET_CHARS
         );
         assert_eq!(s.theme, "system");
+        assert!(s.auto_update_check, "update checks are on until turned off");
         apply(
             &db,
             &SettingsPatch {
@@ -96,6 +102,7 @@ mod tests {
                 default_executor_id: Some(Some("p1".into())),
                 theme: Some("dark".into()),
                 overlap_threshold: Some(2.0),
+                auto_update_check: Some(false),
                 ..Default::default()
             },
         )
@@ -106,6 +113,7 @@ mod tests {
         assert_eq!(s.theme, "dark");
         assert_eq!(s.overlap_threshold, 0.95);
         assert!(s.github_token_set);
+        assert!(!s.auto_update_check);
         apply(
             &db,
             &SettingsPatch {

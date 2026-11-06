@@ -130,6 +130,16 @@ enum Command {
     /// The instruction files agents load on every session (CLAUDE.md, AGENTS.md, rules folders).
     #[command(subcommand)]
     Instructions(InstructionsCmd),
+    /// Replace this `hive` binary with the latest GitHub release.
+    #[command(name = "self-update")]
+    SelfUpdate {
+        /// Only report whether a newer release exists; download nothing.
+        #[arg(long)]
+        check: bool,
+        /// Install without asking.
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
 }
 
 #[derive(Args)]
@@ -337,7 +347,7 @@ enum ProjectCmd {
 #[derive(Subcommand)]
 enum ConfigCmd {
     Show,
-    /// Set a setting: link-mode, budget-chars, overlap, theme, executor, grader, github-token, scan-dirs (comma separated).
+    /// Set a setting: link-mode, budget-chars, overlap, theme, executor, grader, github-token, scan-dirs (comma separated), auto-update-check (true/false).
     Set {
         key: String,
         value: String,
@@ -488,6 +498,102 @@ struct EvalRunArgs {
     case: Vec<u32>,
 }
 
+fn parse_bool(value: &str) -> Result<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "yes" | "on" | "1" => Ok(true),
+        "false" | "no" | "off" | "0" => Ok(false),
+        other => bail!("expected true or false, got `{other}`"),
+    }
+}
+
+/// `hive self-update`: compare this binary with the latest GitHub release and swap it in.
+async fn cmd_self_update(hive: &Arc<Hive>, out: &Out, check_only: bool, yes: bool) -> Result<()> {
+    use std::io::{BufRead, IsTerminal, Write};
+
+    let check = hive
+        .check_cli_update()
+        .await
+        .context("looking up the latest release on GitHub")?;
+    let current = check.current_version.clone();
+    let latest = check.latest_version.clone();
+    if check_only || !check.update_available {
+        out.emit(&check, || {
+            if check.update_available {
+                out.note(format!(
+                    "hive {latest} is available (this is {current}); run `hive self-update` to install it"
+                ));
+                println!("{}", check.release_url);
+            } else {
+                out.ok(format!("hive {current} is the latest release"));
+            }
+        })?;
+        return Ok(());
+    }
+    let exe = std::env::current_exe().context("locating this executable")?;
+    let Some(asset) = &check.asset else {
+        bail!(
+            "release {latest} has no CLI build for {}-{}; the installers are at {}",
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            check.release_url
+        );
+    };
+    if !yes {
+        if !std::io::stdin().is_terminal() {
+            bail!(
+                "hive {latest} is available; run `hive self-update --yes` to install it without a prompt"
+            );
+        }
+        eprint!(
+            "Replace {} (hive {current}) with hive {latest}? [y/N] ",
+            exe.display()
+        );
+        std::io::stderr().flush().ok();
+        let mut answer = String::new();
+        std::io::stdin()
+            .lock()
+            .read_line(&mut answer)
+            .context("reading the answer")?;
+        if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+            out.note("left as is");
+            return Ok(());
+        }
+    }
+    out.note(format!(
+        "downloading {} ({:.1} MB)",
+        asset.name,
+        asset.size as f64 / 1_048_576.0
+    ));
+    let downloaded = hive
+        .download_cli_update(&check)
+        .await
+        .context("downloading the release")?;
+    // The new binary has to start before it replaces this one.
+    let probe = std::process::Command::new(&downloaded.binary)
+        .arg("--version")
+        .output()
+        .context("starting the downloaded binary")?;
+    if !probe.status.success() {
+        bail!(
+            "the downloaded binary did not start ({}); nothing was changed",
+            probe.status
+        );
+    }
+    self_replace::self_replace(&downloaded.binary)
+        .with_context(|| format!("replacing {}", exe.display()))?;
+    out.emit(
+        &serde_json::json!({
+            "updated": true,
+            "from": current,
+            "to": latest,
+            "path": exe,
+            "archive_bytes": downloaded.archive_bytes,
+        }),
+        || out.ok(format!("hive {latest} installed at {}", exe.display())),
+    )?;
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
     let filter =
@@ -513,6 +619,7 @@ async fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Command::Scan(args) => cmd_scan(&hive, &out, args)?,
+        Command::SelfUpdate { check, yes } => cmd_self_update(&hive, &out, check, yes).await?,
         Command::Add(args) => {
             // With --name, preview first and import only the matching candidates.
             let paths: Option<Vec<String>> = if args.name.is_empty() {
@@ -926,6 +1033,7 @@ async fn run(cli: Cli) -> Result<()> {
                         if s.github_token_set { "set" } else { "not set" }
                     );
                     println!("{:<22} {}", "theme", s.theme);
+                    println!("{:<22} {}", "auto-update-check", s.auto_update_check);
                 })?;
             }
             ConfigCmd::Set { key, value } => {
@@ -947,6 +1055,7 @@ async fn run(cli: Cli) -> Result<()> {
                             Some(Some(value).filter(|v| v != "-" && !v.is_empty()))
                     }
                     "github-token" => patch.github_token = Some(value),
+                    "auto-update-check" => patch.auto_update_check = Some(parse_bool(&value)?),
                     "scan-dirs" => {
                         patch.extra_scan_dirs = Some(
                             value

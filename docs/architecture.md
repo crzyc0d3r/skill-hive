@@ -39,6 +39,7 @@ reaches the file system or the network directly; every operation is a core metho
 | `loadouts` | Named sets; plan (adds/removes/keeps/unmanaged, resulting conflicts and budget) and apply (exclusive or additive). |
 | `providers` | `Provider` trait with `complete` and `execute`; Claude Code CLI, Codex CLI, Anthropic Messages API, OpenAI-compatible chat completions, and a scripted offline provider; registry, probes, secrets. `trace` builds an `ExecutionTrace` (tool calls by category, files, thinking, token split, cache, timeline) from a CLI agent's event stream. |
 | `evals` | Suites (`evals/evals.json`, `checks.json`, `trigger.json`), deterministic checks, LLM grader, trigger evaluation, the run engine (sandboxes, arms, repeats, concurrency, cancellation, events) and analytics, including per-arm activity statistics. See `docs/evaluations.md`. |
+| `app_update` | Updates of Skill Hive itself: the latest GitHub release, whether it is newer than this build, and the `hive` archive for this OS and architecture, downloaded and extracted for `hive self-update` to swap in. The desktop app updates through the Tauri updater in the shell (`src-tauri/src/update.rs`), driven by the `update_check` and `update_install` commands. See `docs/releasing.md`. |
 | `hive` | The facade: owns the database, paths, secrets, target resolver and event bus. |
 
 ## Data on disk
@@ -86,6 +87,11 @@ Rust types are the contract. `ts-rs` writes one `.ts` file per type into
 `CheckKind`, `ArmKind` and `HiveEvent`). `src/lib/api/client.ts` lists every command; outside
 Tauri the same calls go to `src/lib/api/mock.ts`. Core events (`HiveEvent`) are broadcast
 through the shell as `hive://event` and drive React Query invalidation and live run progress.
+
+Two commands belong to the shell rather than the core: `update_check` and `update_install`
+(`src-tauri/src/update.rs`) wrap the Tauri updater, and the install reports its download on the
+`hive://update` event. Their result types are declared by hand in `client.ts`, next to
+`app_info`; the mock answers "up to date" and refuses to install.
 
 ## Testing
 

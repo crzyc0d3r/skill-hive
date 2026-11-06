@@ -42,6 +42,7 @@ flate2 = "1"
 tar = "0.4"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 keyring = { version = "4", optional = true }
+semver = "1"
 
 [target.'cfg(windows)'.dependencies]
 junction = "2"

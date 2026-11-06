@@ -19,6 +19,7 @@ const EMPTY_PATCH: T.SettingsPatch = {
   githubToken: null,
   theme: null,
   overlapThreshold: null,
+  autoUpdateCheck: null,
 };
 
 /** A full patch with every untouched field set to null (= leave unchanged). */

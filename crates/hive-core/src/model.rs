@@ -2020,6 +2020,13 @@ pub struct Settings {
     pub theme: String,
     /// Similarity threshold (0…1) above which two descriptions count as overlapping.
     pub overlap_threshold: f64,
+    /// Look for a newer release on GitHub when the desktop app starts and offer to install it.
+    #[serde(default = "default_true")]
+    pub auto_update_check: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
@@ -2043,6 +2050,8 @@ pub struct SettingsPatch {
     pub theme: Option<String>,
     #[serde(default)]
     pub overlap_threshold: Option<f64>,
+    #[serde(default)]
+    pub auto_update_check: Option<bool>,
 }
 
 /// Progress and lifecycle events pushed to the UI / CLI.

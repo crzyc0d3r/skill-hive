@@ -21,4 +21,8 @@ githubTokenSet: boolean, theme: string,
 /**
  * Similarity threshold (0…1) above which two descriptions count as overlapping.
  */
-overlapThreshold: number, };
+overlapThreshold: number, 
+/**
+ * Look for a newer release on GitHub when the desktop app starts and offer to install it.
+ */
+autoUpdateCheck: boolean, };

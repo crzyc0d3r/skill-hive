@@ -3,7 +3,7 @@
 //! Used for discovery and as a fallback when `git` is unavailable. A token raises rate limits
 //! and unlocks private repositories; without one the API allows 60 requests per hour.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{HiveError, Result};
 use crate::model::RepoSearchResult;
@@ -36,6 +36,32 @@ pub struct RepoInfo {
 struct SearchResponse {
     #[serde(default)]
     items: Vec<RepoInfo>,
+}
+
+/// One file attached to a release.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct ReleaseAsset {
+    pub name: String,
+    pub browser_download_url: String,
+    #[serde(default)]
+    pub size: u64,
+}
+
+/// A published release, as `GET /repos/{owner}/{repo}/releases/latest` returns it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReleaseInfo {
+    pub tag_name: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub html_url: String,
+    #[serde(default)]
+    pub published_at: Option<String>,
+    /// Release notes, Markdown.
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub assets: Vec<ReleaseAsset>,
 }
 
 impl GithubClient {
@@ -86,6 +112,27 @@ impl GithubClient {
         let url = format!("{API_BASE}/repos/{owner}/{repo}");
         let resp = Self::check(self.request(reqwest::Method::GET, &url).send().await?).await?;
         Ok(resp.json::<RepoInfo>().await?)
+    }
+
+    /// The newest release that is neither a draft nor a pre-release.
+    pub async fn latest_release(&self, owner: &str, repo: &str) -> Result<ReleaseInfo> {
+        let url = format!("{API_BASE}/repos/{owner}/{repo}/releases/latest");
+        let resp = Self::check(self.request(reqwest::Method::GET, &url).send().await?).await?;
+        Ok(resp.json::<ReleaseInfo>().await?)
+    }
+
+    /// Download a release asset of at most `max_bytes`. Assets of public releases need no
+    /// token, and the download redirects to another host, so the request carries none.
+    pub async fn download_asset(&self, url: &str, max_bytes: u64) -> Result<Vec<u8>> {
+        let resp = Self::check(self.http.get(url).send().await?).await?;
+        if resp.content_length().is_some_and(|len| len > max_bytes) {
+            return Err(HiveError::invalid("the release asset is too large"));
+        }
+        let bytes = resp.bytes().await?;
+        if bytes.len() as u64 > max_bytes {
+            return Err(HiveError::invalid("the release asset is too large"));
+        }
+        Ok(bytes.to_vec())
     }
 
     /// Download the repository tarball at `reference` (branch, tag or sha; `None` = default).
