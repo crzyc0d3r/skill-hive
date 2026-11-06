@@ -50,6 +50,9 @@ pub enum UpdateProgress {
 fn updater_error(err: tauri_plugin_updater::Error) -> CommandError {
     use tauri_plugin_updater::Error;
     let message = match &err {
+        // No endpoint answered with a release manifest: the latest release was published
+        // without `latest.json` (built without the updater signing key).
+        Error::ReleaseNotFound => "the latest release does not publish an update manifest (latest.json), so there is nothing to compare this version with; install it from the Releases page, or wait for a release built with the updater key".to_string(),
         Error::Network(_) | Error::Reqwest(_) => {
             format!("could not reach the release server ({err})")
         }
