@@ -30,7 +30,7 @@ Installers and CLI binaries for every release are attached to
 [the latest GitHub release](https://github.com/crzyc0d3r/skill-hive/releases/latest). The desktop
 app is called `Skill Hive`; the CLI binary is called `hive`. Builds are not code-signed yet, so
 macOS and Windows show a warning the first time (the steps to get past it are below). In the
-asset names, replace `0.2.0` with the version you download; the downloaded file names have a
+asset names, replace `0.2.1` with the version you download; the downloaded file names have a
 dot where the space in "Skill Hive" is. Later releases install themselves: see
 [Updating](#updating).
 
@@ -38,8 +38,8 @@ dot where the space in "Skill Hive" is. Later releases install themselves: see
 
 | Mac | Desktop app | CLI |
 | --- | --- | --- |
-| Apple Silicon (M1 and later) | `Skill.Hive_0.2.0_aarch64.dmg` | `hive-aarch64-apple-darwin.tar.gz` |
-| Intel | `Skill.Hive_0.2.0_x64.dmg` | `hive-x86_64-apple-darwin.tar.gz` |
+| Apple Silicon (M1 and later) | `Skill.Hive_0.2.1_aarch64.dmg` | `hive-aarch64-apple-darwin.tar.gz` |
+| Intel | `Skill.Hive_0.2.1_x64.dmg` | `hive-x86_64-apple-darwin.tar.gz` |
 
 Open the `.dmg` and drag `Skill Hive` into `Applications`. Because the app is unsigned, Gatekeeper
 refuses a normal double-click. On macOS 14 and earlier, right-click (or Control-click) the app in
@@ -56,7 +56,7 @@ xattr -dr com.apple.quarantine "/Applications/Skill Hive.app"
 
 | Installer | CLI |
 | --- | --- |
-| `Skill.Hive_0.2.0_x64-setup.exe` (NSIS) or `Skill.Hive_0.2.0_x64_en-US.msi` (MSI) | `hive-x86_64-pc-windows-msvc.zip` |
+| `Skill.Hive_0.2.1_x64-setup.exe` (NSIS) or `Skill.Hive_0.2.1_x64_en-US.msi` (MSI) | `hive-x86_64-pc-windows-msvc.zip` |
 
 SmartScreen shows "Windows protected your PC" for an unsigned installer. Click **More info**, then
 **Run anyway**. The app needs the WebView2 runtime. Windows 11 and up-to-date Windows 10
@@ -66,9 +66,9 @@ installations already have it; otherwise the installer downloads it.
 
 | Package | File | Install |
 | --- | --- | --- |
-| Debian, Ubuntu and derivatives | `Skill.Hive_0.2.0_amd64.deb` | `sudo apt install ./Skill.Hive_0.2.0_amd64.deb` (or `sudo dpkg -i` the file, then `sudo apt-get install -f`) |
-| Fedora, RHEL, openSUSE | `Skill.Hive-0.2.0-1.x86_64.rpm` | `sudo dnf install ./Skill.Hive-0.2.0-1.x86_64.rpm` |
-| Any distribution | `Skill.Hive_0.2.0_amd64.AppImage` | `chmod +x Skill.Hive_0.2.0_amd64.AppImage && ./Skill.Hive_0.2.0_amd64.AppImage` |
+| Debian, Ubuntu and derivatives | `Skill.Hive_0.2.1_amd64.deb` | `sudo apt install ./Skill.Hive_0.2.1_amd64.deb` (or `sudo dpkg -i` the file, then `sudo apt-get install -f`) |
+| Fedora, RHEL, openSUSE | `Skill.Hive-0.2.1-1.x86_64.rpm` | `sudo dnf install ./Skill.Hive-0.2.1-1.x86_64.rpm` |
+| Any distribution | `Skill.Hive_0.2.1_amd64.AppImage` | `chmod +x Skill.Hive_0.2.1_amd64.AppImage && ./Skill.Hive_0.2.1_amd64.AppImage` |
 | CLI | `hive-x86_64-unknown-linux-gnu.tar.gz` | see below |
 
 The `.deb` depends on `libwebkit2gtk-4.1-0` and the `.rpm` on `webkit2gtk4.1`; the package manager
@@ -735,7 +735,7 @@ Details are in [docs/releasing.md](docs/releasing.md).
 
 ## Status and limitations
 
-- Version 0.2.0 is the current release. Expect rough edges and report them in
+- Version 0.2.1 is the current release. Expect rough edges and report them in
   [the issue tracker](https://github.com/crzyc0d3r/skill-hive/issues).
 - The core, CLI, sources, deployment, conflict analysis, recommender, loadouts and evaluation
   engine are covered by automated tests that run offline, using temporary homes, local git
