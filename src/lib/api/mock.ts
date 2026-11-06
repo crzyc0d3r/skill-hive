@@ -841,6 +841,13 @@ const slugify = (s: string) =>
 
 /** Mock figure for the merged `SKILL.md` body and the model's token counts. */
 const tokensIn = (text: string) => Math.ceil(text.length / 4);
+/** Instruction file stats, counted like the backend's `file_stats` / `estimate_tokens`. */
+const instructionTokens = (text: string) => {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return Math.ceil(Math.max(text.length / 4, words * 0.75));
+};
+const instructionLines = (text: string) => (text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0));
+const instructionBytes = (text: string) => new TextEncoder().encode(text).length;
 
 export function createMockBackend(): Backend {
   const state = initialState();
@@ -947,10 +954,10 @@ export function createMockBackend(): Backend {
       pattern: kind === "directory" ? (spec.pattern ?? ".md") : null,
       parent,
       exists,
-      sizeBytes: body.length,
+      sizeBytes: instructionBytes(body),
       modifiedAt: exists ? (state.instructionModified.get(path) ?? null) : null,
-      tokens: exists && kind === "file" ? tokensIn(body) : 0,
-      lines: exists && kind === "file" ? body.split("\n").length : 0,
+      tokens: exists && kind === "file" ? instructionTokens(body) : 0,
+      lines: exists && kind === "file" ? instructionLines(body) : 0,
       note: spec.note ?? null,
     };
   }
@@ -1000,7 +1007,7 @@ export function createMockBackend(): Backend {
     for (let n = 1; state.instructions.has(dest); n++) dest = `${INSTRUCTION_BACKUPS}/${key}/${savedAt}-${n}${ext}`;
     state.instructions.set(dest, text);
     state.instructionModified.set(dest, savedAt);
-    const backup: T.InstructionBackup = { path: dest, savedAt, sizeBytes: text.length };
+    const backup: T.InstructionBackup = { path: dest, savedAt, sizeBytes: instructionBytes(text) };
     const all = state.instructionBackups.get(path) ?? [];
     all.push(backup);
     while (all.length > 20) {
@@ -1486,28 +1493,22 @@ export function createMockBackend(): Backend {
       const sc = scope as T.Scope;
       const root = instructionRoot(sc, (projectPath as string | null) ?? null);
       const project = sc === "project" ? root : null;
-      // One group per path, in the table's order, naming the installed agents that read it. An
-      // agent that is not installed is only named for a file that exists and no installed agent
-      // reads, so the seeded AGENTS.md stays "Codex CLI · Cursor" rather than every known reader.
+      // One group per path, in the table's order, naming every agent that reads it: the
+      // installed ones, plus any agent whose file exists (as the backend lists them).
       const groups: { path: string; spec: InstructionSpec; targets: InstructionTargets }[] = [];
       const specs = INSTRUCTION_SPECS.filter((s) => s.scope === sc);
-      const add = (spec: InstructionSpec, target: T.TargetSpec, path: string) => {
+      for (const spec of specs) {
+        const target = targetSpecs.find((t) => t.id === spec.targetId);
+        if (!target) continue;
+        const path = `${root}/${spec.rel}`;
+        const onDisk = spec.kind === "directory" ? instructionDirExists(path) : state.instructions.has(path);
+        if (!installedTargetIds.includes(target.id) && !onDisk) continue;
         const group = groups.find((g) => g.path === path);
         if (group) {
           group.targets.ids.push(target.id);
           group.targets.names.push(target.name);
         } else groups.push({ path, spec, targets: { ids: [target.id], names: [target.name] } });
-      };
-      for (const installedPass of [true, false]) {
-        for (const spec of specs) {
-          const target = targetSpecs.find((t) => t.id === spec.targetId);
-          if (!target || installedTargetIds.includes(target.id) !== installedPass) continue;
-          const path = `${root}/${spec.rel}`;
-          const onDisk = spec.kind === "directory" ? instructionDirExists(path) : state.instructions.has(path);
-          if (installedPass || (onDisk && !groups.some((g) => g.path === path))) add(spec, target, path);
-        }
       }
-      groups.sort((a, b) => specs.findIndex((s) => s === a.spec) - specs.findIndex((s) => s === b.spec));
       const out: T.InstructionFile[] = [];
       for (const { path, spec, targets } of groups) {
         const display = sc === "user" ? `~/${spec.rel}` : spec.rel;
@@ -1530,7 +1531,7 @@ export function createMockBackend(): Backend {
       if (p.startsWith(`${INSTRUCTION_BACKUPS}/`)) {
         const text = state.instructions.get(p);
         if (text === undefined) throw new ApiError("not_found", `${p} does not exist`);
-        const file: T.InstructionFile = { path: p, display: p.split("/").pop() ?? "", scope: "user", projectPath: null, targetIds: [], targetNames: [], label: "Backup", kind: "file", pattern: null, parent: null, exists: true, sizeBytes: text.length, modifiedAt: state.instructionModified.get(p) ?? null, tokens: tokensIn(text), lines: text.split("\n").length, note: null };
+        const file: T.InstructionFile = { path: p, display: p.split("/").pop() ?? "", scope: "user", projectPath: null, targetIds: [], targetNames: [], label: "Backup", kind: "file", pattern: null, parent: null, exists: true, sizeBytes: instructionBytes(text), modifiedAt: state.instructionModified.get(p) ?? null, tokens: instructionTokens(text), lines: instructionLines(text), note: null };
         return { file, text } satisfies T.InstructionDocument;
       }
       const r = resolveInstruction(p, (projectPath as string | null) ?? null);

@@ -127,9 +127,10 @@ describe("InstructionsPage", () => {
     await findEntry("~/.claude/CLAUDE.md");
     await openProjectScope(user);
 
-    // AGENTS.md is one entry, grouped under both installed agents that read it.
+    // AGENTS.md is one entry, grouped under every agent that reads it (installed or not, since
+    // the file exists).
     expect(within(rail()).getAllByTitle("AGENTS.md")).toHaveLength(1);
-    expect(within(rail()).getByText("Codex CLI · Cursor")).toBeInTheDocument();
+    expect(within(rail()).getByText("Codex CLI · Cursor · GitHub Copilot · OpenCode · Shared (.agents)")).toBeInTheDocument();
     expect(within(entry("AGENTS.md")).getByText("The AGENTS.md convention: one file read by several agents.")).toBeInTheDocument();
 
     // The rules folder and its two members.

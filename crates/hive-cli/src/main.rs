@@ -1471,7 +1471,7 @@ fn cmd_instructions(hive: &Hive, out: &Out, cmd: InstructionsCmd) -> Result<()> 
                         .map(|f| {
                             vec![
                                 f.target_names.join(", "),
-                                f.display.clone(),
+                                f.path.clone(),
                                 f.label.clone(),
                                 match (f.kind, f.exists) {
                                     (InstructionKind::Directory, true) => "folder".into(),
@@ -1501,8 +1501,12 @@ fn cmd_instructions(hive: &Hive, out: &Out, cmd: InstructionsCmd) -> Result<()> 
                 if !doc.file.exists {
                     out.warn(format!("{} does not exist yet", doc.file.display));
                 } else {
+                    // Piped output is byte-identical so `show <backup> | write <path>` restores
+                    // exactly; a terminal gets a final newline for a tidy prompt.
                     print!("{}", doc.text);
-                    if !doc.text.ends_with('\n') {
+                    if !doc.text.ends_with('\n')
+                        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+                    {
                         println!();
                     }
                 }

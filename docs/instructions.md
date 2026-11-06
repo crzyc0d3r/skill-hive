@@ -82,7 +82,11 @@ refused with "write one of its files instead"; text over 2 MB is refused. An exi
 backed up first. Missing parent folders are created, so a project's first
 `.cursor/rules/style.mdc` creates `.cursor/rules/`. The write is atomic: the text goes to a
 temporary file next to the target, which then replaces it, so a crash leaves the old file or the
-new one, never a half-written one. Each write is recorded in the audit log and emits
+new one, never a half-written one; the file keeps the permissions it had. A symlinked file
+(`~/.claude/CLAUDE.md -> ~/dotfiles/CLAUDE.md`) is written through: the link stays and its
+target changes, and the backups belong to the target. A relative path is taken from the
+`--project` root when one is given, so a name copied from `hive instructions list --project`
+works from any directory. Each write is recorded in the audit log and emits
 `instructions_changed`, which refreshes the app.
 
 ## Backups
@@ -101,13 +105,16 @@ hive instructions show ~/.skill-hive/backups/instructions/<key>/1730000000000.md
   | hive instructions write ~/.claude/CLAUDE.md
 ```
 
-The restore is a write, so the version it replaces becomes the newest backup. In the app the
-**Backups** menu loads a copy into the editor and **Save** writes it back.
+`show` prints the text byte for byte when its output is piped (a terminal gets a final newline),
+so the restored file is identical to the backup. The restore is a write, so the version it
+replaces becomes the newest backup. In the app the **Backups** menu loads a copy into the editor
+and **Save** writes it back.
 
 ## Deleting
 
 `hive instructions delete <path>` takes a backup, removes the file and records the deletion in
-the audit log. A path that does not exist is an error. Rules folders are never deleted, only
+the audit log. Deleting through a symlink removes the target and the link. A path that does not
+exist is an error. Rules folders are never deleted, only
 their members. A deleted known location stays in the listing as missing and can be created again.
 
 ## Which project a path belongs to

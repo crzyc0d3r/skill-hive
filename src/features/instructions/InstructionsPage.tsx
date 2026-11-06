@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { useBlocker, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FilePlus2, FolderOpen, History, Monitor, RotateCcw, Save, Trash2 } from "lucide-react";
@@ -43,11 +43,16 @@ export function InstructionsPage() {
   /** A rules-folder member chosen through "New rule…" that is not on disk yet. */
   const [pending, setPending] = React.useState<T.InstructionFile | null>(null);
   const dirtyRef = React.useRef(false);
+  const [isDirty, setIsDirty] = React.useState(false);
   const onDirtyChange = React.useCallback((dirty: boolean) => {
     dirtyRef.current = dirty;
+    setIsDirty(dirty);
   }, []);
   /** Action waiting on the "Discard changes?" dialog. */
   const [discard, setDiscard] = React.useState<(() => void) | null>(null);
+  // Leaving the page (sidebar, shortcuts, command palette) asks the same question.
+  const blocker = useBlocker(() => dirtyRef.current);
+  const leaving = blocker.state === "blocked";
 
   const guard = (fn: () => void) => {
     if (dirtyRef.current) setDiscard(() => fn);
@@ -72,7 +77,13 @@ export function InstructionsPage() {
 
   const entries = files.data ?? [];
   // A pending rule that has been written is listed like any other member; once deleted it is gone.
-  const selected = entries.find((f) => f.path === selectedPath) ?? (pending && pending.path === selectedPath ? pending : null);
+  // A member removed behind the editor's back (by the agent, or the CLI) stays open while the
+  // draft is unsaved, as a missing file the Create button writes back.
+  const listed = entries.find((f) => f.path === selectedPath);
+  const [lastListed, setLastListed] = React.useState<T.InstructionFile | null>(null);
+  if (listed && listed !== lastListed) setLastListed(listed);
+  const vanished = lastListed?.path === selectedPath && isDirty ? { ...lastListed, exists: false } : null;
+  const selected = listed ?? (pending && pending.path === selectedPath ? pending : null) ?? vanished;
   const onDeleted = React.useCallback((path: string) => setPending((p) => (p?.path === path ? null : p)), []);
   const needsProject = scope === "project" && !projectPath;
 
@@ -130,13 +141,22 @@ export function InstructionsPage() {
         )}
       </div>
       <ConfirmDialog
-        open={!!discard}
-        onOpenChange={(o) => !o && setDiscard(null)}
+        open={!!discard || leaving}
+        onOpenChange={(o) => {
+          if (o) return;
+          setDiscard(null);
+          if (leaving) blocker.reset();
+        }}
         title="Discard changes?"
         description="The edits to this file have not been saved."
         confirmLabel="Discard"
         destructive
         onConfirm={() => {
+          if (leaving) {
+            dirtyRef.current = false;
+            blocker.proceed();
+            return;
+          }
           discard?.();
           setDiscard(null);
         }}
@@ -460,6 +480,22 @@ function InstructionEditor({
   const save = () => {
     if (canSave && !write.isPending) write.mutate(value);
   };
+  // Ctrl/Cmd+S saves wherever focus sits while a file is open (the preview, the footer, the
+  // page body), and never reaches the WebView's own save dialog.
+  const saveRef = React.useRef(save);
+  React.useEffect(() => {
+    saveRef.current = save;
+  });
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (doc.isError && !doc.data) {
     return (
@@ -489,15 +525,7 @@ function InstructionEditor({
   }
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col"
-      onKeyDown={(e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-          e.preventDefault();
-          save();
-        }
-      }}
-    >
+    <div className="flex min-h-0 flex-1 flex-col">
       <EntryHeader file={file} />
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-3 px-5 pt-3">

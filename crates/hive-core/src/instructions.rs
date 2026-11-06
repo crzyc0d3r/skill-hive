@@ -552,15 +552,18 @@ impl Hive {
                 };
                 let base = crate::paths::canonicalize_lenient(&root.join(spec.rel));
                 let who = (target.id.clone(), target.name.clone());
+                // A single-file location that is a folder on disk (`.clinerules/`) is treated
+                // like a rules folder, as the listing does.
+                let is_dir_spec = spec.kind == InstructionKind::Directory || base.is_dir();
                 let parent = if base == wanted {
-                    if spec.kind == InstructionKind::Directory {
+                    if is_dir_spec {
                         return Err(HiveError::invalid(format!(
                             "{} is a rules folder; write one of its files instead",
                             spec.rel
                         )));
                     }
                     None
-                } else if spec.kind == InstructionKind::Directory
+                } else if is_dir_spec
                     && wanted.parent() == Some(base.as_path())
                     && wanted
                         .file_name()
@@ -632,7 +635,7 @@ impl Hive {
         path: &str,
         project: Option<&str>,
     ) -> Result<InstructionDocument> {
-        let p = crate::paths::expand_tilde(path);
+        let p = instruction_path(path, project);
         if self.is_backup_path(&p) {
             let text = read_text(&p)?;
             let (size_bytes, modified_at, tokens, lines) = file_stats(&p);
@@ -714,14 +717,15 @@ impl Hive {
     }
 
     /// Write (or create) an instruction file at a known location, keeping a backup of the
-    /// previous content.
+    /// previous content. A symlinked file (`~/.claude/CLAUDE.md -> ~/dotfiles/CLAUDE.md`)
+    /// is written through: the link stays and its target changes.
     pub fn write_instruction_file(
         &self,
         path: &str,
         text: &str,
         project: Option<&str>,
     ) -> Result<InstructionDocument> {
-        let p = crate::paths::expand_tilde(path);
+        let p = instruction_path(path, project);
         let r = self.resolve_instruction_path(&p, project)?;
         if text.len() as u64 > MAX_INSTRUCTION_BYTES {
             return Err(HiveError::invalid("the file is larger than 2 MB"));
@@ -732,11 +736,17 @@ impl Hive {
                 p.display()
             )));
         }
-        let backup = self.backup_instruction_file(&p)?;
-        if let Some(parent) = p.parent() {
+        let target = link_target(&p);
+        let backup = self.backup_instruction_file(&target)?;
+        if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent).at(parent)?;
         }
-        util::write_atomic(&p, text.as_bytes())?;
+        // The atomic write renames a fresh temp file into place; keep the mode the file had.
+        let permissions = std::fs::metadata(&target).ok().map(|m| m.permissions());
+        util::write_atomic(&target, text.as_bytes())?;
+        if let Some(perms) = permissions {
+            let _ = std::fs::set_permissions(&target, perms);
+        }
         self.db.audit(
             "instructions.write",
             &serde_json::json!({
@@ -759,7 +769,7 @@ impl Hive {
         path: &str,
         project: Option<&str>,
     ) -> Result<InstructionFile> {
-        let p = crate::paths::expand_tilde(path);
+        let p = instruction_path(path, project);
         let r = self.resolve_instruction_path(&p, project)?;
         if !p.is_file() {
             return Err(HiveError::not_found(format!(
@@ -767,14 +777,40 @@ impl Hive {
                 p.display()
             )));
         }
-        self.backup_instruction_file(&p)?;
-        std::fs::remove_file(&p).at(&p)?;
+        let target = link_target(&p);
+        self.backup_instruction_file(&target)?;
+        std::fs::remove_file(&target).at(&target)?;
+        if target != p {
+            // Deleting through a symlink removes the link as well, so nothing dangles.
+            let _ = std::fs::remove_file(&p);
+        }
         self.db.audit(
             "instructions.delete",
             &serde_json::json!({"path": path_string(&p)}),
         )?;
         self.emit(HiveEvent::InstructionsChanged);
         Ok(self.resolved_entry(&p, &r))
+    }
+}
+
+/// The path a command names: `~` expanded, and a relative path taken from the project root
+/// when one is given (so a name copied from `hive instructions list --project` works
+/// wherever the command runs).
+fn instruction_path(path: &str, project: Option<&str>) -> PathBuf {
+    let p = crate::paths::expand_tilde(path);
+    match project {
+        Some(root) if p.is_relative() => crate::paths::expand_tilde(root).join(p),
+        _ => p,
+    }
+}
+
+/// The file a path really names: the target of a symlinked file, else the path itself.
+fn link_target(path: &Path) -> PathBuf {
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_symlink() => {
+            dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        }
+        _ => path.to_path_buf(),
     }
 }
 
@@ -1072,5 +1108,96 @@ mod tests {
         assert_eq!(newest.text, format!("v{}", BACKUPS_KEPT + 3));
         let oldest = hive.read_instruction_file(&backups[0].path, None).unwrap();
         assert_eq!(oldest.text, "v4");
+    }
+
+    #[test]
+    fn relative_paths_follow_the_project_and_folder_form_locations_work() {
+        let (_tmp, hive, home) = temp_hive();
+        let project = home.join("proj");
+        std::fs::create_dir_all(project.join(".clinerules")).unwrap();
+        std::fs::write(project.join(".clinerules/coding.md"), "# Coding\n").unwrap();
+        let proj = project.to_string_lossy().to_string();
+
+        // A name copied from the listing works from any directory.
+        let doc = hive
+            .write_instruction_file("CLAUDE.md", "# Project\n", Some(&proj))
+            .unwrap();
+        assert_eq!(doc.file.display, "CLAUDE.md");
+        assert_eq!(
+            std::fs::read_to_string(project.join("CLAUDE.md")).unwrap(),
+            "# Project\n"
+        );
+        assert_eq!(
+            hive.read_instruction_file("CLAUDE.md", Some(&proj))
+                .unwrap()
+                .text,
+            "# Project\n"
+        );
+
+        // `.clinerules/` as a folder: listed with its members, which can be read and written.
+        let files = hive.instruction_files(Scope::Project, Some(&proj)).unwrap();
+        let folder = files.iter().find(|f| f.display == ".clinerules").unwrap();
+        assert_eq!(folder.kind, InstructionKind::Directory);
+        assert!(
+            files
+                .iter()
+                .any(|f| f.display == ".clinerules/coding.md" && f.exists)
+        );
+        let doc = hive
+            .read_instruction_file(".clinerules/coding.md", Some(&proj))
+            .unwrap();
+        assert_eq!(doc.text, "# Coding\n");
+        assert_eq!(doc.file.parent.as_deref(), Some(folder.path.as_str()));
+        hive.write_instruction_file(".clinerules/testing.md", "# Tests\n", Some(&proj))
+            .unwrap();
+        assert!(project.join(".clinerules/testing.md").is_file());
+        assert!(
+            hive.write_instruction_file(".clinerules", "x", Some(&proj))
+                .is_err()
+        );
+        assert!(
+            hive.write_instruction_file(".clinerules/notes.txt", "x", Some(&proj))
+                .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writes_through_symlinks_and_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_tmp, hive, home) = temp_hive();
+        let real = home.join("dotfiles/CLAUDE.md");
+        std::fs::create_dir_all(real.parent().unwrap()).unwrap();
+        std::fs::write(&real, "# Dotfiles\n").unwrap();
+        std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let link = home.join(".claude/CLAUDE.md");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        hive.write_instruction_file(&link.to_string_lossy(), "# Edited\n", None)
+            .unwrap();
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(std::fs::read_to_string(&real).unwrap(), "# Edited\n");
+        assert_eq!(
+            std::fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        let backups = hive.instruction_backups(&link.to_string_lossy()).unwrap();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(
+            hive.read_instruction_file(&backups[0].path, None)
+                .unwrap()
+                .text,
+            "# Dotfiles\n"
+        );
+
+        hive.delete_instruction_file(&link.to_string_lossy(), None)
+            .unwrap();
+        assert!(!real.exists());
+        assert!(std::fs::symlink_metadata(&link).is_err());
     }
 }
