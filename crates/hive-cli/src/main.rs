@@ -1631,6 +1631,9 @@ async fn cmd_merge(hive: &Hive, out: &Out, args: MergeArgs) -> Result<()> {
         for f in &result.failed {
             out.warn(format!("deployment failed: {}", f.reason));
         }
+        for w in &result.warnings {
+            out.warn(w);
+        }
         if result.eval_cases > 0 {
             out.note(format!(
                 "carried {} evaluation case(s); run `hive eval run {}` to measure the merged skill",

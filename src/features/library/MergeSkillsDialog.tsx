@@ -82,6 +82,11 @@ function MergeFlow({ ids, onClose }: { ids: string[]; onClose: () => void }) {
     [keys.itemsAll, keys.stats, keys.dashboard, keys.deployments, keys.targets, ["item"], ["analyze"]],
     (result) => {
       toast.success(`Merged into ${result.item.name}${result.deployed.length ? `, ${pluralize(result.deployed.length, "deployment")} moved` : ""}`);
+      // The merged skill is written even when a later step failed: say what did not happen.
+      const problems = [...result.failed.map((f) => `Deployment not moved: ${f.reason}`), ...result.warnings];
+      if (problems.length) {
+        toast.warning(`${pluralize(problems.length, "step")} did not complete`, { description: problems.join("\n"), duration: 15_000 });
+      }
       clearSelection();
       onClose();
       openItem(result.item.id);
@@ -255,9 +260,17 @@ function ReviewStep({
   const replaces = proposal.sources.find((s) => s.item.name === draft.name) ?? null;
   const nameOk = nameValid(draft.name);
   const descOk = descriptionValid(draft.description);
+  const bodyOk = draft.body.trim().length > 0;
   const findings = proposal.validation.findings;
-  const blockingError = findings.some((f) => f.severity === "error" && !(f.field && draft.edited.has(f.field)));
-  const canApply = nameOk && descOk && !blockingError && !pending;
+  // A finding blocks until the field it is about is edited; `body.*` findings carry no field,
+  // so they map to the body. Anything else is re-checked by the backend on apply.
+  const fieldOf = (f: T.Finding) => f.field ?? (f.code.startsWith("body") ? "body" : null);
+  const blockingError = findings.some((f) => {
+    if (f.severity !== "error") return false;
+    const field = fieldOf(f);
+    return !!field && !draft.edited.has(field);
+  });
+  const canApply = nameOk && descOk && bodyOk && !blockingError && !pending;
 
   const stats = [
     `Instructions ${formatTokens(proposal.bodyTokensBefore)} → ${formatTokens(proposal.bodyTokensAfter)} tokens`,
@@ -332,7 +345,7 @@ function ReviewStep({
                 "Lowercase letters, digits and single hyphens, up to 64 characters"
               ) : replaces ? (
                 <span className="text-warn">
-                  Replaces {replaces.item.name} in place: it keeps its id, deployments and history.
+                  Replaces {replaces.item.name} in place: it keeps its id, deployments and run history{draft.carryEvals ? "; its evaluation suite becomes the union of the sources'" : " and its own evaluation suite"}.
                 </span>
               ) : (
                 "Also the directory name. Use a source's name to replace that skill in place."

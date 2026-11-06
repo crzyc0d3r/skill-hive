@@ -15,4 +15,9 @@ replacedId?: string | null,
 /**
  * Deployments the merged skill now has in place of the sources'.
  */
-deployed: Array<Deployment>, failed: Array<DeployFailure>, evalCases: number, };
+deployed: Array<Deployment>, failed: Array<DeployFailure>, evalCases: number, 
+/**
+ * Steps after the merged skill was written that did not go to plan (a source that could
+ * not be removed, a copy that could not be re-synced, a suite that could not be read).
+ */
+warnings: Array<string>, };

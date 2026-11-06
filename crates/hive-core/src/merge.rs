@@ -16,9 +16,10 @@ use crate::error::{HiveError, IoContext, Result};
 use crate::evals::suite;
 use crate::hive::Hive;
 use crate::model::{
-    AssetKind, DeployRequest, Deployment, EvalSuite, Finding, HiveEvent, LibraryItem, MergeCommit,
-    MergeFile, MergeProposal, MergeRequest, MergeResult, MergeSource, ParsedDocument,
-    ProviderConfig, ProviderRole, Severity, SkillFrontmatter, SourceRef, ValidationReport,
+    AssetKind, DeployFailure, DeployRequest, Deployment, EvalSuite, Finding, HiveEvent,
+    LibraryItem, LinkMode, MergeCommit, MergeFile, MergeProposal, MergeRequest, MergeResult,
+    MergeSource, ParsedDocument, ProviderConfig, ProviderRole, Scope, Severity, SkillFrontmatter,
+    SourceRef, ValidationReport,
 };
 use crate::providers::CompletionRequest;
 use crate::skill;
@@ -72,12 +73,24 @@ struct Answer {
 
 /// Pull the merged skill out of the model's reply: the JSON object it was asked for, or a raw
 /// `SKILL.md` when it answered with the document instead.
+/// The first JSON object in `text`, wherever it starts and whatever follows it: the reply may
+/// wrap it in a code fence or add a sentence with braces after it.
+fn extract_json(text: &str) -> Option<serde_json::Value> {
+    for (start, _) in text.char_indices().filter(|(_, c)| *c == '{').take(32) {
+        let mut stream =
+            serde_json::Deserializer::from_str(&text[start..]).into_iter::<serde_json::Value>();
+        if let Some(Ok(value)) = stream.next() {
+            if value.is_object() {
+                return Some(value);
+            }
+        }
+    }
+    None
+}
+
 fn parse_answer(text: &str) -> Result<Answer> {
     let text = text.trim();
-    let json = match (text.find('{'), text.rfind('}')) {
-        (Some(a), Some(b)) if b > a => serde_json::from_str::<serde_json::Value>(&text[a..=b]).ok(),
-        _ => None,
-    };
+    let json = extract_json(text);
     if let Some(value) = json.as_ref().and_then(|v| v.as_object()) {
         let field = |k: &str| {
             value
@@ -133,7 +146,9 @@ fn parse_answer(text: &str) -> Result<Answer> {
 /// source that ships the same path with different content gets it under its own name, and an
 /// identical file is carried once.
 fn plan_files(sources: &[Loaded]) -> Vec<MergeFile> {
-    let mut taken: BTreeMap<String, String> = BTreeMap::new();
+    // Final paths handed out so far, and (path, content hash) pairs already carried.
+    let mut dests: BTreeSet<String> = BTreeSet::new();
+    let mut carried: BTreeSet<(String, String)> = BTreeSet::new();
     let mut out = Vec::new();
     for src in sources {
         for (path, size) in &src.files {
@@ -141,12 +156,20 @@ fn plan_files(sources: &[Loaded]) -> Vec<MergeFile> {
             let hash = crate::hash::hash_path(&full)
                 .map(|(h, _)| h)
                 .unwrap_or_default();
-            let dest = match taken.get(path) {
-                None => path.clone(),
-                Some(existing) if *existing == hash && !hash.is_empty() => continue,
-                Some(_) => format!("{}/{}", src.item.slug, path),
+            if !hash.is_empty() && !carried.insert((path.clone(), hash.clone())) {
+                continue; // the same file was already carried from an earlier source
+            }
+            let mut dest = if dests.contains(path) {
+                format!("{}/{}", src.item.slug, path)
+            } else {
+                path.clone()
             };
-            taken.insert(dest.clone(), hash);
+            let mut n = 1;
+            while dests.contains(&dest) {
+                n += 1;
+                dest = format!("{}-{n}/{}", src.item.slug, path);
+            }
+            dests.insert(dest.clone());
             out.push(MergeFile {
                 from_item_id: src.item.id.clone(),
                 from_name: src.item.name.clone(),
@@ -369,9 +392,8 @@ fn resolve_name(
             .collect::<Vec<_>>()
             .join("-"),
     );
-    let mut name = util::truncate_chars(&joined, skill::MAX_NAME_LEN)
-        .trim_end_matches('-')
-        .to_string();
+    let mut name: String = joined.chars().take(skill::MAX_NAME_LEN).collect();
+    name = name.trim_end_matches('-').to_string();
     if name.is_empty() {
         name = "merged-skill".into();
     }
@@ -678,21 +700,34 @@ impl Hive {
         let text = skill::render_document(&frontmatter, commit.body.trim())?;
         skill::parse_skill_text(&text)?;
         std::fs::write(staging.join("SKILL.md"), text).at(&staging)?;
+        let mut dests: BTreeSet<String> = BTreeSet::new();
         for f in commit.files.iter().filter(|f| f.keep) {
-            if !util::is_safe_relative(&f.path) || !util::is_safe_relative(&f.dest) {
+            let path = f.path.replace('\\', "/");
+            let dest = f.dest.replace('\\', "/");
+            if !util::is_safe_relative(&path) || !util::is_safe_relative(&dest) {
                 return Err(HiveError::invalid(format!(
                     "bundled file path `{}` escapes the skill",
                     f.dest
                 )));
             }
+            let top = dest.split('/').next().unwrap_or("");
+            if skill::SKILL_FILE_NAMES.contains(&dest.as_str()) || top == suite::SUITE_DIR {
+                return Err(HiveError::invalid(format!(
+                    "bundled file `{dest}` would overwrite the merged SKILL.md or its evaluation suite"
+                )));
+            }
+            if !dests.insert(dest.clone()) {
+                return Err(HiveError::invalid(format!(
+                    "two bundled files would both be written to `{dest}`"
+                )));
+            }
             let Some(src) = sources.iter().find(|s| s.item.id == f.from_item_id) else {
                 return Err(HiveError::invalid(format!(
-                    "bundled file {} comes from a skill that is not part of this merge",
-                    f.dest
+                    "bundled file {dest} comes from a skill that is not part of this merge"
                 )));
             };
-            let from = Path::new(&src.item.path).join(&f.path);
-            let to = staging.join(&f.dest);
+            let from = Path::new(&src.item.path).join(&path);
+            let to = staging.join(&dest);
             if let Some(parent) = to.parent() {
                 std::fs::create_dir_all(parent).at(parent)?;
             }
@@ -707,17 +742,23 @@ impl Hive {
                 suite::write_suite(&staging, &suite)?;
                 eval_cases = suite.cases.len() as u32;
             }
+        } else if let Some(existing) = &primary {
+            // A source replaced in place keeps its own suite when the union is not wanted.
+            let evals = Path::new(&existing.path).join(suite::SUITE_DIR);
+            if evals.is_dir() {
+                util::copy_dir(&evals, &staging.join(suite::SUITE_DIR))?;
+                eval_cases = suite::read_suite(&existing.id, name, &staging)
+                    .map(|s| s.cases.len() as u32)
+                    .unwrap_or(0);
+            }
         }
 
-        // Where the retired sources were deployed: the merged skill goes there afterwards.
-        let mut targets: Vec<(
-            String,
-            crate::model::Scope,
-            Option<String>,
-            crate::model::LinkMode,
-        )> = Vec::new();
+        // From here on the merged skill is in the library: what fails afterwards is reported
+        // in the result rather than raised, so the caller always learns what the library holds.
         let mut retired = Vec::new();
         let mut replaced_id = None;
+        let mut deployed = Vec::new();
+        let mut failed = Vec::new();
         let item = match &primary {
             Some(existing) => {
                 let item = self.library().import_path(
@@ -729,8 +770,21 @@ impl Hive {
                 replaced_id = Some(existing.id.clone());
                 // Copies of the replaced skill are stale until re-synced; links follow the
                 // library automatically but their recorded hash moves too.
-                for dep in self.db.deployments_for_item(&item.id)? {
-                    self.with_deployer(|d| d.resync(&dep.id))?;
+                match self.db.deployments_for_item(&item.id) {
+                    Ok(deps) => {
+                        for dep in deps {
+                            if let Err(err) = self.with_deployer(|d| d.resync(&dep.id)) {
+                                warnings.push(format!(
+                                    "the copy at {} could not be re-synced: {err}",
+                                    dep.path
+                                ));
+                            }
+                        }
+                    }
+                    Err(err) => warnings.push(format!(
+                        "the deployments of {} could not be listed: {err}",
+                        item.name
+                    )),
                 }
                 item
             }
@@ -739,54 +793,75 @@ impl Hive {
                     .import_path(&staging, SourceRef::authored(), &commit.tags, false)?
             }
         };
+        // Where the retired sources were deployed: the merged skill goes there afterwards, once
+        // per target, scope and project, in the mode of the first deployment seen.
+        let mut targets: Vec<(String, Scope, Option<String>, LinkMode)> = Vec::new();
         if commit.retire_sources {
             for s in sources
                 .iter()
                 .filter(|s| Some(&s.item.id) != replaced_id.as_ref())
             {
                 for dep in &s.deployments {
-                    let key = (
-                        dep.target_id.clone(),
-                        dep.scope,
-                        dep.project_path.clone(),
-                        dep.mode,
-                    );
-                    if !targets.contains(&key) {
-                        targets.push(key);
+                    let seen = targets.iter().any(|(t, sc, p, _)| {
+                        *t == dep.target_id && *sc == dep.scope && *p == dep.project_path
+                    });
+                    if !seen {
+                        targets.push((
+                            dep.target_id.clone(),
+                            dep.scope,
+                            dep.project_path.clone(),
+                            dep.mode,
+                        ));
                     }
                 }
-                self.with_deployer(|d| d.undeploy_item(&s.item.id))?;
-                retired.push(self.library().remove(&s.item.id)?);
+                if let Err(err) = self.with_deployer(|d| d.undeploy_item(&s.item.id)) {
+                    warnings.push(format!(
+                        "the deployments of {} could not be removed ({err}); it stays in the library",
+                        s.item.name
+                    ));
+                    continue;
+                }
+                match self.library().remove(&s.item.id) {
+                    Ok(removed) => retired.push(removed),
+                    Err(err) => warnings.push(format!(
+                        "{} could not be removed from the library: {err}",
+                        s.item.name
+                    )),
+                }
             }
         }
-        let mut deployed = Vec::new();
-        let mut failed = Vec::new();
-        let already = self.db.deployments_for_item(&item.id)?;
+        let default_mode = self
+            .settings()
+            .map(|s| s.default_link_mode)
+            .unwrap_or(LinkMode::Link);
         for (target_id, scope, project_path, mode) in targets {
+            let already = self.db.deployments_for_item(&item.id).unwrap_or_default();
             if already.iter().any(|d| {
                 d.target_id == target_id && d.scope == scope && d.project_path == project_path
             }) {
                 continue;
             }
-            let default_mode = self.settings()?.default_link_mode;
-            let result = self.with_deployer(|d| {
-                d.deploy(
-                    &DeployRequest {
-                        item_ids: vec![item.id.clone()],
-                        target_id,
-                        scope,
-                        project_path,
-                        mode: Some(mode),
-                        force: false,
-                    },
-                    default_mode,
-                )
-            })?;
-            deployed.extend(result.deployed);
-            failed.extend(result.failed);
+            let request = DeployRequest {
+                item_ids: vec![item.id.clone()],
+                target_id: target_id.clone(),
+                scope,
+                project_path,
+                mode: Some(mode),
+                force: false,
+            };
+            match self.with_deployer(|d| d.deploy(&request, default_mode)) {
+                Ok(result) => {
+                    deployed.extend(result.deployed);
+                    failed.extend(result.failed);
+                }
+                Err(err) => failed.push(DeployFailure {
+                    item_id: item.id.clone(),
+                    reason: format!("{target_id}: {err}"),
+                }),
+            }
         }
-        let item = self.get_item(&item.id)?;
-        self.db.audit(
+        let item = self.get_item(&item.id).unwrap_or(item);
+        if let Err(err) = self.db.audit(
             "merge.apply",
             &serde_json::json!({
                 "id": item.id,
@@ -794,8 +869,11 @@ impl Hive {
                 "sources": commit.source_ids,
                 "retired": retired.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
                 "replaced": replaced_id,
+                "warnings": warnings,
             }),
-        )?;
+        ) {
+            warnings.push(format!("the audit row could not be written: {err}"));
+        }
         self.emit(HiveEvent::LibraryChanged);
         self.emit(HiveEvent::DeploymentsChanged);
         Ok(MergeResult {
@@ -805,6 +883,7 @@ impl Hive {
             deployed,
             failed,
             eval_cases,
+            warnings,
         })
     }
 }
@@ -1136,7 +1215,11 @@ mod tests {
             detail.deployments[0].state,
             crate::model::InstallState::InSync
         );
-        assert!(!detail.files.iter().any(|f| f.path == "evals/evals.json"));
+        // Without carrying the union, the replaced source keeps its own suite.
+        assert!(detail.files.iter().any(|f| f.path == "evals/evals.json"));
+        assert_eq!(result.eval_cases, 1);
+        assert_eq!(hive.eval_suite(&a.id).unwrap().cases.len(), 1);
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
     }
 
     #[tokio::test]
@@ -1207,6 +1290,133 @@ mod tests {
             .unwrap();
         assert_eq!(result.retired.len(), 0);
         assert_eq!(hive.stats().unwrap().skills, 4);
+    }
+
+    #[test]
+    fn json_is_found_despite_prose_and_braces_around_it() {
+        let trailing = parse_answer(
+            "```json\n{\"name\":\"pdf-tools\",\"description\":\"d\",\"body\":\"# B\"}\n```\nNote: the body keeps the `{{args}}` placeholders of source 2.",
+        )
+        .unwrap();
+        assert_eq!(trailing.name, "pdf-tools");
+        assert_eq!(trailing.body, "# B");
+        let leading = parse_answer(
+            "I kept the {{args}} placeholder. {\"name\":\"x\",\"description\":\"d\",\"body\":\"b\"} done.",
+        )
+        .unwrap();
+        assert_eq!(leading.body, "b");
+        assert!(parse_answer("{ not json } and no document").is_err());
+    }
+
+    #[tokio::test]
+    async fn long_joined_names_are_cut_without_an_ellipsis() {
+        let (tmp, hive, _) = hive_with_provider(
+            "---\nname: \ndescription: Everything about these three long-named skills, when any applies.\n---\n\n# Body\n",
+        );
+        let src = tmp.path().join("src");
+        let mut ids = Vec::new();
+        for n in [
+            "test-driven-development",
+            "systematic-debugging-and-tracing",
+            "conventional-commit-messages",
+        ] {
+            let dir = write_skill(
+                &src,
+                n,
+                &format!("Skill {n} for testing long names in merges"),
+                "x",
+            );
+            ids.push(hive.import_path(&dir, &[], false).unwrap().id);
+        }
+        let proposal = hive
+            .propose_merge(&MergeRequest {
+                item_ids: ids,
+                name: None,
+                guidance: None,
+                provider_id: None,
+            })
+            .await
+            .unwrap();
+        assert!(skill::is_valid_name(&proposal.name), "{}", proposal.name);
+        assert_eq!(proposal.name.len(), 64);
+        assert!(
+            proposal
+                .validation
+                .findings
+                .iter()
+                .all(|f| f.code != "name.invalid"),
+            "{:?}",
+            proposal.validation
+        );
+    }
+
+    #[tokio::test]
+    async fn identical_files_across_later_sources_are_carried_once_and_bad_dests_refused() {
+        let (tmp, hive, _) = hive_with_provider(ANSWER);
+        let (a, b) = two_pdf_skills(tmp.path(), &hive);
+        // A third source shipping the reader's exact script and a file at the prefixed path.
+        let c = write_skill(
+            &tmp.path().join("src"),
+            "pdf-third",
+            "Yet another way to extract tables from PDF documents when a PDF is shared.",
+            "# Third\n",
+        );
+        std::fs::create_dir_all(c.join("scripts")).unwrap();
+        std::fs::write(c.join("scripts/extract.py"), "print('b')\n").unwrap();
+        std::fs::create_dir_all(c.join("pdf-reader/scripts")).unwrap();
+        std::fs::write(c.join("pdf-reader/scripts/extract.py"), "print('c')\n").unwrap();
+        let item_c = hive.import_path(&c, &[], false).unwrap();
+        let proposal = hive
+            .propose_merge(&MergeRequest {
+                item_ids: vec![a.id.clone(), b.id.clone(), item_c.id.clone()],
+                name: Some("pdf-all".into()),
+                guidance: None,
+                provider_id: None,
+            })
+            .await
+            .unwrap();
+        let dests: Vec<&str> = proposal.files.iter().map(|f| f.dest.as_str()).collect();
+        assert_eq!(
+            dests,
+            vec![
+                "README.md",
+                "scripts/extract.py",
+                "pdf-reader/scripts/extract.py",
+                "pdf-third/pdf-reader/scripts/extract.py",
+            ],
+            "the third source's identical script is carried once; its clashing path gets its own prefix"
+        );
+        let bad = |dest: &str, path: &str| MergeCommit {
+            source_ids: vec![a.id.clone(), b.id.clone()],
+            name: "pdf-all".into(),
+            description: proposal.description.clone(),
+            body: proposal.body.clone(),
+            frontmatter: proposal.frontmatter.clone(),
+            files: vec![MergeFile {
+                from_item_id: a.id.clone(),
+                from_name: "pdf-extract".into(),
+                path: path.into(),
+                dest: dest.into(),
+                size_bytes: 1,
+                keep: true,
+            }],
+            tags: vec![],
+            retire_sources: false,
+            carry_evals: false,
+        };
+        for (dest, path) in [
+            ("SKILL.md", "SKILL.md"),
+            ("evals/evals.json", "README.md"),
+            ("..\\x", "README.md"),
+            ("../x", "README.md"),
+        ] {
+            let err = hive.apply_merge(&bad(dest, path)).unwrap_err();
+            assert!(matches!(err, HiveError::Invalid(_)), "{dest}: {err}");
+        }
+        let mut dup = bad("docs/a.md", "README.md");
+        dup.files.push(dup.files[0].clone());
+        assert!(hive.apply_merge(&dup).is_err());
+        assert_eq!(hive.stats().unwrap().skills, 3, "nothing was written");
     }
 
     #[test]

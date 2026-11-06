@@ -1020,7 +1020,7 @@ export function createMockBackend(): Backend {
             ]
           : [{ fromItemId: s.id, fromName: s.name, path: "scripts/extract.py", dest: `${s.slug}/scripts/extract.py`, sizeBytes: 1830, keep: false }],
       );
-      const taken = items.find((i) => i.name === name && !sources.includes(i));
+      const taken = items.find((i) => i.kind === "skill" && i.name === name && !sources.includes(i));
       const findings: T.Finding[] = taken ? [{ code: "name.taken", severity: "error", message: `A ${taken.kind} named \`${name}\` is already in the library; pick another name or merge it in too`, field: "name" }] : [];
       const warnings = req.name ? [] : [`The model proposed "${first.name} + ${second.name}"; it was normalised to \`${name}\` to fit the skill name rules.`];
       const evalCases = sources.reduce((n, s) => n + (state.suites.get(s.id)?.cases.length ?? 0), 0);
@@ -1031,7 +1031,7 @@ export function createMockBackend(): Backend {
         name,
         description,
         body,
-        frontmatter: { "merged-from": sources.map((s) => s.name), ...(first.frontmatter.license ? { license: first.frontmatter.license } : {}) },
+        frontmatter: { metadata: { "merged-from": sources.map((s) => s.name).join(", ") }, ...(first.frontmatter.license ? { license: first.frontmatter.license } : {}) },
         files,
         tags: [...new Set(sources.flatMap((s) => s.tags))],
         notes: `Kept ${first.name}'s overview as the opening because it states the trigger more precisely, and folded ${second.name}'s steps in as their own section. The reference files of both are identical, so only one copy is carried over.`,
@@ -1055,7 +1055,7 @@ export function createMockBackend(): Backend {
       const c = commit as T.MergeCommit;
       if (!NAME_RE.test(c.name) || c.name.length > 64) throw new ApiError("invalid", "name must be 1–64 lowercase letters, digits or single hyphens");
       const sources = mergeSources(c.sourceIds);
-      const taken = items.find((i) => i.name === c.name && !sources.includes(i));
+      const taken = items.find((i) => i.kind === "skill" && i.name === c.name && !sources.includes(i));
       if (taken) throw new ApiError("already_exists", `a ${taken.kind} named '${c.name}' is already in the library`);
       const replaced = sources.find((s) => s.name === c.name) ?? null;
       const frontmatter = { ...c.frontmatter };
@@ -1098,7 +1098,7 @@ export function createMockBackend(): Backend {
       }
       emit({ type: "library_changed" });
       emit({ type: "deployments_changed" });
-      return { item: stripBody(merged), retired, replacedId: replaced?.id ?? null, deployed, failed: [], evalCases } satisfies T.MergeResult;
+      return { item: stripBody(merged), retired, replacedId: replaced?.id ?? null, deployed, failed: [], evalCases, warnings: [] } satisfies T.MergeResult;
     },
 
     scan_local: async () => {

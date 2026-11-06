@@ -81,7 +81,7 @@ export function LibraryPage() {
   // The selection survives filter changes, so kinds come from the whole library rather than the
   // filtered list.
   const { data: allItems } = useItems(ALL_ITEMS_QUERY);
-  const selectionHasNonSkill = selectedIds.some((id) => allItems?.find((i) => i.id === id)?.kind !== "skill");
+  const selectionHasNonSkill = !!allItems && selectedIds.some((id) => allItems.find((i) => i.id === id)?.kind !== "skill");
 
   const removeMany = useApiMutation(
     async (ids: string[]) => {
@@ -270,7 +270,7 @@ export function LibraryPage() {
             {selectedIds.length >= 2 ? (
               <>
                 {selectionHasNonSkill ? <span className="mr-1 text-subtle">Only skills can be merged</span> : null}
-                <Button size="sm" variant="secondary" disabled={selectionHasNonSkill} onClick={() => openMerge(selectedIds)}>
+                <Button size="sm" variant="secondary" disabled={selectionHasNonSkill || !allItems} onClick={() => openMerge(selectedIds)}>
                   <Sparkles /> Merge with AI…
                 </Button>
               </>
