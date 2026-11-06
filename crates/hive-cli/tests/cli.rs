@@ -384,7 +384,22 @@ fn config_and_projects() {
         .args(["config", "show"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("copy"));
+        .stdout(predicate::str::contains("copy"))
+        .stdout(predicate::str::contains("auto-update-check      true"));
+    env.cmd()
+        .args(["config", "set", "auto-update-check", "off"])
+        .assert()
+        .success();
+    env.cmd()
+        .args(["config", "show"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("auto-update-check      false"));
+    env.cmd()
+        .args(["config", "set", "auto-update-check", "maybe"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("expected true or false"));
     env.cmd()
         .args(["config", "set", "nonsense", "x"])
         .assert()

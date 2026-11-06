@@ -31,7 +31,8 @@ Installers and CLI binaries for every release are attached to
 app is called `Skill Hive`; the CLI binary is called `hive`. Builds are not code-signed yet, so
 macOS and Windows show a warning the first time (the steps to get past it are below). In the
 asset names, replace `0.1.3` with the version you download; the downloaded file names have a
-dot where the space in "Skill Hive" is.
+dot where the space in "Skill Hive" is. Later releases install themselves: see
+[Updating](#updating).
 
 ### macOS (11.0 or later)
 
@@ -88,6 +89,25 @@ hive --version
 On macOS a downloaded binary is quarantined too: `xattr -d com.apple.quarantine hive` before the
 first run. On Windows, unzip `hive.exe` into a folder that is on `PATH`. The CLI and the desktop
 app share the same data under `~/.skill-hive`, so you can mix them freely.
+
+### Updating
+
+Both the app and the CLI update themselves from the GitHub releases.
+
+The desktop app looks for a newer release a few seconds after it opens and shows a notice with
+**Install and restart**; **Settings > About > Updates** has the same button, **Check for
+updates**, the release notes, and the **Check on startup** switch to turn the automatic check
+off. Nothing is downloaded until you accept. The app downloads the build for your platform,
+verifies its signature against the key compiled into the app, installs it and relaunches. On
+Linux a `.deb` or `.rpm` installation asks for your password once (`pkexec`); the AppImage
+replaces itself in place.
+
+The CLI updates on request:
+
+```bash
+hive self-update --check    # is there a newer release?
+hive self-update            # download it and replace this binary (asks first; --yes skips the prompt)
+```
 
 ### Build from source
 
@@ -296,8 +316,10 @@ transcript and a step-by-step timeline of what the agent thought, said, called a
 overlap threshold and theme. **Providers**: the model providers used as executor, grader and
 recommender, with **Detect CLIs**, **Test** probes and default roles. **Agents**: the target table
 with each tool's directories, where you override a skills folder or add a custom agent.
-**Projects**: folders registered for project-scope deployments. **About**: version, the same
-health check as `hive doctor`, re-indexing, the GitHub token and the source cache.
+**Projects**: folders registered for project-scope deployments. **About**: version and updates
+(**Check for updates**, **Install and restart**, the release notes and the **Check on startup**
+switch), the same health check as `hive doctor`, re-indexing, the GitHub token and the source
+cache.
 
 ## How it works
 
@@ -487,6 +509,7 @@ with the same id as a built-in one replaces it. Custom targets always count as d
 | `hive instructions write <PATH> [--from FILE] [--project PATH]` | Write (or create) an instruction file from `--from` or standard input; a backup of the previous content is kept |
 | `hive instructions delete <PATH> [--project PATH]` | Delete an instruction file (a backup is kept; folders are never deleted) |
 | `hive instructions backups <PATH>` | The backups kept of an instruction file, oldest first |
+| `hive self-update [--check] [--yes]` | Replace this `hive` binary with the latest GitHub release; `--check` only reports, `--yes` skips the confirmation |
 
 Global flags on every command:
 
@@ -537,6 +560,7 @@ Settings are stored in the database and shown by `hive config show`:
 | `scan-dirs` | extra folders for local scans, comma separated | none |
 | `github-token` | personal access token; stored in the secret store, shown only as set / not set | not set |
 | `theme` | `system`, `light` or `dark` | `system` |
+| `auto-update-check` | `true` or `false`: whether the desktop app looks for a newer release after it starts | `true` |
 
 Environment variables:
 
@@ -554,10 +578,13 @@ Network access is limited to: cloning or downloading the sources you import and 
 updates; GitHub API calls for search, previews and the tarball fallback; the curated catalog,
 which is fetched from `crates/hive-core/src/sources/catalog.json` on the `main` branch of this
 repository when you open **Discover > Catalog** or run `hive catalog` and the cached copy is
-older than 24 hours (the built-in copy is used when the fetch fails); and the calls to the
-providers you configure during evaluations and model re-ranking. There is no telemetry and no
-automatic update check for the app itself. A GitHub token raises the API rate limit and allows
-private repositories; `repo` read access is enough.
+older than 24 hours (the built-in copy is used when the fetch fails); the calls to the
+providers you configure during evaluations and model re-ranking; and the update check, which
+fetches `latest.json` from the latest GitHub release a few seconds after the desktop app starts
+(turn it off with `auto-update-check` or in Settings > About; `hive self-update` checks only
+when you run it). The check sends nothing but the request itself; there is no telemetry. A
+GitHub token raises the API rate limit and allows private repositories; `repo` read access is
+enough.
 
 ## Troubleshooting
 

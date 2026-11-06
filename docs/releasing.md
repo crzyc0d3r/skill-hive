@@ -63,8 +63,10 @@ tag, but the installers are built from the commit you picked, so pick the tag it
    x86_64): each runner first builds the bare binary and starts it with
    `scripts/smoke-desktop.mjs`, so a build whose interface does not come up fails before
    anything is uploaded (the Intel macOS build is cross-compiled and skips this step); then
-   `tauri-action` runs `tauri build` and uploads the bundles to that release. On Windows the
-   NSIS installer is afterwards installed silently and the installed copy started once more.
+   `tauri-action` runs `tauri build`, uploads the bundles and their `.sig` files to that
+   release and adds the runner's platform to the release's `latest.json` (see
+   [Updater](#updater)). On Windows the NSIS installer is afterwards installed silently and the
+   installed copy started once more.
 3. `cli` (four runners in parallel): `cargo build --release -p hive-cli` for each target,
    archived and uploaded to the same release.
 
@@ -90,27 +92,84 @@ file names, so the macOS and Windows files arrive as `Skill.Hive_0.1.3_...`.
 | CLI macOS Apple Silicon | `hive-aarch64-apple-darwin.tar.gz` | |
 | CLI macOS Intel | `hive-x86_64-apple-darwin.tar.gz` | |
 | CLI Windows x86_64 | `hive-x86_64-pc-windows-msvc.zip` | contains `hive.exe` |
+| Updater | `latest.json` | version, date, notes and one signed download per platform; read by installed apps |
+| Updater | `<bundle>.sig` next to every bundle above | minisign signature the app verifies before installing |
 
 The installed desktop binary is `skill-hive`; the Debian package also installs
 `Skill Hive.desktop` and the icons under `/usr/share`.
 
+## Updater
+
+Installed apps update themselves through the Tauri updater; `hive self-update` does the same
+for the CLI. Both read the latest release.
+
+**Desktop app.** `src-tauri/tauri.conf.json` turns on `bundle.createUpdaterArtifacts`, so
+`tauri build` signs every bundle with the updater key and writes a `.sig` next to it, and
+configures `plugins.updater` with the public key and one endpoint:
+`https://github.com/crzyc0d3r/skill-hive/releases/latest/download/latest.json`. tauri-action
+writes `latest.json` from the bundles it uploaded; the four build runners each add their
+platform to the copy already on the release, so the finished file lists
+`darwin-aarch64`, `darwin-x86_64`, `linux-x86_64` and `windows-x86_64` with a URL under
+`releases/latest/download/` and the signature of that file. The app (Settings > About, and a
+check a few seconds after start-up unless turned off) fetches `latest.json`, compares the
+version with its own, and on **Install and restart** downloads the bundle, verifies the
+signature against the public key compiled into the app, installs it and relaunches: the
+`.app.tar.gz` replaces the bundle in `/Applications`, the AppImage replaces itself, a `.deb`
+or `.rpm` install runs `dpkg`/`rpm` through `pkexec` (one password prompt), and on Windows the
+NSIS installer runs in passive mode and restarts the app. A release without a bundle for the
+app's platform is reported as "latest", not as an error.
+
+**CLI.** `hive self-update` asks the GitHub API for the latest release, compares the tag with
+its own version and downloads `hive-<target>.tar.gz` (`.zip` on Windows) for the running OS
+and architecture. The archive is extracted under the Hive cache, the new binary is started once
+with `--version`, and then swaps itself in place of the running executable. `--check` only
+reports, `--yes` skips the confirmation, and `--json` prints the data.
+
+**The signing key is required.** With `createUpdaterArtifacts` on, `tauri build` fails
+without `TAURI_SIGNING_PRIVATE_KEY`, and the release workflow stops the build job early with a
+message when the secret is missing. The key pair was generated with
+`npx tauri signer generate`; the public half is `plugins.updater.pubkey` in
+`src-tauri/tauri.conf.json`, the private half and its password are the two secrets below. An
+installed app only accepts updates signed with this key. Losing the key means the next release
+cannot be installed through the updater: users would download it by hand once, and the new
+build would carry a new public key. To rotate on purpose, generate a new pair, replace the
+public key in the config, ship one release signed with the **old** key that carries the new
+public key, then switch the secrets.
+
+To build bundles locally without the key, turn the updater artifacts off for that build:
+
+```bash
+npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+CI does this for its Linux bundle. To build exactly what the workflow builds, export the key
+first:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/skill-hive.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="…"
+npm run app:build
+```
+
 ## Signing
 
-Nothing is signed unless the repository has the secrets below. Without them macOS Gatekeeper
-and Windows SmartScreen warn on first launch; the README tells users how to get past that
-(macOS: right-click > Open on macOS 14 and earlier, System Settings > Privacy & Security >
-Open Anyway on macOS 15 and later, or
+The macOS app is signed and notarized only when the repository has the Apple secrets below.
+Without them macOS Gatekeeper and Windows SmartScreen warn on first launch; the README tells
+users how to get past that (macOS: right-click > Open on macOS 14 and earlier, System Settings
+> Privacy & Security > Open Anyway on macOS 15 and later, or
 `xattr -dr com.apple.quarantine "/Applications/Skill Hive.app"`; Windows: More info > Run anyway).
+The updater signature is separate from OS code signing: an unsigned app still verifies its
+updates.
 
 | Secret | Effect |
 | --- | --- |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` | Developer ID signing of the macOS app |
 | `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | notarization of the macOS app (needs the three above) |
-| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | signatures for Tauri updater artifacts; unused until `bundle.createUpdaterArtifacts` is turned on |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **required**: signatures for the updater artifacts and `latest.json` (see [Updater](#updater)) |
 
-The workflow exports a secret to the build only when it has a value. Tauri starts signing as
-soon as `APPLE_CERTIFICATE` is set, even to an empty string, so passing missing secrets
-through would break every macOS build.
+The workflow exports an Apple secret to the build only when it has a value. Tauri starts
+signing as soon as `APPLE_CERTIFICATE` is set, even to an empty string, so passing missing
+secrets through would break every macOS build.
 
 Windows code signing is not configured. Adding it means a certificate plus
 `bundle.windows.certificateThumbprint` or `bundle.windows.signCommand` in

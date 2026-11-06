@@ -15,11 +15,15 @@ name: Release
 # given a tag: when it looks a published release up by tag it rewrites the release's name and
 # body, which would replace the generated notes.
 #
-# Builds are unsigned unless these repository secrets exist (empty secrets count as missing):
+# The macOS app is signed and notarized only when these repository secrets exist (empty secrets
+# count as missing):
 #   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY   sign the macOS app
 #   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID                                 notarize it
-#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD            sign updater artifacts
-#     (only used if bundle.createUpdaterArtifacts is turned on in src-tauri/tauri.conf.json)
+# The updater signing key is required. bundle.createUpdaterArtifacts is on in
+# src-tauri/tauri.conf.json, so every bundle gets a .sig that the installed app verifies before
+# it applies an update, and tauri-action publishes latest.json for the in-app updater. The build
+# job stops early when the key is missing (see docs/releasing.md, "Updater"):
+#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 # Windows installers are not signed by this workflow.
 
 on:
@@ -180,13 +184,20 @@ jobs:
               echo "$name: not set"
             fi
           done
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set. The updater artifacts cannot be signed and the installed apps would not accept this release; add the key as a repository secret (docs/releasing.md, Updater)."
+            exit 1
+          fi
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           releaseId: ${{ needs.release.outputs.release_id }}
-          # The app has no updater, so there is no latest.json to publish.
-          uploadUpdaterJson: false
+          # latest.json for the in-app updater. Each runner adds its platform to the copy already
+          # on the release; the installed app fetches the file from releases/latest/download.
+          uploadUpdaterJson: true
+          # On Windows the updater runs the NSIS installer, the per-user one the README recommends.
+          updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
       # The installer is what users run, so install it the way they would and start that copy.
       - name: Install the Windows setup silently and start the installed app

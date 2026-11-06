@@ -22,8 +22,9 @@ import { Toaster, toast } from "sonner";
 import type { HiveEvent } from "@/lib/api/bindings";
 import { cn, modKey } from "@/lib/utils";
 import { applyTheme, useUi, type Theme } from "@/lib/store";
-import { api } from "@/lib/api/client";
-import { useAppInfo, useHiveEvents, useStats } from "@/lib/api/hooks";
+import { useUpdate } from "@/lib/update";
+import { api, isTauri } from "@/lib/api/client";
+import { useAppInfo, useHiveEvents, useSettings, useStats } from "@/lib/api/hooks";
 import { Button, Kbd, Tooltip, TooltipProvider } from "@/components/ui";
 import { CommandPalette } from "./CommandPalette";
 import { ItemDetailSheet } from "@/features/library/ItemDetailSheet";
@@ -199,11 +200,61 @@ function useGlobalShortcuts() {
   }, [navigate, setPaletteOpen]);
 }
 
+/** How long after the first render the startup update check runs: the window should be usable first. */
+export const STARTUP_UPDATE_CHECK_DELAY_MS = 6000;
+
+/**
+ * Once per session, a few seconds after the app opened: look for a newer release and offer to
+ * install it. Only inside Tauri (the browser preview has nothing to update) and only while the
+ * setting is on. A failed background check is logged by the backend and shows nothing here.
+ */
+export function useStartupUpdateCheck(navigate: (to: string) => void) {
+  const { data: settings } = useSettings();
+  const started = React.useRef(false);
+  const enabled = settings?.autoUpdateCheck ?? null;
+  // The timer must survive navigation, so the effect depends on the setting alone.
+  const navigateRef = React.useRef(navigate);
+  React.useEffect(() => {
+    navigateRef.current = navigate;
+  }, [navigate]);
+  React.useEffect(() => {
+    if (started.current || enabled !== true || !isTauri()) return;
+    started.current = true;
+    const navigate = (to: string) => navigateRef.current(to);
+    const timer = window.setTimeout(() => {
+      void useUpdate
+        .getState()
+        .checkForUpdates()
+        .then((check) => {
+          if (!check?.available) return;
+          toast(`Skill Hive ${check.version} is available`, {
+            description: check.date ? `Released ${check.date}. Install it now, or later from Settings > About.` : "Install it now, or later from Settings > About.",
+            duration: 20000,
+            action: {
+              label: "Install and restart",
+              onClick: () => {
+                navigate("/settings/about");
+                void useUpdate
+                  .getState()
+                  .install()
+                  .catch((err: unknown) => toast.error("The update did not install", { description: err instanceof Error ? err.message : String(err) }));
+              },
+            },
+            cancel: { label: "Later", onClick: () => {} },
+          });
+        });
+    }, STARTUP_UPDATE_CHECK_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [enabled]);
+}
+
 export function AppShell() {
   const theme = useUi((s) => s.theme);
   const resolvedTheme = useUi((s) => s.resolvedTheme);
   const location = useLocation();
+  const navigate = useNavigate();
   useGlobalShortcuts();
+  useStartupUpdateCheck(navigate);
 
   React.useEffect(() => {
     applyTheme(theme);

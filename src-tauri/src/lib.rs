@@ -2,6 +2,7 @@
 
 mod commands;
 mod error;
+mod update;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -145,6 +146,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(update::PendingUpdate::default())
         .on_page_load(|webview, payload| {
             tracing::info!(
                 window = webview.label(),
@@ -263,6 +266,8 @@ pub fn run() {
             commands::eval_history,
             commands::eval_benchmark_markdown,
             commands::eval_case_transcript,
+            update::update_check,
+            update::update_install,
         ])
         .build(tauri::generate_context!());
 

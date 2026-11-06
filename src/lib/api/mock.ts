@@ -773,6 +773,7 @@ function initialState(): MockState {
       githubTokenSet: false,
       theme: "system",
       overlapThreshold: 0.6,
+      autoUpdateCheck: true,
     },
     projects: [{ path: PROJECT, name: "acme-api", addedAt: now - 5 * day }],
     runs: [run1, run2, run3, run4, run0],
@@ -1096,6 +1097,10 @@ export function createMockBackend(): Backend {
   const handlers: Record<string, (args: Record<string, unknown>) => unknown | Promise<unknown>> = {
     app_info: () => ({ version: "0.1.0", platform: "mock", arch: "wasm" }),
     ui_report: () => null,
+    update_check: () => ({ currentVersion: "0.1.0", available: false, version: null, notes: null, date: null, target: "mock-wasm" }),
+    update_install: () => {
+      throw new ApiError("update", "Updates are installed by the desktop app");
+    },
     dashboard: () => ({
       stats: stats(),
       targets: installedTargetIds.map((t) => targetStatus(t, "user", null)),
@@ -1116,6 +1121,7 @@ export function createMockBackend(): Backend {
       if (p.githubToken !== undefined && p.githubToken !== null) state.settings.githubTokenSet = p.githubToken.length > 0;
       if (p.theme) state.settings.theme = p.theme;
       if (p.overlapThreshold) state.settings.overlapThreshold = p.overlapThreshold;
+      if (p.autoUpdateCheck !== undefined && p.autoUpdateCheck !== null) state.settings.autoUpdateCheck = p.autoUpdateCheck;
       return state.settings;
     },
     doctor: () => ({ home: state.settings.home, dbOk: true, libraryItems: items.length, orphanDirs: [], missingDirs: [], brokenDeployments: [], gitAvailable: true, detectedClis: [{ kind: "claude_code", command: "claude", path: "/usr/local/bin/claude", version: "2.1.45" }], notes: ["secrets backend: os-keychain"] }),
