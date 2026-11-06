@@ -17,6 +17,6 @@ name?: string | null,
  */
 guidance?: string | null, 
 /**
- * Provider to ask; the default is the recommender, then the grader, then any provider.
+ * Provider to ask; the default is the recommender, then the grader, then the executor.
  */
 providerId?: string | null, };

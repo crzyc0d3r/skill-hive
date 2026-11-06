@@ -141,6 +141,7 @@
   --animate-slide-up: slide-up 220ms var(--ease-out) both;
   --animate-slide-in-right: slide-in-right 240ms var(--ease-out) both;
   --animate-pulse-soft: pulse-soft 1.8s ease-in-out infinite;
+  --animate-progress-sweep: progress-sweep 1.4s ease-in-out infinite;
 }
 
 @keyframes fade-in {
@@ -158,6 +159,10 @@
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+@keyframes progress-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
 }
 
 @layer base {

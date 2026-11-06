@@ -35,8 +35,9 @@ to bundled files by their final paths. The user prompt holds, in order:
 The output budget is 8 192 tokens.
 
 **Answer.** Strict JSON: `{"name", "description", "body", "notes", "dropped": [...],
-"keep_files": [...]}`. The first `{` to the last `}` of the reply is parsed, so a code fence or a
-sentence around it does no harm, but the object must carry a body or a description. If there is
+"keep_files": [...]}`. The first JSON object in the reply is taken, wherever it starts and whatever follows it,
+so a code fence or a sentence around it does no harm, but the object must carry a body or a
+description. If there is
 no usable JSON, a raw `SKILL.md` (frontmatter and body, optionally inside a `markdown` fence) is
 accepted instead; then notes and the dropped list are empty and `keep_files` is unknown. Anything
 else is an error ("the model did not return a merged skill").
@@ -44,7 +45,7 @@ else is an error ("the model did not return a merged skill").
 **Name.** The requested name wins and is validated up front (1–64 lowercase letters, digits or
 single hyphens). Otherwise the model's name is slugified and used when valid (with a warning when
 it was changed, for example `PDF Tools` to `pdf-tools`). Otherwise the sources' names are joined
-with hyphens, slugified and cut to 64 characters, with a warning; `merged-skill` if even that is
+with hyphens, slugified and cut to 64 characters (a trailing hyphen dropped), with a warning; `merged-skill` if even that is
 empty. The proposal is validated like any authored skill, and a skill outside the merge that
 already has the name adds the error finding `name.taken` on the `name` field.
 
@@ -60,8 +61,8 @@ already has the name adds the error finding `name.taken` on the `name` field.
 
 **Bundled files.** Everything in a source directory except `SKILL.md` and the `evals/` suite,
 in source order. A later source whose file has the same relative path as an earlier one gets it
-under `<its slug>/<path>` when the content differs; a byte-identical file is carried once, from
-the first source that had it. Each entry has `path` (in the source), `dest` (in the merged
+under `<its slug>/<path>` when the content differs (`<slug>-2/<path>` if even that is taken); a
+byte-identical file at the same path is carried once, from the first source that had it. Each entry has `path` (in the source), `dest` (in the merged
 skill), its size and a `keep` flag. `keep` starts true for every file; when the model returned
 `keep_files`, only the files it lists (by final or original path, a leading `./` ignored) stay
 true. A file whose final path appears in the body is kept whatever the model said. The user can
@@ -96,18 +97,32 @@ unchanged; the app passes whatever the user edited. Step by step:
    `<slug>-<file name>` next to the original and the case updated), renumber the cases and write
    `evals/`. Nothing is written when the union is empty.
 5. Import the staged directory into the library as an authored skill with the tags. Replacing in
-   place keeps the source's id, sidecar, deployments and run history; its copy deployments are
-   re-synced so they carry the new content. Otherwise a new item is created.
+   place keeps the source's id, sidecar, deployments and run history; every deployment of it is
+   re-synced, so copies get the new content and links record the new hash. Otherwise a new item
+   is created.
 6. With `retire_sources`, for every other source: note each deployment's target, scope, project
    and mode, undeploy it, and remove the skill from the library.
-7. Deploy the merged skill to each noted place, skipping any where it already has a deployment
-   for the same target, scope and project. A deployment that fails is reported in `failed` and
-   does not undo the merge.
+7. Deploy the merged skill to each noted place in the mode the retired deployment used (link or
+   copy), skipping any where it already has a deployment for the same target, scope and project.
+   A deployment that fails is reported in `failed` and does not undo the merge.
 8. Write the audit row `merge.apply`, emit `LibraryChanged` and `DeploymentsChanged`, and return
-   the item, the retired items, `replaced_id`, the deployments made, the failures and the number
-   of eval cases written.
+   the item, the retired items, `replaced_id`, the deployments made, the failures, the number of
+   eval cases written and `warnings`.
 
-Without `retire_sources` the sources stay, keep their deployments, and the overlap remains.
+Everything up to and including the import can fail cleanly: the staging directory is temporary
+and the library is untouched. Once the merged skill is in the library, a later step that fails
+(a copy that cannot be re-synced, a source whose deployments cannot be removed, a source that
+cannot be deleted, a deployment that cannot be made) is reported in `warnings` or `failed`
+rather than raised, so the result always says what the library now holds; the app shows these
+in a toast and the CLI prints them.
+
+A source replaced in place with "carry evaluation cases" off keeps its own `evals/` suite. A
+bundled file whose final path is `SKILL.md` or inside `evals/` is refused, as are two kept files
+with the same final path.
+
+Without `retire_sources` the sources stay, keep their deployments, and the overlap remains;
+the one exception is a source whose name the merged skill takes, which is replaced in place
+either way.
 
 ## CLI
 

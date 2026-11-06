@@ -1087,7 +1087,7 @@ pub struct MergeRequest {
     /// Free-form guidance for the model ("keep the python workflow", "prefer the shorter one").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guidance: Option<String>,
-    /// Provider to ask; the default is the recommender, then the grader, then any provider.
+    /// Provider to ask; the default is the recommender, then the grader, then the executor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_id: Option<String>,
 }
@@ -1208,6 +1208,10 @@ pub struct MergeResult {
     pub deployed: Vec<Deployment>,
     pub failed: Vec<DeployFailure>,
     pub eval_cases: u32,
+    /// Steps after the merged skill was written that did not go to plan (a source that could
+    /// not be removed, a copy that could not be re-synced, a suite that could not be read).
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ import { useAppInfo, useHiveEvents, useStats } from "@/lib/api/hooks";
 import { Button, Kbd, Tooltip, TooltipProvider } from "@/components/ui";
 import { CommandPalette } from "./CommandPalette";
 import { ItemDetailSheet } from "@/features/library/ItemDetailSheet";
+import { MergeSkillsDialog } from "@/features/library/MergeSkillsDialog";
 import { ProgressBanner } from "./ProgressBanner";
 
 export interface NavItem {
@@ -233,6 +234,7 @@ export function AppShell() {
         </main>
         <CommandPalette />
         <ItemDetailSheet />
+        <MergeSkillsDialog />
         <Toaster
           position="bottom-right"
           theme={resolvedTheme}

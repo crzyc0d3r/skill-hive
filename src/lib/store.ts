@@ -16,6 +16,9 @@ interface UiState {
   /** Item currently open in the detail panel. */
   detailItemId: string | null;
   openItem: (id: string | null) => void;
+  /** Skills the merge dialog is open for (null = closed). */
+  mergeIds: string[] | null;
+  openMerge: (ids: string[] | null) => void;
   /** Library selection for batch actions. */
   selectedIds: string[];
   toggleSelected: (id: string) => void;
@@ -49,6 +52,8 @@ export const useUi = create<UiState>((set) => ({
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   detailItemId: null,
   openItem: (detailItemId) => set({ detailItemId }),
+  mergeIds: null,
+  openMerge: (mergeIds) => set({ mergeIds }),
   selectedIds: [],
   toggleSelected: (id) =>
     set((s) => ({ selectedIds: s.selectedIds.includes(id) ? s.selectedIds.filter((x) => x !== id) : [...s.selectedIds, id] })),
