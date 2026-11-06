@@ -182,7 +182,11 @@ Every item in one grid or list, filtered by kind (skills, subagents, commands), 
 favourites and the agent they are deployed to, with full-text search over name, description and
 body. **Check updates** compares each GitHub- or git-sourced item with its source and lets you
 update it. **New skill** creates a skill in the library from a name and description. Multi-select
-to check a set for conflicts, deploy it, or remove several items at once.
+to check a set for conflicts, deploy it, or remove several items at once. With two or more skills
+selected, **Merge with AI...** asks a model provider to combine them into one skill and shows the
+draft for review before anything is written; the same dialog opens from the **Merge...** button
+next to an overlap conflict (duplicate content, description, trigger or tool overlap,
+contradictory directive) wherever conflicts are listed.
 
 ![Item detail](docs/screenshots/item-detail-dark.png)
 
@@ -226,6 +230,22 @@ in the installed set, and a table of every installed asset with its state (linke
 stale, modified, broken, unmanaged). Stale and modified copies can be re-synced from the library;
 unmanaged files can be added to the library or deleted. **Deploy...** and **Apply loadout...** act
 on this agent, and **Add custom agent** registers a tool that is not built in.
+
+### Instructions
+
+The files each agent loads into every session: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, Copilot's
+repository instructions and the rules folders of Cursor, Windsurf, Kiro, Cline and Roo Code. Pick
+user scope (files under your home directory) or project scope and a registered project. The rail
+on the left lists every known location of the detected agents, grouped by the agents that read
+it, with the line and token count of each file or a **Missing** badge; a path several agents
+share, such as `AGENTS.md`, appears once naming all of them, and a rules folder lists its members
+under it with a **New rule...** action that enforces the folder's file suffix. The editor on the
+right has Edit and Preview tabs. **Create** writes a missing file from a short starter; **Save**
+(Ctrl+S, Cmd+S on macOS) overwrites an existing one and keeps a copy of the previous content under
+`~/.skill-hive/backups/instructions`; **Backups** loads any earlier version into the editor so you
+can save it back; **Delete** removes the file and keeps a backup. Folders are never deleted, and
+only locations Skill Hive knows can be written. Where each agent looks and the exact rules are in
+[docs/instructions.md](docs/instructions.md).
 
 ### Loadouts
 
@@ -322,6 +342,24 @@ it is large enough; the threshold is a setting. The budget defaults to 15 000 ch
 point at which Claude Code truncates its skill listing; other agents use the same figure until a
 better one is known, and a custom target can declare its own.
 
+#### Merging overlapping skills
+
+The usual fix for an overlap is one skill instead of two. **Merge with AI...** (or `hive merge`)
+sends the sources to a model provider (the recommender by default, then the grader, then the
+executor) with their descriptions, pre-approved tools, licences, bundled file list with excerpts,
+the full `SKILL.md` bodies, the conflicts the analyser found between them and any guidance you
+typed. The model answers with one name, description and body, notes on how it combined them, a
+list of what it left out, and the bundled files the body still refers to. The proposal adds the
+merged frontmatter (union of `allowed-tools`, a licence when every licensed source agrees, merged
+metadata with a `merged-from` entry), the union of the tags, the files to carry with their final
+paths, the eval cases the merged skill would inherit, token counts before and after, warnings and
+the same validation as any authored skill. If the merged name is one of the sources' names, that
+source is replaced in place and keeps its id, deployments and history; otherwise a new skill is
+created. Retiring the sources removes the others from the library and deploys the merged skill
+wherever they were deployed; carrying evaluations writes the union of their suites. Nothing is
+written until the draft is accepted, and the draft can be edited first. The full contract is in
+[docs/merging.md](docs/merging.md).
+
 ### The recommender
 
 `Find` ranks the library with SQLite FTS5 BM25 over name, description and body, plus features for
@@ -377,26 +415,29 @@ directory, project paths to a project root. A tool counts as detected when its d
 exists under your home directory, or when you have overridden its skills folder in Settings. Only
 Claude Code has separate directories for subagents (`.claude/agents`) and commands
 (`.claude/commands`) at both scopes; the other tools take skills only. Every built-in target uses
-the 15 000 character description budget.
+the 15 000 character description budget. The last column lists the standing instruction files
+the tool reads (user scope first, then project scope; a trailing slash marks a rules folder),
+which the Instructions screen and `hive instructions` edit; the full table with the rules is in
+[docs/instructions.md](docs/instructions.md).
 
-| Target id | Tool | User skills | Project skills | Detected by |
-| --- | --- | --- | --- | --- |
-| `claude-code` | Claude Code | `~/.claude/skills` | `.claude/skills` | `~/.claude` |
-| `codex` | Codex CLI | `~/.codex/skills` | `.codex/skills` | `~/.codex` |
-| `cursor` | Cursor | `~/.cursor/skills` | `.cursor/skills` | `~/.cursor` |
-| `gemini-cli` | Gemini CLI | `~/.gemini/skills` | `.gemini/skills` | `~/.gemini` |
-| `github-copilot` | GitHub Copilot | `~/.copilot/skills` | `.github/skills` | `~/.copilot` |
-| `windsurf` | Windsurf | `~/.codeium/windsurf/skills` | `.windsurf/skills` | `~/.codeium/windsurf` |
-| `opencode` | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` | `~/.config/opencode` |
-| `amp` | Amp | `~/.config/amp/skills` | `.agents/skills` | `~/.config/amp` |
-| `goose` | Goose | `~/.config/goose/skills` | `.goose/skills` | `~/.config/goose` |
-| `kiro` | Kiro | `~/.kiro/skills` | `.kiro/skills` | `~/.kiro` |
-| `cline` | Cline | `~/.cline/skills` | `.cline/skills` | `~/.cline` |
-| `roo-code` | Roo Code | `~/.roo/skills` | `.roo/skills` | `~/.roo` |
-| `antigravity` | Antigravity | `~/.gemini/antigravity/skills` | `.agent/skills` | `~/.gemini/antigravity` |
-| `agents-shared` | Shared (`.agents`) | `~/.agents/skills` | `.agents/skills` | `~/.agents` |
-| `openclaw` | OpenClaw | `~/.openclaw/skills` | none | `~/.openclaw` |
-| `hermes` | Hermes Agent | `~/.hermes/skills` | none | `~/.hermes` |
+| Target id | Tool | User skills | Project skills | Detected by | Instruction files |
+| --- | --- | --- | --- | --- | --- |
+| `claude-code` | Claude Code | `~/.claude/skills` | `.claude/skills` | `~/.claude` | `~/.claude/CLAUDE.md`; `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` |
+| `codex` | Codex CLI | `~/.codex/skills` | `.codex/skills` | `~/.codex` | `~/.codex/AGENTS.md`; `AGENTS.md` |
+| `cursor` | Cursor | `~/.cursor/skills` | `.cursor/skills` | `~/.cursor` | `.cursor/rules/`, `.cursorrules`, `AGENTS.md` |
+| `gemini-cli` | Gemini CLI | `~/.gemini/skills` | `.gemini/skills` | `~/.gemini` | `~/.gemini/GEMINI.md`; `GEMINI.md` |
+| `github-copilot` | GitHub Copilot | `~/.copilot/skills` | `.github/skills` | `~/.copilot` | `.github/copilot-instructions.md`, `.github/instructions/`, `AGENTS.md` |
+| `windsurf` | Windsurf | `~/.codeium/windsurf/skills` | `.windsurf/skills` | `~/.codeium/windsurf` | `~/.codeium/windsurf/memories/global_rules.md`; `.windsurf/rules/`, `.windsurfrules` |
+| `opencode` | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` | `~/.config/opencode` | `~/.config/opencode/AGENTS.md`; `AGENTS.md` |
+| `amp` | Amp | `~/.config/amp/skills` | `.agents/skills` | `~/.config/amp` | `~/.config/amp/AGENTS.md`; `AGENTS.md` |
+| `goose` | Goose | `~/.config/goose/skills` | `.goose/skills` | `~/.config/goose` | `~/.config/goose/.goosehints`; `.goosehints` |
+| `kiro` | Kiro | `~/.kiro/skills` | `.kiro/skills` | `~/.kiro` | `.kiro/steering/` |
+| `cline` | Cline | `~/.cline/skills` | `.cline/skills` | `~/.cline` | `~/Documents/Cline/Rules/`; `.clinerules` |
+| `roo-code` | Roo Code | `~/.roo/skills` | `.roo/skills` | `~/.roo` | `~/.roo/rules/`; `.roo/rules/`, `.roorules` |
+| `antigravity` | Antigravity | `~/.gemini/antigravity/skills` | `.agent/skills` | `~/.gemini/antigravity` | none known |
+| `agents-shared` | Shared (`.agents`) | `~/.agents/skills` | `.agents/skills` | `~/.agents` | `AGENTS.md` |
+| `openclaw` | OpenClaw | `~/.openclaw/skills` | none | `~/.openclaw` | none known |
+| `hermes` | Hermes Agent | `~/.hermes/skills` | none | `~/.hermes` | none known |
 
 These directories are defaults. In **Settings > Agents** you can point any target's user skills
 folder somewhere else, reset it, or add a **custom agent** with its own id, category, user and
@@ -427,6 +468,7 @@ with the same id as a built-in one replaces it. Custom targets always count as d
 | `hive loadout apply <LOADOUT> --to TARGET [--exclusive] ...` | Apply a loadout (additive unless `--exclusive`) |
 | `hive find <TASK>... [--target T] [--kind K] [--limit N] [--llm] [--deploy]` | Rank the library for a task and compose a conflict-free set; `--deploy` installs it |
 | `hive conflicts <ITEMS>... [--target T]` | Analyse a set of items for conflicts and budget |
+| `hive merge <SKILLS>... [--name N] [--guidance TEXT] [--provider P] [--keep-sources] [--no-evals] [--dry-run]` | Ask a model to combine two or more skills into one and write it; `--name` set to a source's name replaces that source in place, `--dry-run` only prints the proposal |
 | `hive catalog [QUERY] [--refresh]` | The curated catalog of collections |
 | `hive github-search <QUERY> [--limit N]` | Search GitHub for skill repositories |
 | `hive project list\|add <PATH>\|remove <PATH>` | Projects registered for project-scope deployments |
@@ -440,6 +482,11 @@ with the same id as a built-in one replaces it. Custom targets always count as d
 | `hive eval report <RUN> [--markdown]` | A run's benchmark, with the per-arm activity table when the executor traced its runs (`--markdown` prints the written report) |
 | `hive eval history <ITEM>` | Effectiveness per run, against the skill's content hash |
 | `hive eval cancel <RUN>` / `hive eval delete <RUN>` | Cancel a running evaluation; delete a run and its workspace |
+| `hive instructions list [--project PATH]` | The instruction files (`CLAUDE.md`, `AGENTS.md`, rules folders) of the detected agents, existing or not; user scope without `--project` |
+| `hive instructions show <PATH> [--project PATH]` | Print an instruction file, or one of its backups |
+| `hive instructions write <PATH> [--from FILE] [--project PATH]` | Write (or create) an instruction file from `--from` or standard input; a backup of the previous content is kept |
+| `hive instructions delete <PATH> [--project PATH]` | Delete an instruction file (a backup is kept; folders are never deleted) |
+| `hive instructions backups <PATH>` | The backups kept of an instruction file, oldest first |
 
 Global flags on every command:
 
@@ -469,6 +516,7 @@ Everything lives under one directory, `~/.skill-hive` by default:
   library/meta/<id>.json provenance sidecars (id, slug, source, revision, tags)
   cache/git/<key>/       shallow clones of remote sources, refreshed in place
   cache/archives/<key>/  extracted downloads
+  backups/instructions/<key>/  copies of instruction files before each overwrite or delete (20 per file)
   workspaces/<skill>/<run-id>/
     skill-snapshot/      the skill exactly as tested
     cases/<case>/<arm>/<n>/work/   one sandbox per execution, with .hive/transcript.jsonl
@@ -616,8 +664,8 @@ crates/hive-cli/    the `hive` binary (clap) with end-to-end tests
 src-tauri/          Tauri 2 shell: async commands over the facade, event bridge
 src/                React 19 + TypeScript UI (Vite, Tailwind 4, Radix, TanStack Query)
   lib/api/          typed client, generated bindings, mock backend, hooks
-  features/         home, library, discover, find, agents, loadouts, evals, settings
-docs/               architecture.md, evaluations.md, screenshots/
+  features/         home, library, discover, find, agents, instructions, loadouts, evals, settings
+docs/               architecture.md, evaluations.md, merging.md, instructions.md, screenshots/
 ```
 
 [docs/architecture.md](docs/architecture.md) describes the core modules, the data on disk, the

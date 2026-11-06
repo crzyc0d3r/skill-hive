@@ -29,11 +29,13 @@ reaches the file system or the network directly; every operation is a core metho
 | `hash` | Content hashes over sorted relative paths + bytes, so copies compare equal anywhere. |
 | `library` | Import (copy + sidecar + index), replace, refresh, create, remove, files, reindex, orphan detection. Names are unique per kind; slugs get suffixes. |
 | `targets` | The table of agent tools and their user/project directories; overrides and custom targets. |
+| `instructions` | The table of standing instruction files per agent (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, rules folders) at user and project scope; listing merged by path for the detected agents, read, atomic write to known locations only, delete, and the capped backups under `backups/instructions`. See `docs/instructions.md`. |
 | `discovery` | Depth-limited scans of agent directories, projects and extra folders; candidates classified as new / in library / modified / managed / invalid. |
 | `sources` | `parse_spec` for `owner/repo`, GitHub tree/blob URLs, git URLs, archive URLs and paths; git-CLI clone cache; GitHub API (search, tarball fallback); safe zip/tar extraction; curated catalog; previews, imports, update checks and updates. |
 | `deploy` | Link (symlink/junction) or copy into a target directory; install state (linked, in sync, stale, modified, unmanaged, broken); undeploy; resync; what a directory contains. |
 | `conflicts` | Analysis of a set that would share one agent: name collisions, duplicate content, description overlap (log-TF cosine, IDF from the whole library when it is large enough), trigger overlap, tool overlap, contradictory always/never directives, and the description budget. |
 | `recommend` | Task → ranked items (FTS5 BM25 + name/tag/trigger/description features + measured effectiveness), pairwise conflicts, greedy conflict-free in-budget suggested set, optional model re-ranking. |
+| `merge` | Combine two or more skills into one: a provider writes the merged `SKILL.md` from the sources, their conflicts and bundled file excerpts; the proposal is validated and returned with files, frontmatter, tags, evals and token counts; apply stages the skill, replaces a source in place or creates a new one, retires the others and moves their deployments. See `docs/merging.md`. |
 | `loadouts` | Named sets; plan (adds/removes/keeps/unmanaged, resulting conflicts and budget) and apply (exclusive or additive). |
 | `providers` | `Provider` trait with `complete` and `execute`; Claude Code CLI, Codex CLI, Anthropic Messages API, OpenAI-compatible chat completions, and a scripted offline provider; registry, probes, secrets. `trace` builds an `ExecutionTrace` (tool calls by category, files, thinking, token split, cache, timeline) from a CLI agent's event stream. |
 | `evals` | Suites (`evals/evals.json`, `checks.json`, `trigger.json`), deterministic checks, LLM grader, trigger evaluation, the run engine (sandboxes, arms, repeats, concurrency, cancellation, events) and analytics, including per-arm activity statistics. See `docs/evaluations.md`. |
@@ -50,6 +52,7 @@ reaches the file system or the network directly; every operation is a core metho
   library/meta/<id>.json provenance sidecars (id, slug, source, tags) → reindex
   cache/git/<key>/       shallow clones, refreshed in place
   cache/archives/<key>/  extracted downloads
+  backups/instructions/<key>/  instruction files as they were before each overwrite or delete
   workspaces/<skill>/<run-id>/
     skill-snapshot/      the skill exactly as tested
     cases/<case>/<arm>/<n>/work/   sandbox: inputs, outputs, .hive/transcript.jsonl

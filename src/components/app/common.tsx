@@ -20,8 +20,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type * as T from "@/lib/api/bindings";
+import { useUi } from "@/lib/store";
 import { cn, formatDelta, formatPercent, titleCase } from "@/lib/utils";
-import { Badge, Progress, Tooltip } from "@/components/ui";
+import { Badge, Button, Progress, Tooltip } from "@/components/ui";
 
 export const KIND_ICON: Record<T.AssetKind, LucideIcon> = { skill: Puzzle, agent: Bot, command: TerminalSquare };
 export const KIND_LABEL: Record<T.AssetKind, string> = { skill: "Skill", agent: "Agent", command: "Command" };
@@ -155,6 +156,13 @@ export const CONFLICT_LABEL: Record<T.ConflictKind, string> = {
   contradictory_directive: "Contradictory instructions",
 };
 
+/** Conflicts a model can resolve by combining the skills into one. */
+const MERGEABLE_CONFLICTS: ReadonlySet<T.ConflictKind> = new Set(["description_overlap", "duplicate_content", "trigger_overlap", "tool_overlap", "contradictory_directive"]);
+
+export function canMergeConflict(c: T.Conflict): boolean {
+  return MERGEABLE_CONFLICTS.has(c.kind) && c.itemIds.length >= 2;
+}
+
 export function ConflictList({ report, compact, className }: { report: T.ConflictReport; compact?: boolean; className?: string }) {
   if (report.conflicts.length === 0) {
     return (
@@ -172,6 +180,11 @@ export function ConflictList({ report, compact, className }: { report: T.Conflic
             <Badge tone={SEVERITY_TONE[c.severity]}>{titleCase(c.severity)}</Badge>
             <span className="font-medium">{CONFLICT_LABEL[c.kind]}</span>
             {c.names.length ? <span className="text-muted">· {c.names.join(" ↔ ")}</span> : null}
+            {canMergeConflict(c) ? (
+              <Button size="sm" variant="subtle" className="ml-auto" aria-label={`Merge ${c.names.join(" and ")} with AI`} onClick={() => useUi.getState().openMerge(c.itemIds)}>
+                <Sparkles /> Merge…
+              </Button>
+            ) : null}
           </div>
           <p className="mt-1 text-muted">{c.detail}</p>
           {c.sharedTerms?.length ? (

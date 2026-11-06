@@ -86,6 +86,8 @@ enum Command {
         #[arg(long)]
         target: Option<String>,
     },
+    /// Combine overlapping skills into one, written by a model provider.
+    Merge(MergeArgs),
     /// The curated catalog of well-known skill collections.
     Catalog {
         #[arg(long)]
@@ -125,6 +127,9 @@ enum Command {
     /// Comparative evaluations.
     #[command(subcommand)]
     Eval(EvalCmd),
+    /// The instruction files agents load on every session (CLAUDE.md, AGENTS.md, rules folders).
+    #[command(subcommand)]
+    Instructions(InstructionsCmd),
 }
 
 #[derive(Args)]
@@ -296,6 +301,32 @@ struct FindArgs {
     deploy: bool,
 }
 
+#[derive(Args)]
+struct MergeArgs {
+    /// Two or more skills (by id, name or `skill:name`).
+    items: Vec<String>,
+    /// Name of the merged skill; the model proposes one when omitted. Using a source's name
+    /// replaces that source in place (it keeps its id, deployments and history).
+    #[arg(long)]
+    name: Option<String>,
+    /// Guidance for the model ("keep the python workflow", "prefer the shorter wording").
+    #[arg(long)]
+    guidance: Option<String>,
+    /// Provider to ask (default: the recommender, then the grader, then the executor).
+    #[arg(long)]
+    provider: Option<String>,
+    /// Keep the source skills in the library instead of retiring them and moving their
+    /// deployments to the merged skill.
+    #[arg(long)]
+    keep_sources: bool,
+    /// Do not carry the sources' evaluation cases over.
+    #[arg(long)]
+    no_evals: bool,
+    /// Show the proposal and stop without writing anything.
+    #[arg(long)]
+    dry_run: bool,
+}
+
 #[derive(Subcommand)]
 enum ProjectCmd {
     List,
@@ -361,6 +392,39 @@ enum RoleArg {
     Executor,
     Grader,
     Recommender,
+}
+
+#[derive(Subcommand)]
+enum InstructionsCmd {
+    /// List the instruction locations of the detected agents, whether they exist or not.
+    List {
+        /// Project root for project-scope files; omitted lists the user-scope files.
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Print an instruction file (or one of its backups).
+    Show {
+        path: String,
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Write an instruction file from a file (`--from`) or standard input. A backup of the
+    /// previous content is kept under the Hive home.
+    Write {
+        path: String,
+        #[arg(long)]
+        from: Option<PathBuf>,
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Delete an instruction file (a backup is kept).
+    Delete {
+        path: String,
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Backups Hive kept of an instruction file, oldest first.
+    Backups { path: String },
 }
 
 #[derive(Subcommand)]
@@ -753,6 +817,7 @@ async fn run(cli: Cli) -> Result<()> {
             let report = hive.analyze_items(&ids, target.as_deref())?;
             out.emit(&report, || print_conflicts(&report))?;
         }
+        Command::Merge(args) => cmd_merge(&hive, &out, args).await?,
         Command::Catalog { refresh, query } => {
             let entries = hive.catalog(refresh).await?;
             let entries = match query {
@@ -955,6 +1020,7 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Command::Provider(cmd) => cmd_provider(&hive, &out, cmd).await?,
         Command::Eval(cmd) => cmd_eval(&hive, &out, cmd).await?,
+        Command::Instructions(cmd) => cmd_instructions(&hive, &out, cmd)?,
     }
     Ok(())
 }
@@ -1382,6 +1448,278 @@ fn print_plan(plan: &LoadoutPlan) {
             .unwrap_or_default()
     );
     print_conflicts(&plan.conflicts);
+}
+
+fn cmd_instructions(hive: &Hive, out: &Out, cmd: InstructionsCmd) -> Result<()> {
+    match cmd {
+        InstructionsCmd::List { project } => {
+            let scope = if project.is_some() {
+                Scope::Project
+            } else {
+                Scope::User
+            };
+            let files = hive.instruction_files(scope, project.as_deref())?;
+            out.emit(&files, || {
+                if files.is_empty() {
+                    out.note("No agent with instruction files is detected on this machine.");
+                    return;
+                }
+                out.table(
+                    &["Agents", "File", "What", "Status", "Tokens"],
+                    files
+                        .iter()
+                        .map(|f| {
+                            vec![
+                                f.target_names.join(", "),
+                                f.path.clone(),
+                                f.label.clone(),
+                                match (f.kind, f.exists) {
+                                    (InstructionKind::Directory, true) => "folder".into(),
+                                    (InstructionKind::Directory, false) => "no folder".into(),
+                                    (InstructionKind::File, true) => {
+                                        format!("{} lines", f.lines)
+                                    }
+                                    (InstructionKind::File, false) => "missing".into(),
+                                },
+                                if f.exists && f.kind == InstructionKind::File {
+                                    f.tokens.to_string()
+                                } else {
+                                    String::new()
+                                },
+                            ]
+                        })
+                        .collect(),
+                );
+                out.note(
+                    "Write one with `hive instructions write <path> --from file.md` (or from stdin); a backup is kept.",
+                );
+            })?;
+        }
+        InstructionsCmd::Show { path, project } => {
+            let doc = hive.read_instruction_file(&path, project.as_deref())?;
+            out.emit(&doc, || {
+                if !doc.file.exists {
+                    out.warn(format!("{} does not exist yet", doc.file.display));
+                } else {
+                    // Piped output is byte-identical so `show <backup> | write <path>` restores
+                    // exactly; a terminal gets a final newline for a tidy prompt.
+                    print!("{}", doc.text);
+                    if !doc.text.ends_with('\n')
+                        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+                    {
+                        println!();
+                    }
+                }
+            })?;
+        }
+        InstructionsCmd::Write {
+            path,
+            from,
+            project,
+        } => {
+            let text = match from {
+                Some(file) => std::fs::read_to_string(&file)
+                    .with_context(|| format!("reading {}", file.display()))?,
+                None => {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)
+                        .context("reading standard input")?;
+                    buf
+                }
+            };
+            let doc = hive.write_instruction_file(&path, &text, project.as_deref())?;
+            out.emit(&doc, || {
+                out.ok(format!(
+                    "wrote {} ({} lines, ~{} tokens)",
+                    doc.file.path, doc.file.lines, doc.file.tokens
+                ))
+            })?;
+        }
+        InstructionsCmd::Delete { path, project } => {
+            let file = hive.delete_instruction_file(&path, project.as_deref())?;
+            out.emit(&file, || {
+                out.ok(format!("deleted {} (backup kept)", file.path))
+            })?;
+        }
+        InstructionsCmd::Backups { path } => {
+            let backups = hive.instruction_backups(&path)?;
+            out.emit(&backups, || {
+                if backups.is_empty() {
+                    out.note("No backups yet.");
+                    return;
+                }
+                out.table(
+                    &["Saved", "Size", "Backup"],
+                    backups
+                        .iter()
+                        .map(|b| {
+                            vec![
+                                hive_core::util::iso_from_ms(b.saved_at),
+                                hive_core::util::human_bytes(b.size_bytes),
+                                b.path.clone(),
+                            ]
+                        })
+                        .collect(),
+                );
+                out.note("Restore one with `hive instructions show <backup> | hive instructions write <path>`.");
+            })?;
+        }
+    }
+    Ok(())
+}
+
+async fn cmd_merge(hive: &Hive, out: &Out, args: MergeArgs) -> Result<()> {
+    if args.items.len() < 2 {
+        bail!("name at least two skills, e.g. `hive merge pdf-extract pdf-reader`");
+    }
+    let ids = resolve_ids(hive, &args.items)?;
+    let proposal = hive
+        .propose_merge(&MergeRequest {
+            item_ids: ids.clone(),
+            name: args.name.clone(),
+            guidance: args.guidance.clone(),
+            provider_id: args.provider.clone(),
+        })
+        .await?;
+    let errors: Vec<&Finding> = proposal
+        .validation
+        .findings
+        .iter()
+        .filter(|f| f.severity == Severity::Error)
+        .collect();
+    if args.dry_run || !errors.is_empty() {
+        out.emit(&proposal, || print_proposal(&proposal))?;
+        if !errors.is_empty() {
+            bail!(
+                "the proposal does not validate: {}",
+                errors
+                    .iter()
+                    .map(|f| f.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+        }
+        return Ok(());
+    }
+    if !out.json {
+        print_proposal(&proposal);
+    }
+    let result = hive.apply_merge(&MergeCommit {
+        source_ids: ids,
+        name: proposal.name.clone(),
+        description: proposal.description.clone(),
+        body: proposal.body.clone(),
+        frontmatter: proposal.frontmatter.clone(),
+        files: proposal.files.clone(),
+        tags: proposal.tags.clone(),
+        retire_sources: !args.keep_sources,
+        carry_evals: !args.no_evals,
+    })?;
+    out.emit(&result, || {
+        out.ok(format!(
+            "{} {} at {}",
+            if result.replaced_id.is_some() {
+                "replaced"
+            } else {
+                "created"
+            },
+            result.item.name.style(st::bold()),
+            result.item.path
+        ));
+        for r in &result.retired {
+            out.note(format!("retired {}", r.name));
+        }
+        for d in &result.deployed {
+            out.ok(format!("deployed to {} ({})", d.target_id, d.path));
+        }
+        for f in &result.failed {
+            out.warn(format!("deployment failed: {}", f.reason));
+        }
+        for w in &result.warnings {
+            out.warn(w);
+        }
+        if result.eval_cases > 0 {
+            out.note(format!(
+                "carried {} evaluation case(s); run `hive eval run {}` to measure the merged skill",
+                result.eval_cases, result.item.name
+            ));
+        }
+    })
+}
+
+fn print_proposal(p: &MergeProposal) {
+    println!(
+        "{} {} ← {}",
+        "merge:".style(st::bold()),
+        p.name,
+        p.sources
+            .iter()
+            .map(|s| s.item.name.as_str())
+            .collect::<Vec<_>>()
+            .join(" + ")
+    );
+    println!("{} {}", "description:".style(st::dim()), p.description);
+    println!(
+        "{} {} → {} instruction tokens, {} → {} description tokens",
+        "size:".style(st::dim()),
+        p.body_tokens_before,
+        p.body_tokens_after,
+        p.description_tokens_before,
+        p.description_tokens_after
+    );
+    let kept: Vec<&str> = p
+        .files
+        .iter()
+        .filter(|f| f.keep)
+        .map(|f| f.dest.as_str())
+        .collect();
+    let dropped: Vec<&str> = p
+        .files
+        .iter()
+        .filter(|f| !f.keep)
+        .map(|f| f.dest.as_str())
+        .collect();
+    if !kept.is_empty() {
+        println!("{} {}", "files kept:".style(st::dim()), kept.join(", "));
+    }
+    if !dropped.is_empty() {
+        println!(
+            "{} {}",
+            "files dropped:".style(st::dim()),
+            dropped.join(", ")
+        );
+    }
+    if p.eval_cases > 0 {
+        println!("{} {}", "eval cases:".style(st::dim()), p.eval_cases);
+    }
+    if !p.notes.is_empty() {
+        println!("{} {}", "model:".style(st::dim()), p.notes);
+    }
+    for d in &p.dropped {
+        println!("{} {d}", "left out:".style(st::yellow()));
+    }
+    for w in &p.warnings {
+        println!("{} {w}", "!".style(st::yellow()).style(st::bold()));
+    }
+    for f in &p.validation.findings {
+        let tag = match f.severity {
+            Severity::Error => "error".style(st::red()).style(st::bold()).to_string(),
+            Severity::Warning => "warning".style(st::yellow()).to_string(),
+            Severity::Info => "info".style(st::dim()).to_string(),
+        };
+        println!("{tag} {}", f.message);
+    }
+    println!(
+        "{} {} · {} in, {} out · {} ms",
+        "provider:".style(st::dim()),
+        p.provider_name,
+        p.input_tokens,
+        p.output_tokens,
+        p.latency_ms
+    );
+    println!("\n{}", "--- SKILL.md body ---".style(st::dim()));
+    println!("{}", p.body);
+    println!("{}", "---".style(st::dim()));
 }
 
 async fn cmd_find(hive: &Hive, out: &Out, args: FindArgs) -> Result<()> {

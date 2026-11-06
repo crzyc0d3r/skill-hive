@@ -131,6 +131,9 @@ export const api = {
   refreshItem: (id: string) => call<T.LibraryItem>("library_refresh", { id }),
   analyzeItems: (ids: string[], targetId?: string | null) =>
     call<T.ConflictReport>("library_analyze", { ids, targetId: targetId ?? null }),
+  /** Asks a provider to combine two or more skills into one draft (slow: a model call). */
+  proposeMerge: (request: T.MergeRequest) => call<T.MergeProposal>("merge_propose", { request }),
+  applyMerge: (commit: T.MergeCommit) => call<T.MergeResult>("merge_apply", { commit }),
 
   // discovery & sources
   scanLocal: (extra: string[] = []) => call<T.ScanReport>("scan_local", { extra }),
@@ -162,6 +165,17 @@ export const api = {
   resync: (deploymentId: string) => call<T.Deployment>("resync", { deploymentId }),
   deployments: () => call<T.Deployment[]>("deployments_list"),
   removeInstalledPath: (path: string) => call<void>("remove_installed_path", { path }),
+
+  // instruction files (CLAUDE.md, AGENTS.md, rules folders)
+  instructionFiles: (scope: T.Scope, projectPath?: string | null) =>
+    call<T.InstructionFile[]>("instructions_list", { scope, projectPath: projectPath ?? null }),
+  readInstruction: (path: string, projectPath?: string | null) =>
+    call<T.InstructionDocument>("instruction_read", { path, projectPath: projectPath ?? null }),
+  writeInstruction: (path: string, text: string, projectPath?: string | null) =>
+    call<T.InstructionDocument>("instruction_write", { path, text, projectPath: projectPath ?? null }),
+  deleteInstruction: (path: string, projectPath?: string | null) =>
+    call<T.InstructionFile>("instruction_delete", { path, projectPath: projectPath ?? null }),
+  instructionBackups: (path: string) => call<T.InstructionBackup[]>("instruction_backups", { path }),
 
   // loadouts & recommendations
   loadouts: () => call<T.Loadout[]>("loadouts_list"),

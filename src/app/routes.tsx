@@ -5,6 +5,7 @@ import { LibraryPage } from "@/features/library/LibraryPage";
 import { DiscoverPage } from "@/features/discover/DiscoverPage";
 import { FindPage } from "@/features/find/FindPage";
 import { AgentsPage } from "@/features/agents/AgentsPage";
+import { InstructionsPage } from "@/features/instructions/InstructionsPage";
 import { LoadoutsPage } from "@/features/loadouts/LoadoutsPage";
 import { EvalsPage } from "@/features/evals/EvalsPage";
 import { RunPage } from "@/features/evals/RunPage";
@@ -26,6 +27,7 @@ export const router = createRouter([
       { path: "find", element: <FindPage /> },
       { path: "agents", element: <AgentsPage /> },
       { path: "agents/:targetId", element: <AgentsPage /> },
+      { path: "instructions", element: <InstructionsPage /> },
       { path: "loadouts", element: <LoadoutsPage /> },
       { path: "loadouts/:loadoutId", element: <LoadoutsPage /> },
       { path: "evals", element: <EvalsPage /> },

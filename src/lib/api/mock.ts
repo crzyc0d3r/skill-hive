@@ -12,6 +12,10 @@ const nextId = (prefix: string) => `${prefix}-${(seq++).toString(36)}`;
 
 const HOME = "/Users/you";
 const LIB = `${HOME}/.skill-hive/library`;
+const PROJECT = `${HOME}/dev/acme-api`;
+const INSTRUCTION_BACKUPS = `${HOME}/.skill-hive/backups/instructions`;
+/** Agents the mock machine has installed. */
+const installedTargetIds = ["claude-code", "codex", "cursor"];
 
 function src(kind: T.SourceKind, locator: string, subpath?: string): T.SourceRef {
   return {
@@ -259,6 +263,104 @@ const targetSpecs: T.TargetSpec[] = [
 /** Original user skills dir per target, so `target_set_skills_dir(id, null)` can reset an override. */
 const defaultSkillsDirs = new Map<string, string>();
 
+/** Where one agent looks for standing instructions (relative to the home or the project root). */
+interface InstructionSpec {
+  targetId: string;
+  scope: T.Scope;
+  rel: string;
+  label: string;
+  kind: T.InstructionKind;
+  /** File-name suffix for members of a rules folder. */
+  pattern?: string;
+  note?: string;
+}
+
+const ifile = (targetId: string, scope: T.Scope, rel: string, label: string, note?: string): InstructionSpec => ({ targetId, scope, rel, label, kind: "file", note });
+const idir = (targetId: string, scope: T.Scope, rel: string, label: string, pattern: string, note?: string): InstructionSpec => ({ targetId, scope, rel, label, kind: "directory", pattern, note });
+const LOCAL_NOTE = "Meant for your own machine; usually kept out of git.";
+const SHARED_AGENTS_NOTE = "The AGENTS.md convention: one file read by several agents.";
+const LEGACY_NOTE = "Older single-file format; the rules folder is preferred.";
+
+/** Mirrors `INSTRUCTION_SPECS` in crates/hive-core/src/instructions.rs for the agents the mock knows. */
+const INSTRUCTION_SPECS: InstructionSpec[] = [
+  ifile("claude-code", "user", ".claude/CLAUDE.md", "User memory", "Loaded in every project."),
+  ifile("claude-code", "project", "CLAUDE.md", "Project instructions", "Committed with the project; everyone on it sees it."),
+  ifile("claude-code", "project", ".claude/CLAUDE.md", "Project instructions (.claude)", "Alternative location for the project file."),
+  ifile("claude-code", "project", "CLAUDE.local.md", "Local instructions", LOCAL_NOTE),
+  ifile("codex", "user", ".codex/AGENTS.md", "Global instructions", "Loaded in every project."),
+  ifile("codex", "project", "AGENTS.md", "Project instructions", SHARED_AGENTS_NOTE),
+  ifile("gemini-cli", "user", ".gemini/GEMINI.md", "Global context", "Loaded in every project."),
+  ifile("gemini-cli", "project", "GEMINI.md", "Project context"),
+  idir("cursor", "project", ".cursor/rules", "Rules", ".mdc", "One rule per file; frontmatter sets when it applies."),
+  ifile("cursor", "project", ".cursorrules", "Rules (legacy)", LEGACY_NOTE),
+  ifile("cursor", "project", "AGENTS.md", "Project instructions", SHARED_AGENTS_NOTE),
+  ifile("github-copilot", "project", ".github/copilot-instructions.md", "Repository instructions"),
+  idir("github-copilot", "project", ".github/instructions", "Path-specific instructions", ".instructions.md", "Each file names the paths it applies to in its frontmatter."),
+  ifile("github-copilot", "project", "AGENTS.md", "Project instructions", SHARED_AGENTS_NOTE),
+  ifile("windsurf", "user", ".codeium/windsurf/memories/global_rules.md", "Global rules"),
+  idir("windsurf", "project", ".windsurf/rules", "Rules", ".md"),
+  ifile("windsurf", "project", ".windsurfrules", "Rules (legacy)", LEGACY_NOTE),
+  ifile("opencode", "user", ".config/opencode/AGENTS.md", "Global instructions"),
+  ifile("opencode", "project", "AGENTS.md", "Project instructions", SHARED_AGENTS_NOTE),
+  ifile("agents-shared", "project", "AGENTS.md", "Project instructions", SHARED_AGENTS_NOTE),
+];
+
+/** Does `name` fit a rules folder's suffix and sit directly inside it? */
+const memberNameOk = (name: string, pattern: string) => name.length > pattern.length && !name.startsWith(".") && !name.includes("/") && !name.includes("\\") && name.endsWith(pattern);
+
+const USER_CLAUDE_MD = `# Preferences
+
+## Working style
+
+- Ask before making changes that touch more than a handful of files.
+- Prefer small, reviewable commits with a one-line summary and a short body.
+- When a task is ambiguous, state the assumption you are making and carry on.
+
+## Code
+
+- TypeScript strict mode everywhere; no \`any\` without a comment saying why.
+- Rust: run \`cargo clippy --all-targets\` before declaring something done.
+- Tests next to the code they cover; name them after the behaviour, not the function.
+
+## Tools
+
+- Use \`rg\` rather than \`grep\`, and \`fd\` rather than \`find\`.
+- Package managers: \`npm\` for JS, \`cargo\` for Rust, \`uv\` for Python.
+
+## Communication
+
+- Short answers. Lead with the conclusion, then the evidence.
+- No emojis in commit messages, comments or docs.
+- British spelling in prose; American spelling in identifiers.
+`;
+
+const PROJECT_CLAUDE_MD = `# acme-api
+
+REST API for the Acme storefront: Rust (axum) with Postgres.
+
+## Commands
+
+- \`cargo run\` starts the API on :8080 against the dev database.
+- \`cargo test\` runs unit and integration tests (needs \`docker compose up db\`).
+- \`sqlx migrate run\` applies migrations.
+
+## Conventions
+
+- Handlers live in \`src/routes/\`, one module per resource.
+- Errors go through \`ApiError\`; never return a bare string.
+- Every endpoint gets an integration test in \`tests/\`.
+`;
+
+/** Instruction files on the mock machine's disk: absolute path, text and modification time. */
+const INSTRUCTION_SEED: [path: string, text: string, modifiedAt: number][] = [
+  [`${HOME}/.claude/CLAUDE.md`, USER_CLAUDE_MD, now - 2 * day],
+  [`${HOME}/.codex/AGENTS.md`, "# Global instructions\n\nRun the test suite before reporting a task as done. Prefer editing existing files to creating new ones.\n", now - 20 * day],
+  [`${PROJECT}/CLAUDE.md`, PROJECT_CLAUDE_MD, now - 4 * day],
+  [`${PROJECT}/AGENTS.md`, "# Agents\n\nRead CLAUDE.md for the project conventions. Keep diffs small and run `cargo test` before finishing.\n", now - 6 * day],
+  [`${PROJECT}/.cursor/rules/style.mdc`, "---\ndescription: Formatting and naming conventions\nalwaysApply: true\n---\n\n- Four-space indentation; rustfmt defaults.\n- Snake case for functions and modules, camel case for types.\n", now - 8 * day],
+  [`${PROJECT}/.cursor/rules/testing.mdc`, "---\ndescription: How to write and run tests\nglobs: tests/**,src/**/*_test.rs\nalwaysApply: false\n---\n\n- Integration tests use the `test_app()` fixture from `tests/common.rs`.\n- Never hit the real Stripe API; use the mock in `tests/stripe_mock.rs`.\n", now - 3 * day],
+];
+
 interface MockState {
   deployments: T.Deployment[];
   loadouts: T.Loadout[];
@@ -269,6 +371,13 @@ interface MockState {
   caseResults: Map<string, T.CaseResult[]>;
   suites: Map<string, T.EvalSuite>;
   unmanaged: Record<string, T.InstalledAsset[]>;
+  /** Instruction files (and their backup copies under the Hive home): absolute path → text. */
+  instructions: Map<string, string>;
+  /** Backups per instruction file, oldest first. */
+  instructionBackups: Map<string, T.InstructionBackup[]>;
+  instructionModified: Map<string, number>;
+  /** Rules folders that exist even when empty. */
+  instructionDirs: Set<string>;
 }
 
 function deployment(itemName: string, targetId: string, mode: T.LinkMode = "link", state: T.InstallState = "linked"): T.Deployment {
@@ -665,10 +774,14 @@ function initialState(): MockState {
       theme: "system",
       overlapThreshold: 0.6,
     },
-    projects: [{ path: `${HOME}/dev/acme-api`, name: "acme-api", addedAt: now - 5 * day }],
+    projects: [{ path: PROJECT, name: "acme-api", addedAt: now - 5 * day }],
     runs: [run1, run2, run3, run4, run0],
     caseResults,
     suites,
+    instructions: new Map(INSTRUCTION_SEED.map(([path, text]) => [path, text])),
+    instructionBackups: new Map(),
+    instructionModified: new Map(INSTRUCTION_SEED.map(([path, , modifiedAt]) => [path, modifiedAt])),
+    instructionDirs: new Set([`${PROJECT}/.cursor/rules`]),
     unmanaged: {
       "claude-code": [
         { kind: "skill", name: "my-scratch-skill", description: "Personal notes on deploying the staging stack", path: `${HOME}/.claude/skills/my-scratch-skill`, contentHash: "ffee", descriptionTokens: 11, libraryItemId: null, deploymentId: null, state: "unmanaged" },
@@ -718,6 +831,24 @@ function budgetFor(list: { name: string; description: string; tokenEstimate?: nu
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+/** Mock figure for the merged `SKILL.md` body and the model's token counts. */
+const tokensIn = (text: string) => Math.ceil(text.length / 4);
+/** Instruction file stats, counted like the backend's `file_stats` / `estimate_tokens`. */
+const instructionTokens = (text: string) => {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return Math.ceil(Math.max(text.length / 4, words * 0.75));
+};
+const instructionLines = (text: string) => (text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0));
+const instructionBytes = (text: string) => new TextEncoder().encode(text).length;
+
 export function createMockBackend(): Backend {
   const state = initialState();
   const listeners = new Set<(e: T.HiveEvent) => void>();
@@ -734,7 +865,7 @@ export function createMockBackend(): Backend {
     const chars = assets.reduce((n, a) => n + a.name.length + a.description.length + 4, 0);
     return {
       spec,
-      installed: ["claude-code", "codex", "cursor"].includes(targetId),
+      installed: installedTargetIds.includes(targetId),
       scope,
       projectPath,
       skillsPath: scope === "user" ? `${HOME}/${spec.userSkillsDir}` : `${projectPath}/${spec.projectSkillsDir}`,
@@ -770,6 +901,122 @@ export function createMockBackend(): Backend {
       loadouts: state.loadouts.filter((l) => l.itemIds.includes(id)).map((l) => ({ id: l.id, name: l.name })),
       history,
     };
+  }
+
+  /** The skills a merge request names, in order, with the checks the Rust core makes. */
+  function mergeSources(ids: string[]): (T.LibraryItem & { body: string })[] {
+    const distinct = [...new Set(ids)];
+    if (distinct.length < 2) throw new ApiError("invalid", "pick at least two skills to merge");
+    return distinct.map((id) => {
+      const it = byId.get(id);
+      if (!it) throw new ApiError("not_found", `item ${id}`);
+      if (it.kind !== "skill") throw new ApiError("invalid", `${it.name} is ${it.kind === "agent" ? "an agent" : "a command"}; only skills can be merged`);
+      return it;
+    });
+  }
+
+  // --- instruction files -------------------------------------------------------------------
+
+  type InstructionTargets = { ids: string[]; names: string[] };
+  /** The location a path belongs to, when it is one the mock knows. */
+  interface ResolvedInstruction {
+    spec: InstructionSpec;
+    scope: T.Scope;
+    project: string | null;
+    /** For a rules-folder member: the folder. */
+    parent: string | null;
+    targets: InstructionTargets;
+  }
+
+  function instructionRoot(scope: T.Scope, projectPath: string | null): string {
+    if (scope === "user") return HOME;
+    if (!projectPath) throw new ApiError("invalid", "project scope needs a project path");
+    return projectPath.replace(/\/+$/, "");
+  }
+
+  const instructionDirExists = (path: string) => state.instructionDirs.has(path) || [...state.instructions.keys()].some((p) => p.startsWith(`${path}/`));
+
+  /** Describe one path at a location. `parent` is set for a member of a rules folder. */
+  function instructionEntry(spec: InstructionSpec, scope: T.Scope, project: string | null, targets: InstructionTargets, path: string, display: string, parent: string | null): T.InstructionFile {
+    const kind: T.InstructionKind = parent ? "file" : spec.kind;
+    const text = state.instructions.get(path);
+    const exists = kind === "directory" ? instructionDirExists(path) : text !== undefined;
+    const body = exists && kind === "file" ? (text ?? "") : "";
+    return {
+      path,
+      display,
+      scope,
+      projectPath: project,
+      targetIds: targets.ids,
+      targetNames: targets.names,
+      label: spec.label,
+      kind,
+      pattern: kind === "directory" ? (spec.pattern ?? ".md") : null,
+      parent,
+      exists,
+      sizeBytes: instructionBytes(body),
+      modifiedAt: exists ? (state.instructionModified.get(path) ?? null) : null,
+      tokens: exists && kind === "file" ? instructionTokens(body) : 0,
+      lines: exists && kind === "file" ? instructionLines(body) : 0,
+      note: spec.note ?? null,
+    };
+  }
+
+  /** Match an absolute path against the known locations: user scope, the given project, then every registered project. */
+  function resolveInstruction(path: string, projectPath: string | null): ResolvedInstruction {
+    const roots: [T.Scope, string | null][] = [["user", null]];
+    if (projectPath) roots.push(["project", instructionRoot("project", projectPath)]);
+    for (const p of state.projects) if (!roots.some(([, r]) => r === p.path)) roots.push(["project", p.path]);
+    for (const [scope, projectRoot] of roots) {
+      const root = scope === "user" ? HOME : projectRoot!;
+      let hit: ResolvedInstruction | null = null;
+      for (const spec of INSTRUCTION_SPECS.filter((s) => s.scope === scope)) {
+        const target = targetSpecs.find((t) => t.id === spec.targetId);
+        if (!target) continue;
+        const base = `${root}/${spec.rel}`;
+        let parent: string | null = null;
+        if (base === path) {
+          if (spec.kind === "directory") throw new ApiError("invalid", `${spec.rel} is a rules folder; write one of its files instead`);
+        } else if (spec.kind === "directory" && path.startsWith(`${base}/`) && memberNameOk(path.slice(base.length + 1), spec.pattern ?? ".md")) {
+          parent = base;
+        } else continue;
+        if (hit) {
+          hit.targets.ids.push(target.id);
+          hit.targets.names.push(target.name);
+        } else hit = { spec, scope, project: projectRoot, parent, targets: { ids: [target.id], names: [target.name] } };
+      }
+      if (hit) return hit;
+    }
+    throw new ApiError("invalid", `${path} is not an instruction file of a known agent (add the project under Agents first, or pass its path)`);
+  }
+
+  function resolvedInstructionEntry(path: string, r: ResolvedInstruction): T.InstructionFile {
+    const base = r.scope === "user" ? `~/${r.spec.rel}` : r.spec.rel;
+    const display = r.parent ? `${base}/${path.split("/").pop() ?? ""}` : base;
+    return instructionEntry(r.spec, r.scope, r.project, r.targets, path, display, r.parent);
+  }
+
+  /** Keep a copy of `path` under the Hive home before it changes; the 20 newest are kept. */
+  function backupInstruction(path: string): T.InstructionBackup | null {
+    const text = state.instructions.get(path);
+    if (text === undefined) return null;
+    const key = path.replace(/^\/+/, "").replace(/[^A-Za-z0-9.-]/g, "_");
+    const savedAt = Date.now();
+    const ext = /\.[^./]+$/.exec(path)?.[0] ?? ".txt";
+    let dest = `${INSTRUCTION_BACKUPS}/${key}/${savedAt}${ext}`;
+    for (let n = 1; state.instructions.has(dest); n++) dest = `${INSTRUCTION_BACKUPS}/${key}/${savedAt}-${n}${ext}`;
+    state.instructions.set(dest, text);
+    state.instructionModified.set(dest, savedAt);
+    const backup: T.InstructionBackup = { path: dest, savedAt, sizeBytes: instructionBytes(text) };
+    const all = state.instructionBackups.get(path) ?? [];
+    all.push(backup);
+    while (all.length > 20) {
+      const oldest = all.shift()!;
+      state.instructions.delete(oldest.path);
+      state.instructionModified.delete(oldest.path);
+    }
+    state.instructionBackups.set(path, all);
+    return backup;
   }
 
   function stripBody(it: T.LibraryItem & { body?: string }): T.LibraryItem {
@@ -851,7 +1098,7 @@ export function createMockBackend(): Backend {
     ui_report: () => null,
     dashboard: () => ({
       stats: stats(),
-      targets: ["claude-code", "codex", "cursor"].map((t) => targetStatus(t, "user", null)),
+      targets: installedTargetIds.map((t) => targetStatus(t, "user", null)),
       recentRuns: state.runs.slice(0, 5),
       recentItems: listItems({ text: null, kinds: [], tags: [], sourceKinds: [], favoritesOnly: false, deployedTo: null, sort: "updated", limit: 6 }),
       loadouts: state.loadouts,
@@ -963,6 +1210,120 @@ export function createMockBackend(): Backend {
         (ids as string[]).map((id) => byId.get(id)!).filter(Boolean),
         targetSpecs.find((t) => t.id === targetId)?.descriptionBudgetChars ?? state.settings.defaultDescriptionBudgetChars,
       ),
+    merge_propose: async ({ request }) => {
+      await sleep(900);
+      const req = request as T.MergeRequest;
+      const sources = mergeSources(req.itemIds);
+      const provider = req.providerId
+        ? state.providers.find((p) => p.id === req.providerId) ?? (() => { throw new ApiError("not_found", `provider ${req.providerId}`); })()
+        : state.providers.find((p) => p.roles.includes("recommender")) ?? state.providers.find((p) => p.roles.includes("grader")) ?? state.providers[0];
+      if (!provider) throw new ApiError("not_found", "no provider is configured; add one in Settings → Providers");
+      const [first, second] = sources;
+      const name = req.name ?? slugify(`${first.name}-${second.name}`);
+      const firstSentence = (s: string) => s.split(/(?<=\.)\s+/)[0].replace(/\.$/, "");
+      const topics = sources.map((s) => s.name.replace(/-/g, " "));
+      const description = `${firstSentence(first.description)}. ${firstSentence(second.description)}. Use when the task involves ${topics.slice(0, -1).join(", ")} or ${topics[topics.length - 1]}.`;
+      const body = [
+        `# ${name}`,
+        "",
+        `Combines ${sources.map((s) => `\`${s.name}\``).join(" and ")} into one skill. Read the section that matches the task; the shared conventions at the end apply to all of them.${req.guidance ? ` Guidance applied: ${req.guidance.trim()}` : ""}`,
+        "",
+        ...sources.flatMap((s) => [`## ${s.name.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase())}`, "", s.body.replace(/^#\s[^\n]*\n+/, "").trim() || "_No instructions in the original._", ""]),
+        "## Resolved differences",
+        "",
+        `- Where ${first.name} and ${second.name} described the same step differently, the more specific wording was kept.`,
+        "- Tool recommendations that appeared in only one source are kept with the section they came from.",
+        "- The combined \"Use when\" clause covers every trigger of the originals.",
+        "",
+      ].join("\n");
+      const files = sources.flatMap((s, i): T.MergeFile[] =>
+        i === 0
+          ? [
+              { fromItemId: s.id, fromName: s.name, path: "scripts/extract.py", dest: "scripts/extract.py", sizeBytes: 1830, keep: true },
+              { fromItemId: s.id, fromName: s.name, path: "reference.md", dest: "reference.md", sizeBytes: 9100, keep: true },
+            ]
+          : [{ fromItemId: s.id, fromName: s.name, path: "scripts/extract.py", dest: `${s.slug}/scripts/extract.py`, sizeBytes: 1830, keep: false }],
+      );
+      const taken = items.find((i) => i.kind === "skill" && i.name === name && !sources.includes(i));
+      const findings: T.Finding[] = taken ? [{ code: "name.taken", severity: "error", message: `A ${taken.kind} named \`${name}\` is already in the library; pick another name or merge it in too`, field: "name" }] : [];
+      const warnings = req.name ? [] : [`The model proposed "${first.name} + ${second.name}"; it was normalised to \`${name}\` to fit the skill name rules.`];
+      const evalCases = sources.reduce((n, s) => n + (state.suites.get(s.id)?.cases.length ?? 0), 0);
+      const inputTokens = sources.reduce((n, s) => n + tokensIn(s.body) + s.descriptionTokens, 0) + 640;
+      return {
+        sources: sources.map((s) => ({ item: stripBody(s), fileCount: detail(s.id).files.filter((f) => !f.isDir && f.path !== "SKILL.md").length, evalCases: state.suites.get(s.id)?.cases.length ?? 0, deployments: state.deployments.filter((d) => d.itemId === s.id) })),
+        conflicts: conflictsFor(sources),
+        name,
+        description,
+        body,
+        frontmatter: { metadata: { "merged-from": sources.map((s) => s.name).join(", ") }, ...(first.frontmatter.license ? { license: first.frontmatter.license } : {}) },
+        files,
+        tags: [...new Set(sources.flatMap((s) => s.tags))],
+        notes: `Kept ${first.name}'s overview as the opening because it states the trigger more precisely, and folded ${second.name}'s steps in as their own section. The reference files of both are identical, so only one copy is carried over.`,
+        dropped: [`${second.name}'s closing note about keeping the file under 500 lines (already covered by the shared conventions).`],
+        warnings,
+        validation: { findings },
+        bodyTokensBefore: sources.reduce((n, s) => n + s.tokenEstimate, 0),
+        bodyTokensAfter: tokensIn(body),
+        descriptionTokensBefore: sources.reduce((n, s) => n + s.descriptionTokens, 0),
+        descriptionTokensAfter: tokensIn(description),
+        evalCases,
+        providerId: provider.id,
+        providerName: provider.name,
+        model: provider.model ?? null,
+        inputTokens,
+        outputTokens: tokensIn(body) + tokensIn(description) + 120,
+        latencyMs: 900,
+      } satisfies T.MergeProposal;
+    },
+    merge_apply: ({ commit }) => {
+      const c = commit as T.MergeCommit;
+      if (!NAME_RE.test(c.name) || c.name.length > 64) throw new ApiError("invalid", "name must be 1–64 lowercase letters, digits or single hyphens");
+      const sources = mergeSources(c.sourceIds);
+      const taken = items.find((i) => i.kind === "skill" && i.name === c.name && !sources.includes(i));
+      if (taken) throw new ApiError("already_exists", `a ${taken.kind} named '${c.name}' is already in the library`);
+      const replaced = sources.find((s) => s.name === c.name) ?? null;
+      const frontmatter = { ...c.frontmatter };
+      let merged: (typeof items)[number];
+      if (replaced) {
+        merged = replaced;
+        Object.assign(merged, { description: c.description, body: c.body, frontmatter: { name: c.name, description: c.description, ...frontmatter }, tags: [...new Set(c.tags)], updatedAt: Date.now(), contentHash: Math.random().toString(16).slice(2).padEnd(40, "0"), tokenEstimate: tokensIn(c.body) + 300, descriptionTokens: tokensIn(c.description) });
+      } else {
+        merged = item({ name: c.name, description: c.description, tags: [...new Set(c.tags)], source: src("authored", ""), frontmatter }, c.body);
+        items.push(merged);
+        byId.set(merged.id, merged);
+      }
+      const retired: T.LibraryItem[] = [];
+      const deployed: T.Deployment[] = [];
+      if (c.retireSources) {
+        for (const s of sources) {
+          if (s === merged) continue;
+          items.splice(items.indexOf(s), 1);
+          byId.delete(s.id);
+          retired.push(stripBody(s));
+          for (const d of state.deployments.filter((x) => x.itemId === s.id)) {
+            const duplicate = state.deployments.some((x) => x.itemId === merged.id && x.targetId === d.targetId && x.scope === d.scope && (x.projectPath ?? null) === (d.projectPath ?? null));
+            if (duplicate) {
+              state.deployments = state.deployments.filter((x) => x !== d);
+              continue;
+            }
+            Object.assign(d, { itemId: merged.id, itemName: merged.name, path: d.path.replace(new RegExp(`/${s.name}$`), `/${merged.name}`), deployedHash: merged.contentHash, updatedAt: Date.now() });
+            deployed.push(d);
+          }
+        }
+      }
+      let evalCases = 0;
+      if (c.carryEvals) {
+        const suites = sources.map((s) => state.suites.get(s.id)).filter((s): s is T.EvalSuite => !!s);
+        const cases = suites.flatMap((s) => s.cases).map((k, i) => ({ ...k, id: i + 1 }));
+        const seen = new Set<string>();
+        const triggerCases = suites.flatMap((s) => s.triggerCases).filter((t) => !seen.has(t.query) && seen.add(t.query));
+        state.suites.set(merged.id, { itemId: merged.id, skillName: merged.name, path: `${merged.path}/evals`, exists: cases.length > 0, cases, triggerCases });
+        evalCases = cases.length;
+      }
+      emit({ type: "library_changed" });
+      emit({ type: "deployments_changed" });
+      return { item: stripBody(merged), retired, replacedId: replaced?.id ?? null, deployed, failed: [], evalCases, warnings: [] } satisfies T.MergeResult;
+    },
 
     scan_local: async () => {
       await sleep(900);
@@ -1040,7 +1401,7 @@ export function createMockBackend(): Backend {
     source_clear_cache: () => 184_000_000,
 
     targets_list: () => targetSpecs,
-    targets_installed: () => ["claude-code", "codex", "cursor"].map((t) => targetStatus(t, "user", null)),
+    targets_installed: () => installedTargetIds.map((t) => targetStatus(t, "user", null)),
     target_status: ({ targetId, scope, projectPath }) => targetStatus(targetId as string, scope as T.Scope, (projectPath as string | null) ?? null),
     target_add_custom: ({ spec }) => {
       const s = { ...(spec as T.TargetSpec), custom: true };
@@ -1127,6 +1488,79 @@ export function createMockBackend(): Backend {
       for (const k of Object.keys(state.unmanaged)) state.unmanaged[k] = state.unmanaged[k].filter((a) => a.path !== path);
       emit({ type: "deployments_changed" });
     },
+
+    instructions_list: ({ scope, projectPath }) => {
+      const sc = scope as T.Scope;
+      const root = instructionRoot(sc, (projectPath as string | null) ?? null);
+      const project = sc === "project" ? root : null;
+      // One group per path, in the table's order, naming every agent that reads it: the
+      // installed ones, plus any agent whose file exists (as the backend lists them).
+      const groups: { path: string; spec: InstructionSpec; targets: InstructionTargets }[] = [];
+      const specs = INSTRUCTION_SPECS.filter((s) => s.scope === sc);
+      for (const spec of specs) {
+        const target = targetSpecs.find((t) => t.id === spec.targetId);
+        if (!target) continue;
+        const path = `${root}/${spec.rel}`;
+        const onDisk = spec.kind === "directory" ? instructionDirExists(path) : state.instructions.has(path);
+        if (!installedTargetIds.includes(target.id) && !onDisk) continue;
+        const group = groups.find((g) => g.path === path);
+        if (group) {
+          group.targets.ids.push(target.id);
+          group.targets.names.push(target.name);
+        } else groups.push({ path, spec, targets: { ids: [target.id], names: [target.name] } });
+      }
+      const out: T.InstructionFile[] = [];
+      for (const { path, spec, targets } of groups) {
+        const display = sc === "user" ? `~/${spec.rel}` : spec.rel;
+        const top = instructionEntry(spec, sc, project, targets, path, display, null);
+        out.push(top);
+        if (top.kind === "directory" && top.exists) {
+          const pattern = spec.pattern ?? ".md";
+          const names = [...state.instructions.keys()]
+            .filter((p) => p.startsWith(`${path}/`))
+            .map((p) => p.slice(path.length + 1))
+            .filter((n) => memberNameOk(n, pattern))
+            .sort();
+          for (const name of names) out.push(instructionEntry(spec, sc, project, targets, `${path}/${name}`, `${display}/${name}`, path));
+        }
+      }
+      return out;
+    },
+    instruction_read: ({ path, projectPath }) => {
+      const p = path as string;
+      if (p.startsWith(`${INSTRUCTION_BACKUPS}/`)) {
+        const text = state.instructions.get(p);
+        if (text === undefined) throw new ApiError("not_found", `${p} does not exist`);
+        const file: T.InstructionFile = { path: p, display: p.split("/").pop() ?? "", scope: "user", projectPath: null, targetIds: [], targetNames: [], label: "Backup", kind: "file", pattern: null, parent: null, exists: true, sizeBytes: instructionBytes(text), modifiedAt: state.instructionModified.get(p) ?? null, tokens: instructionTokens(text), lines: instructionLines(text), note: null };
+        return { file, text } satisfies T.InstructionDocument;
+      }
+      const r = resolveInstruction(p, (projectPath as string | null) ?? null);
+      const file = resolvedInstructionEntry(p, r);
+      return { file, text: file.exists ? (state.instructions.get(p) ?? "") : "" } satisfies T.InstructionDocument;
+    },
+    instruction_write: ({ path, text, projectPath }) => {
+      const p = path as string;
+      const t = text as string;
+      const r = resolveInstruction(p, (projectPath as string | null) ?? null);
+      if (t.length > 2 * 1024 * 1024) throw new ApiError("invalid", "the file is larger than 2 MB");
+      backupInstruction(p);
+      state.instructions.set(p, t);
+      state.instructionModified.set(p, Date.now());
+      if (r.parent) state.instructionDirs.add(r.parent);
+      emit({ type: "instructions_changed" });
+      return { file: resolvedInstructionEntry(p, r), text: t } satisfies T.InstructionDocument;
+    },
+    instruction_delete: ({ path, projectPath }) => {
+      const p = path as string;
+      const r = resolveInstruction(p, (projectPath as string | null) ?? null);
+      if (!state.instructions.has(p)) throw new ApiError("not_found", `${p} does not exist`);
+      backupInstruction(p);
+      state.instructions.delete(p);
+      state.instructionModified.delete(p);
+      emit({ type: "instructions_changed" });
+      return resolvedInstructionEntry(p, r);
+    },
+    instruction_backups: ({ path }) => state.instructionBackups.get(path as string) ?? [],
 
     loadouts_list: () => state.loadouts,
     loadout_get: ({ id }) => state.loadouts.find((l) => l.id === id) ?? (() => { throw new ApiError("not_found", "loadout"); })(),

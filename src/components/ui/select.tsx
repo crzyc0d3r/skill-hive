@@ -83,6 +83,7 @@ export function SimpleSelect({
   size,
   className,
   disabled,
+  "aria-label": ariaLabel,
 }: {
   value: string | null | undefined;
   onChange: (value: string) => void;
@@ -91,10 +92,11 @@ export function SimpleSelect({
   size?: "sm" | "md";
   className?: string;
   disabled?: boolean;
+  "aria-label"?: string;
 }) {
   return (
     <Select value={value ?? undefined} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger size={size} className={className}>
+      <SelectTrigger size={size} className={className} aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
