@@ -19,10 +19,10 @@ name: Release
 # count as missing):
 #   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY   sign the macOS app
 #   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID                                 notarize it
-# The updater signing key is required. bundle.createUpdaterArtifacts is on in
-# src-tauri/tauri.conf.json, so every bundle gets a .sig that the installed app verifies before
-# it applies an update, and tauri-action publishes latest.json for the in-app updater. The build
-# job stops early when the key is missing (see docs/releasing.md, "Updater"):
+# The updater key signs every bundle (bundle.createUpdaterArtifacts in src-tauri/tauri.conf.json)
+# and tauri-action publishes latest.json for the in-app updater. Without the key the release is
+# still built, with a warning, but without updater artifacts, so installed apps cannot update to
+# it in-app (see docs/releasing.md, "Updater"):
 #   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 # Windows installers are not signed by this workflow.
 
@@ -184,9 +184,16 @@ jobs:
               echo "$name: not set"
             fi
           done
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set. The updater artifacts cannot be signed and the installed apps would not accept this release; add the key as a repository secret (docs/releasing.md, Updater)."
-            exit 1
+          # Without the updater key the bundles cannot be signed: build them without updater
+          # artifacts and skip latest.json, so the release still ships. Installed apps cannot
+          # update *to* such a release in-app; they will to the next one that has the key.
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "UPDATER_ARGS=" >> "$GITHUB_ENV"
+            echo "UPLOAD_UPDATER_JSON=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set: this release is built without updater artifacts and latest.json, so installed apps cannot update to it in-app. Add the key as a repository secret (docs/releasing.md, Updater)."
+            echo 'UPDATER_ARGS=--config {"bundle":{"createUpdaterArtifacts":false}}' >> "$GITHUB_ENV"
+            echo "UPLOAD_UPDATER_JSON=false" >> "$GITHUB_ENV"
           fi
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -195,10 +202,10 @@ jobs:
           releaseId: ${{ needs.release.outputs.release_id }}
           # latest.json for the in-app updater. Each runner adds its platform to the copy already
           # on the release; the installed app fetches the file from releases/latest/download.
-          uploadUpdaterJson: true
+          uploadUpdaterJson: ${{ env.UPLOAD_UPDATER_JSON }}
           # On Windows the updater runs the NSIS installer, the per-user one the README recommends.
           updaterJsonPreferNsis: true
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ env.UPDATER_ARGS }}
       # The installer is what users run, so install it the way they would and start that copy.
       - name: Install the Windows setup silently and start the installed app
         if: runner.os == 'Windows'
